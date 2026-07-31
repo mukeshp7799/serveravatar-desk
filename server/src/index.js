@@ -5,6 +5,8 @@ const path = require("path");
 
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/users");
+const designationRoutes = require('./routes/designations');
+const employeeRoutes = require('./routes/employees');
 const roleRoutes = require("./routes/roles");
 const departmentRoutes = require("./routes/departments");
 const leaveRoutes = require("./routes/leaves");
@@ -41,7 +43,9 @@ app.use(langMiddleware);
 
 // Routes
 app.use("/api/auth", authRoutes);
+app.use('/api/employees', employeeRoutes);
 app.use("/api/users", userRoutes);
+app.use('/api/designations', designationRoutes);
 app.use("/api/roles", roleRoutes);
 app.use("/api/departments", departmentRoutes);
 app.use("/api/leaves", leaveRoutes);

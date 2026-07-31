@@ -64,12 +64,44 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
   }, [collapsed])
   const profileRef = useRef<HTMLDivElement>(null)
 
+  // Fetch fresh user data from API on mount to get the latest emailVerified status.
   useEffect(() => {
     const token = localStorage.getItem('token')
     const storedUser = localStorage.getItem('user')
     if (!token) { router.replace('/login'); return }
     if (storedUser) setUser(JSON.parse(storedUser))
+    // Always fetch fresh user data from API so emailVerified status is current.
+    api.get('/auth/me')
+      .then((data: any) => {
+        if (data?.user) {
+          setUser(data.user)
+          localStorage.setItem('user', JSON.stringify(data.user))
+        }
+      })
+      .catch(() => { /* use cached user on error */ })
   }, [router])
+
+  // Listen for localStorage updates (e.g. after email verification)
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'user' && e.newValue) {
+        try {
+          setUser(JSON.parse(e.newValue))
+        } catch {}
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    // Also listen for custom 'user-updated' event dispatched by the verify-email page.
+    const onUserUpdated = (e: Event) => {
+      const me = (e as CustomEvent).detail
+      if (me) setUser(me)
+    }
+    window.addEventListener('user-updated', onUserUpdated)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('user-updated', onUserUpdated)
+    }
+  }, [])
 
   // Fetch unread notifications count (goes through api so 401s auto-logout)
   useEffect(() => {
@@ -358,8 +390,6 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
             <LanguageSwitcher />
             <Link
               href="/notifications"
-              data-tooltip-id="app-tooltip"
-              data-tooltip-content={t('nav.notifications')}
               className="header-icon-btn relative"
             >
               <Bell size={18} strokeWidth={2.25} />

@@ -41,8 +41,6 @@ export default function LanguageSwitcher({ compact = false }: { compact?: boolea
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Language: ${current.label}`}
-        data-tooltip-id="app-tooltip"
-        data-tooltip-content={`Language: ${current.label}`}
         className={`header-icon-btn text-xl ${open ? 'is-open' : ''}`}
       >
         <span aria-hidden className="leading-none">{current.flag}</span>

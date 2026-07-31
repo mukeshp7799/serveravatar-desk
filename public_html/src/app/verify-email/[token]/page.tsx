@@ -38,7 +38,12 @@ export default function VerifyEmailPage() {
               const me = await api.get('/auth/me')
               if (me?.user) {
                 localStorage.setItem('user', JSON.stringify(me.user))
-                window.dispatchEvent(new Event('storage'))
+                // Dispatch a custom event so the authenticated layout can
+              // update its user state before the redirect.
+              window.dispatchEvent(new CustomEvent('user-updated', { detail: me.user }))
+              // Also update localStorage and dispatch storage event for other tabs.
+              localStorage.setItem('user', JSON.stringify(me.user))
+              window.dispatchEvent(new Event('storage'))
               }
             }
           } catch {

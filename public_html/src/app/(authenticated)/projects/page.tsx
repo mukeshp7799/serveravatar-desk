@@ -206,8 +206,8 @@ export default function ProjectsPage() {
                 </div>
               </div>
               <div className="border-t border-gray-100 px-6 py-4 flex flex-wrap justify-end gap-2 bg-gray-50 rounded-b-3xl shrink-0">
-                <button type="button" onClick={() => setShowCreate(false)} data-tooltip-id="app-tooltip" data-tooltip-content={`✕ ${t('common.cancel')}`} className="px-5 py-2.5 text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-xl transition cursor-pointer border-none">{t('common.cancel')}</button>
-                <button type="submit" data-tooltip-id="app-tooltip" data-tooltip-content={editProject ? "💾 Save changes" : "✨ Create this project"} className="px-5 py-2.5 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow rounded-xl transition cursor-pointer border-none">{editProject ? t('common.saveChanges') : t('projects.createProject')}</button>
+                <button type="button" onClick={() => setShowCreate(false)} className="px-5 py-2.5 text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-xl transition cursor-pointer border-none">{t('common.cancel')}</button>
+                <button type="submit" className="px-5 py-2.5 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow rounded-xl transition cursor-pointer border-none">{editProject ? t('common.saveChanges') : t('projects.createProject')}</button>
               </div>
             </form>
           </div>

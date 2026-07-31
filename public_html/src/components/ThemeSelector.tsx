@@ -43,8 +43,6 @@ export default function ThemeSelector() {
         type="button"
         onClick={handleClick}
         aria-label="Change theme"
-        data-tooltip-id="app-tooltip"
-        data-tooltip-content={`Theme: ${labels[theme as ThemeMode]} — click to choose, shift+click to cycle`}
         aria-haspopup="listbox"
         aria-expanded={open}
         className={`header-icon-btn ${open ? 'is-open' : ''}`}

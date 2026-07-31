@@ -13,7 +13,6 @@ const navItems = [
   { href: "/roles", label: "Roles & Permissions", icon: "⬢" },
   { section: "Projects" },
   { href: "/projects", label: "Projects", icon: "◆" },
-  { href: "/tasks", label: "Tasks", icon: "◇" },
   { href: "/discussions", label: "Discussions", icon: "○" },
   { section: "Company" },
   { href: "/announcements", label: "Announcements", icon: "★" },

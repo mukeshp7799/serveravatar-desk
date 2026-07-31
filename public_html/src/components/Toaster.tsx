@@ -21,7 +21,7 @@ export default function Toaster() {
       gutter={12}
       toastOptions={{
         // Default duration: success = 4s, error = 6s (react-hot-toast defaults).
-        duration: 4000,
+        duration: 3000,
         // Shared styling — reads from the project's design tokens / theme.
         className:
           '!rounded-xl !shadow-xl !text-sm !font-medium !p-4 !border',
@@ -33,23 +33,30 @@ export default function Toaster() {
           background: 'var(--toast-bg, #ffffff)',
           color: 'var(--toast-fg, #1f2937)',
           borderColor: 'var(--toast-border, #e5e7eb)',
+          // Break long URLs and text so they don't overflow the toast container.
+          wordBreak: 'break-all',
+          overflowWrap: 'break-word',
         },
         success: {
-          duration: 3000,
+          duration: 2500,
           iconTheme: { primary: '#10b981', secondary: '#ffffff' },
           style: {
             background: 'var(--toast-success-bg, #ecfdf5)',
             color: 'var(--toast-success-fg, #065f46)',
             borderColor: 'var(--toast-success-border, #a7f3d0)',
+            wordBreak: 'break-all',
+            overflowWrap: 'break-word',
           },
         },
         error: {
-          duration: 6000,
+          duration: 4000,
           iconTheme: { primary: '#ef4444', secondary: '#ffffff' },
           style: {
             background: 'var(--toast-error-bg, #fef2f2)',
             color: 'var(--toast-error-fg, #991b1b)',
             borderColor: 'var(--toast-error-border, #fecaca)',
+            wordBreak: 'break-all',
+            overflowWrap: 'break-word',
           },
         },
         loading: {

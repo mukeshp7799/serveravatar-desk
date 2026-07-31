@@ -1,343 +1,246 @@
 'use client'
 import PageLoader from '@/components/PageLoader'
-import RequirePermission from '@/components/RequirePermission'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import Link from 'next/link'
 import api from '@/lib/api'
-import { validateForm, employeeSchema, employeeCreateSchema } from '@/lib/schemas'
+
+const Search = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+const Filter = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+const ChevronLeft = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+const ChevronRight = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+const UserIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
 
 export default function EmployeesPage() {
-  return (
-    <RequirePermission permission="hr.manage_employees">
-      <EmployeesPageInner />
-    </RequirePermission>
-  )
-}
-
-function EmployeesPageInner() {
   const { t } = useTranslation()
+  const [loading, setLoading] = useState(true)
   const [employees, setEmployees] = useState<any[]>([])
   const [departments, setDepartments] = useState<any[]>([])
-  const [designations, setDesignations] = useState<any[]>([]) // eslint-disable-line @typescript-eslint/no-unused-vars
   const [roles, setRoles] = useState<any[]>([])
+  const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 12, totalPages: 0 })
+  
+  // Filters
   const [search, setSearch] = useState('')
   const [filterDept, setFilterDept] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [editEmployee, setEditEmployee] = useState<any>(null)
-  const [deleteId, setDeleteId] = useState<number | null>(null)
-  const [deleteError, setDeleteError] = useState('')
-  const [deleteSuccess, setDeleteSuccess] = useState('')
-  const [formError, setFormError] = useState('')
-  const [form, setForm] = useState({
-    firstName: '', lastName: '', email: '', password: '',
-    employeeId: '', departmentId: '', designation: '', managerId: '',
-    roleId: '', hireDate: '', status: 'active'
-  })
+  const [filterStatus, setFilterStatus] = useState('')
+  const [filterRole, setFilterRole] = useState('')
+  const [filterEmpType, setFilterEmpType] = useState('')
 
   const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
-  const canManage = Array.isArray(user.permissions) && user.permissions.includes('hr.manage_employees')
+  const canManage = Array.isArray(user.permissions) && (user.permissions.includes('hr.manage_employees') || user.permissions.includes('users.edit_all'))
 
-  useEffect(() => {
-    Promise.all([
-      api.get('/users'), api.get('/departments'), api.get('/roles'),
-    ]).then(([usersData, deptsData, rolesData]) => {
-      setEmployees(usersData.users || [])
-      setDepartments(deptsData.departments || [])
-      setDesignations([])
-      setRoles(rolesData.roles || [])
-    }).catch(console.error).finally(() => setLoading(false))
-  }, [])
-
-  const filtered = employees.filter((e: any) => {
-    if (search && !`${e.first_name} ${e.last_name} ${e.email}`.toLowerCase().includes(search.toLowerCase())) return false
-    if (filterDept && e.department_id != filterDept) return false
-    return true
-  })
-
-  const openCreate = () => {
-    setEditEmployee(null)
-    setForm({ firstName: '', lastName: '', email: '', password: '', employeeId: '', departmentId: '', designation: '', managerId: '', roleId: '', hireDate: '', status: 'active' })
-    setFormError(''); setShowModal(true)
-  }
-
-  const openEdit = (e: any) => {
-    setEditEmployee(e)
-    setForm({
-      firstName: e.first_name || '', lastName: e.last_name || '',
-      email: e.email || '', password: '',
-      // API returns *_id as numbers but the zod schema expects strings (with
-      // optional .optional() — undefined ≠ missing). Coerce explicitly so
-      // null IDs become '' (not the number 0) and existing IDs become
-      // stringified numbers that parseInt() can round-trip in handleSave.
-      employeeId: e.employee_id == null ? '' : String(e.employee_id),
-      departmentId: e.department_id == null ? '' : String(e.department_id),
-      designation: e.designation || '',
-      managerId: e.reporting_manager_id == null ? '' : String(e.reporting_manager_id),
-      roleId: e.role_id == null ? '' : String(e.role_id),
-      hireDate: e.hire_date || '', status: e.status || 'active'
-    })
-    setFormError(''); setShowModal(true)
-  }
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault(); setFormError('')
-    const valid = validateForm(editEmployee ? employeeSchema : employeeCreateSchema, form)
-    if (!valid) return
+  const fetchEmployees = async (page = 1) => {
+    setLoading(true)
     try {
-      if (editEmployee) {
-        await api.put(`/users/${editEmployee.id}`, {
-          firstName: valid.firstName, lastName: valid.lastName, phone: '', address: '',
-          dateOfBirth: '', emergencyContactName: '', emergencyContactPhone: '',
-          departmentId: valid.departmentId ? parseInt(valid.departmentId) : null,
-          designation: valid.designation || null,
-          managerId: valid.managerId ? parseInt(valid.managerId) : null,
-          roleId: valid.roleId ? parseInt(valid.roleId) : null,
-          status: valid.status || 'active'
-        })
-      } else {
-        await api.post('/auth/register', {
-          email: valid.email, password: valid.password,
-          firstName: valid.firstName, lastName: valid.lastName,
-          employeeId: valid.employeeId,
-          departmentId: valid.departmentId ? parseInt(valid.departmentId) : null,
-          designation: valid.designation || null,
-          managerId: valid.managerId ? parseInt(valid.managerId) : null,
-          roleId: valid.roleId ? parseInt(valid.roleId) : 1,
-          hireDate: valid.hireDate || null
-        })
-      }
-      setShowModal(false)
-      const res = await api.get('/users'); setEmployees(res.users || [])
-    } catch (err: any) { setFormError(err.message || t('employees.failedToSave')) }
-  }
-
-  const handleDelete = async (id: number) => {
-    setDeleteId(id); setDeleteError(''); setDeleteSuccess('')
-    try {
-      await api.delete(`/users/${id}`)
-      setDeleteSuccess('✅ ' + t('employees.deletedSuccess'))
-      setDeleteId(null)
-      const res = await api.get('/users'); setEmployees(res.users || [])
-      setTimeout(() => setDeleteSuccess(''), 3000)
-    } catch (err: any) {
-      setDeleteError(err.message || t('employees.failedToDelete'))
-      setDeleteId(null); setTimeout(() => setDeleteError(''), 5000)
+      const params = new URLSearchParams()
+      if (search) params.set('search', search)
+      if (filterDept) params.set('departmentId', filterDept)
+      if (filterStatus) params.set('status', filterStatus)
+      if (filterRole) params.set('roleId', filterRole)
+      if (filterEmpType) params.set('employmentType', filterEmpType)
+      params.set('page', String(page))
+      params.set('limit', String(pagination.limit))
+      
+      const data = await api.get(`/employees?${params.toString()}`)
+      setEmployees(data.employees || [])
+      setPagination(data.pagination || { total: 0, page: 1, limit: 12, totalPages: 0 })
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
     }
   }
 
+  useEffect(() => {
+    Promise.all([
+      api.get('/departments'),
+      api.get('/roles'),
+    ]).then(([deptsData, rolesData]) => {
+      setDepartments(deptsData.departments || [])
+      setRoles(rolesData.roles || [])
+    }).catch(console.error)
+  }, [])
+
+  useEffect(() => {
+    fetchEmployees(1)
+  }, [search, filterDept, filterStatus, filterRole, filterEmpType])
+
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(e.target.value)
+  }
+
+  const clearFilters = () => {
+    setSearch('')
+    setFilterDept('')
+    setFilterStatus('')
+    setFilterRole('')
+    setFilterEmpType('')
+  }
+
+  const statusColors: Record<string, string> = {
+    active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    inactive: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+  }
+
+  const empTypeColors: Record<string, string> = {
+    'full-time': 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+    'part-time': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+    'contract': 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+    'intern': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+    'freelance': 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300',
+  }
+
   return (
-    <div className="space-y-5 animate-fade-in-up">
-      <div className="flex flex-wrap justify-end items-center gap-3">
-        {canManage && (
-          <button onClick={openCreate} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-lg rounded-xl text-sm font-bold transition shadow-lg cursor-pointer border-none flex items-center gap-2">
-            <span className="text-lg">+</span> {t('employees.addEmployee')}
-          </button>
-        )}
+    <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Employee Directory</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{pagination.total} employees</p>
+        </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 p-4 flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[200px]">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-          <input
-            type="text"
-            className="w-full border-2 border-gray-200 rounded-xl pl-10 pr-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition"
-            placeholder={t('employees.searchPlaceholder')}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-        <select
-          className="border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 min-w-[180px]"
-          value={filterDept}
-          onChange={e => setFilterDept(e.target.value)}
-        >
-          <option value="">{t('common.allDepartments')}</option>
-          {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-        {(search || filterDept) && (
-          <button
-            onClick={() => { setSearch(''); setFilterDept('') }}
-            className="px-3 py-2.5 text-sm font-semibold text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-xl transition"
-          >
-            ✕ {t('employees.clearFilters')}
-          </button>
-        )}
-      </div>
-
-      {deleteError && (
-        <div className="bg-red-50 border border-red-200 text-rose-700 p-3 rounded-xl text-sm flex items-center gap-2">
-          <span>⚠️</span> {deleteError}
-        </div>
-      )}
-      {deleteSuccess && (
-        <div className="bg-gray-50 border border-emerald-200 text-emerald-700 p-3 rounded-xl text-sm flex items-center gap-2">
-          <span>✅</span> {deleteSuccess}
-        </div>
-      )}
-
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        {loading ? (
-          <PageLoader label={t('common.loading')} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse min-w-[640px]">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="text-left px-4 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">{t('employees.cols.name')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">{t('employees.cols.id')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">{t('employees.cols.dept')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">{t('employees.cols.desig')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">{t('employees.cols.mgr')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">{t('employees.cols.status')}</th>
-                  {canManage && <th className="text-left px-4 py-3 text-xs font-bold text-gray-700 uppercase tracking-wider whitespace-nowrap">{t('employees.cols.actions')}</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((e: any, i: number) => (
-                  <tr key={e.id} className={`border-b border-gray-100 hover:bg-gray-50 transition ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-10 h-10 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center text-sm font-bold shrink-0 shadow">
-                          {e.first_name?.[0]}{e.last_name?.[0]}
-                        </div>
-                        <div>
-                          <div className="font-bold text-gray-900">{e.first_name} {e.last_name}</div>
-                          <div className="text-xs text-gray-500">{e.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm font-mono text-gray-700">{e.employee_id || '—'}</td>
-                    <td className="px-4 py-3 text-sm">
-                      {e.department_name ? <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-full text-xs font-bold">{e.department_name}</span> : <span className="text-gray-400">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{e.designation || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{e.manager_first_name ? `${e.manager_first_name} ${e.manager_last_name}` : '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${e.status === 'active' ? 'bg-gray-50 text-emerald-700 border border-emerald-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${e.status === 'active' ? 'bg-gray-500' : 'bg-gray-400'}`}></span>
-                        {e.status === 'active' ? t('employees.active') : t('employees.inactive')}
-                      </span>
-                    </td>
-                    {canManage && (
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1.5">
-                          <button onClick={() => openEdit(e)} title={t('common.edit')} className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 cursor-pointer border-none text-sm font-bold transition">✏️</button>
-                          <button onClick={() => handleDelete(e.id)} title={t('common.delete')} className="w-8 h-8 rounded-lg text-red-600 hover:text-red-800 cursor-pointer border-none text-sm font-bold transition">🗑️</button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {!loading && filtered.length === 0 && (
-          <div className="p-12 text-center">
-            <div className="text-5xl mb-3">👤</div>
-            <p className="text-gray-500 font-semibold">{t('employees.noEmployees')}</p>
-            <p className="text-gray-400 text-sm mt-1">{t('employees.tryAdjustingFilters')}</p>
-          </div>
-        )}
-      </div>
-
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl animate-scale-in flex flex-col max-h-[calc(100vh-2rem)]" onClick={e => e.stopPropagation()}>
-            <div className={`border-b border-gray-200 px-6 py-4 bg-white shrink-0`}>
-              <div className="flex justify-between items-center">
-                <h3 className="text-xl font-extrabold text-gray-900">{editEmployee ? `✏️ ${t('employees.editEmployee')}` : `➕ ${t('employees.addNewEmployee')}`}</h3>
-                <button onClick={() => setShowModal(false)} className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg w-8 h-8 flex items-center justify-center cursor-pointer border-none text-lg leading-none">×</button>
-              </div>
+      {/* Search & Filters */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
+        <div className="flex flex-col lg:flex-row gap-3">
+          {/* Search */}
+          <div className="relative flex-1">
+            <Search />
+            <input
+              type="text"
+              placeholder="Search by name, email, designation..."
+              value={search}
+              onChange={handleSearch}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <Search />
             </div>
-            <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0">
-              <div className="p-6 bg-white overflow-y-auto  flex-1 min-h-0">
-                {formError && (
-                  <div className="bg-red-50 border border-red-200 text-rose-700 p-3 rounded-xl mb-4 text-sm flex items-center gap-2">
-                    <span>⚠️</span> {formError}
-                  </div>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('employees.firstName')} *</label>
-                    <input className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" required value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('employees.lastName')} *</label>
-                    <input className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" required value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} />
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('auth.register.email')} *</label>
-                  <input type="email" className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-                </div>
-                {!editEmployee && (
-                  <div className="mt-3">
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('auth.register.password')} *</label>
-                    <input type="password" className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder={t('employees.passwordPlaceholder')} />
-                  </div>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('employees.employeeId')}</label>
-                    <input className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" value={form.employeeId} onChange={e => setForm({ ...form, employeeId: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('employees.hireDate')}</label>
-                    <input type="date" className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" value={form.hireDate} onChange={e => setForm({ ...form, hireDate: e.target.value })} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('employees.department')}</label>
-                    <select className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" value={form.departmentId} onChange={e => setForm({ ...form, departmentId: e.target.value })}>
-                      <option value="">{t('employees.selectDepartment')}</option>
-                      {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('employees.designation')}</label>
-                    <input
-                      className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-                      value={form.designation}
-                      onChange={e => setForm({ ...form, designation: e.target.value })}
-                      placeholder="e.g. Senior Software Engineer"
-                      maxLength={100}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('employees.manager')}</label>
-                    <select className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" value={form.managerId} onChange={e => setForm({ ...form, managerId: e.target.value })}>
-                      <option value="">{t('employees.selectManager')}</option>
-                      {employees.filter((e: any) => e.id !== editEmployee?.id).map((e: any) => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('employees.role')}</label>
-                    <select className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" value={form.roleId} onChange={e => setForm({ ...form, roleId: e.target.value })}>
-                      <option value="">{t('employees.selectRole')}</option>
-                      {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('employees.status')}</label>
-                  <select className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
-                    <option value="active">{t('employees.active')}</option>
-                    <option value="inactive">{t('employees.inactive')}</option>
-                  </select>
-                </div>
-              </div>
-              <div className="border-t border-gray-100 px-6 py-4 flex flex-wrap justify-end gap-2 bg-gray-50 rounded-b-3xl shrink-0">
-                <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2.5 text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-xl transition cursor-pointer border-none">{t('employees.cancel')}</button>
-                <button type="submit" className="px-5 py-2.5 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white hover:rounded-xl transition cursor-pointer border-none">{editEmployee ? t('employees.save') : t('employees.add')}</button>
-              </div>
-            </form>
+          </div>
+          
+          {/* Filters */}
+          <div className="flex flex-wrap gap-2">
+            <select value={filterDept} onChange={e => setFilterDept(e.target.value)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Departments</option>
+              {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+
+            <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Roles</option>
+              {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+
+            <select value={filterEmpType} onChange={e => setFilterEmpType(e.target.value)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Types</option>
+              <option value="full-time">Full Time</option>
+              <option value="part-time">Part Time</option>
+              <option value="contract">Contract</option>
+              <option value="intern">Intern</option>
+              <option value="freelance">Freelance</option>
+            </select>
+
+            {(search || filterDept || filterStatus || filterRole || filterEmpType) && (
+              <button onClick={clearFilters}
+                className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 font-medium">
+                Clear
+              </button>
+            )}
           </div>
         </div>
+      </div>
+
+      {/* Employee Grid */}
+      {loading ? (
+        <div className="flex justify-center py-20"><PageLoader /></div>
+      ) : employees.length === 0 ? (
+        <div className="text-center py-20 text-gray-500 dark:text-gray-400">
+          <UserIcon />
+          <p className="mt-2">No employees found</p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {employees.map((emp: any) => {
+              const initials = `${emp.first_name?.[0] || ''}${emp.last_name?.[0] || ''}`.toUpperCase()
+              return (
+                <Link key={emp.id} href={`/employees/${emp.id}`}
+                  className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-600 transition no-underline block group">
+                  <div className="flex items-start gap-3">
+                    {emp.avatar_url ? (
+                      <img src={emp.avatar_url} alt={initials}
+                        className="w-12 h-12 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                        {initials}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                        {emp.first_name} {emp.last_name}
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                        {emp.designation || emp.designation_name || '—'}
+                      </p>
+                      {emp.department_name && (
+                        <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">{emp.department_name}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-3 flex-wrap">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[emp.status] || statusColors.inactive}`}>
+                      {emp.status === 'active' ? 'Active' : 'Inactive'}
+                    </span>
+                    {emp.employment_type && (
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${empTypeColors[emp.employment_type] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
+                        {emp.employment_type === 'full-time' ? 'FT' : emp.employment_type === 'part-time' ? 'PT' : emp.employment_type === 'contract' ? 'Cont' : emp.employment_type === 'intern' ? 'Int' : 'Fl'}
+                      </span>
+                    )}
+                    {emp.role_name && (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                        {emp.role_name}
+                      </span>
+                    )}
+                  </div>
+                  {emp.manager_first_name && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                      Reports to: {emp.manager_first_name} {emp.manager_last_name}
+                    </p>
+                  )}
+                </Link>
+              )
+            })}
+          </div>
+
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <button
+                onClick={() => fetchEmployees(pagination.page - 1)}
+                disabled={pagination.page <= 1}
+                className="p-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                <ChevronLeft />
+              </button>
+              <span className="text-sm text-gray-600 dark:text-gray-400 px-3">
+                Page {pagination.page} of {pagination.totalPages}
+              </span>
+              <button
+                onClick={() => fetchEmployees(pagination.page + 1)}
+                disabled={pagination.page >= pagination.totalPages}
+                className="p-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                <ChevronRight />
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

@@ -32,7 +32,7 @@ import {
   AlertCircle, ChevronLeft, ChevronRight, ClipboardCheck, FileIcon, Folder, MoreVertical,
   Pencil, Plus, Search, Send, Trash2, Upload, User as UserIcon, X, Paperclip,
   MessageCircle, CheckCircle2, ListChecks, Tag, Calendar as CalIcon, Hash, Image as ImageIcon,
-  UserCircle, Info,
+  UserCircle, Info, Layers, SkipForward,
 } from 'lucide-react'
 import ProjectLayout from '@/components/project/ProjectLayout'
 import { fmtRelative, fmtDateShort } from '@/components/project/format'
@@ -1838,6 +1838,7 @@ export default function TestCasesPage() {
   useEffect(() => { tc.setPriorityFilter(filterPriority || null) }, [filterPriority])
   useEffect(() => { tc.setSuiteFilter(filterSuite) }, [filterSuite])
   useEffect(() => { tc.setAssignedToMeFilter(filterAssignedToMe) }, [filterAssignedToMe])
+  const hasFilters = search || filterSuite || filterStatus || filterPriority || filterAssignedToMe
 
   const projectTasks = useMemo(() => {
     return (tb.board || []).flatMap((c) => (c.tasks || []).map((t) => ({ id: t.id, title: t.title })))
@@ -1871,44 +1872,55 @@ export default function TestCasesPage() {
     window.addEventListener('test-cases:refresh', onRefresh)
     return () => window.removeEventListener('test-cases:refresh', onRefresh)
   }, [tc])
-
   return (
     <ProjectLayout pageTitle="Test Cases">
-      <div className="flex gap-5 items-start">
-        {/* ── Sidebar ──────────────────────────────────────────── */}
-        <aside className="w-64 shrink-0 space-y-3">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-              <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
-                <Folder size={13} className="text-teal-500" />
-                Test Suites
-              </h3>
-              <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 text-[11px] font-bold">
-                {tc.suites.length}
-              </span>
+
+      {/* ── Page Header ── */}
+      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+            <ClipboardCheck size={16} className="text-gray-600 dark:text-gray-300" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Test Cases</h1>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{tc.total} total</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setNewCaseOpen(true)}
+          disabled={tc.suites.length === 0}
+          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <Plus size={15} /> New Test Case
+        </button>
+      </div>
+
+      <div className="flex flex-col xl:flex-row gap-5 xl:gap-6 items-start">
+
+        {/* ── Sidebar ── */}
+        <aside className="w-full xl:w-52 shrink-0 order-2 xl:order-1">
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Suites</h3>
+                <span className="text-[11px] text-gray-400 dark:text-gray-500">{tc.suites.length}</span>
+              </div>
             </div>
-            <div className="p-2 space-y-1.5 max-h-[60vh] overflow-y-auto overflow-visible">
-              {/* "All suites" item */}
+            <div className="p-1.5 max-h-[40vh] overflow-y-auto">
               <button
                 type="button"
                 onClick={() => { setActiveSuiteId(null); setFilterSuite(null) }}
-                className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center gap-2.5 border transition-all cursor-pointer ${
+                className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2.5 transition-all cursor-pointer text-sm ${
                   activeSuiteId == null && filterSuite == null
-                    ? 'bg-teal-50 dark:bg-teal-950/30 border-teal-200 dark:border-teal-800'
-                    : 'bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 hover:border-teal-200 dark:hover:border-teal-800'
+                    ? 'bg-gray-100 dark:bg-gray-800 font-medium text-gray-900 dark:text-white'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}
               >
-                <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                  activeSuiteId == null && filterSuite == null
-                    ? 'bg-gradient-to-br from-teal-500 to-emerald-500 text-white shadow-sm'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
-                }`}>
-                  <ClipboardCheck size={14} strokeWidth={2.5} />
+                <span className="w-6 h-6 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                  <Layers size={12} />
                 </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">All Cases</p>
-                  <p className="text-[11px] text-gray-400">{tc.total} total</p>
-                </div>
+                All Cases
               </button>
 
               {tc.suites.map((suite) => (
@@ -1923,256 +1935,212 @@ export default function TestCasesPage() {
               ))}
 
               {tc.suites.length === 0 && !tc.loading && (
-                <p className="text-xs italic text-gray-400 dark:text-gray-500 text-center py-4 px-2">
-                  No suites yet — create one to organize your tests.
-                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4 px-2">No suites yet.</p>
               )}
             </div>
-            <div className="p-2 border-t border-gray-100 dark:border-gray-800">
+            <div className="p-1.5 border-t border-gray-100 dark:border-gray-800">
               <button type="button" onClick={() => setNewSuiteOpen(true)}
-                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/40 rounded-xl border border-dashed border-teal-300 dark:border-teal-800 cursor-pointer transition-colors">
-                <Plus size={12} strokeWidth={2.5} /> New Suite
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg cursor-pointer transition-colors">
+                <Plus size={12} /> New Suite
               </button>
             </div>
           </div>
         </aside>
 
-        {/* ── Main ─────────────────────────────────────────────── */}
-        <main className="flex-1 min-w-0 space-y-4">
-          {/* Better header */}
-          <div className="bg-gradient-to-r from-teal-500/10 via-emerald-500/5 to-transparent dark:from-teal-500/10 dark:via-emerald-500/5 rounded-2xl border border-teal-100 dark:border-teal-900/50 p-4 sm:p-5">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center shrink-0 shadow-sm">
-                  <ClipboardCheck size={16} strokeWidth={2.5} className="text-white" />
-                </div>
-                <div>
-                  <h2 className="text-base sm:text-lg font-extrabold text-gray-900 dark:text-white">Test Cases</h2>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Organize test suites, write scenarios with steps, and track pass/fail results.</p>
-                </div>
-              </div>
-              <button type="button" onClick={() => setNewCaseOpen(true)}
-                disabled={tc.suites.length === 0}
-                title={tc.suites.length === 0 ? 'Create a suite first' : 'New test case'}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-bold bg-teal-600 hover:bg-teal-700 text-white rounded-xl shadow-sm border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0">
-                <Plus size={14} strokeWidth={2.5} /> New Test Case
-              </button>
-            </div>
-            {tc.total > 0 && (
-              <div className="mt-4 bg-white/70 dark:bg-gray-900/70 rounded-xl p-3 border border-teal-100 dark:border-teal-900/40">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Execution Summary</span>
-                  <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{stats.passed} passed · {stats.failed} failed · {stats.in_progress} in progress</span>
-                </div>
-                <div className="flex gap-1 h-2.5 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-800">
-                  {stats.total > 0 && <>
-                    <div className="bg-emerald-500 transition-all rounded-l-full" style={{ width: `${Math.round(stats.passed / stats.total * 100)}%` }} />
-                    <div className="bg-rose-500 transition-all" style={{ width: `${Math.round(stats.failed / stats.total * 100)}%` }} />
-                    <div className="bg-indigo-500 transition-all" style={{ width: `${Math.round(stats.in_progress / stats.total * 100)}%` }} />
-                    <div className="bg-yellow-400 transition-all" style={{ width: `${Math.round(stats.skipped / stats.total * 100)}%` }} />
-                    <div className="bg-gray-300 dark:bg-gray-600 transition-all rounded-r-full" style={{ width: `${Math.round((stats.ready + stats.draft) / stats.total * 100)}%` }} />
-                  </>}
-                </div>
-                <div className="flex gap-4 mt-2 flex-wrap">
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" /><span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Passed ({stats.passed})</span></div>
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" /><span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Failed ({stats.failed})</span></div>
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0" /><span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">In Progress ({stats.in_progress})</span></div>
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 shrink-0" /><span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Skipped ({stats.skipped})</span></div>
-                  <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" /><span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Ready/Draft ({stats.ready + stats.draft})</span></div>
-                </div>
-              </div>
-            )}
-          </div>
+        {/* ── Main ── */}
+        <main className="flex-1 min-w-0 order-1 xl:order-2 w-full space-y-4">
 
-          {/* Compact stats row — shown only when there are results */}
-          {stats.total > 0 && (
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
-              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm px-3 py-2.5 text-center">
-                <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Total</p>
-                <p className="text-2xl font-extrabold text-gray-900 dark:text-white mt-0.5">{stats.total}</p>
-              </div>
-              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm px-3 py-2.5 text-center">
-                <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Passed</p>
-                <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">{stats.passed}</p>
-              </div>
-              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm px-3 py-2.5 text-center">
-                <p className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Failed</p>
-                <p className="text-2xl font-extrabold text-rose-600 dark:text-rose-400 mt-0.5">{stats.failed}</p>
-              </div>
-              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm px-3 py-2.5 text-center">
-                <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">In Progress</p>
-                <p className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-0.5">{stats.in_progress}</p>
-              </div>
-              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm px-3 py-2.5 text-center">
-                <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Remaining</p>
-                <p className="text-2xl font-extrabold text-gray-500 dark:text-gray-400 mt-0.5">{stats.skipped + stats.ready + stats.draft}</p>
-              </div>
+          {/* Stats Row */}
+          {tc.total > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: 'Total', value: stats.total, cls: 'text-gray-900 dark:text-white' },
+                { label: 'Passed', value: stats.passed, cls: 'text-emerald-600 dark:text-emerald-400' },
+                { label: 'Failed', value: stats.failed, cls: 'text-rose-600 dark:text-rose-400' },
+                { label: 'In Progress', value: stats.in_progress, cls: 'text-indigo-600 dark:text-indigo-400' },
+              ].map(({ label, value, cls }) => (
+                <div key={label} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 px-4 py-3">
+                  <p className={`text-2xl font-bold ${cls}`}>{value}</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
+                </div>
+              ))}
             </div>
           )}
 
-          {/* Filter row */}
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            {/* Search */}
-            <div className="relative w-full sm:w-64 shrink-0">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search test cases…"
-                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900"
-              />
-            </div>
-
-            {/* Filter group */}
-            <div className="flex items-center gap-2 flex-wrap flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500">Suite:</span>
+          {/* Filter Bar */}
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3">
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-center gap-2 w-full">
+                <div className="relative flex-1">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search test cases…"
+                    className="w-full pl-8 pr-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-gray-400 dark:focus:border-gray-600 transition-colors"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFilterAssignedToMe((v) => !v)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors cursor-pointer shrink-0 ${
+                    filterAssignedToMe
+                      ? 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white'
+                      : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400'
+                  }`}
+                >
+                  <UserCircle size={12} /> My Cases
+                </button>
+                {hasFilters && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearch(''); setFilterSuite(null); setFilterStatus(''); setFilterPriority(''); setFilterAssignedToMe(false); setActiveSuiteId(null) }}
+                    className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 cursor-pointer transition-colors"
+                  >
+                    <X size={10} /> Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
                 <select value={filterSuite ?? ''} onChange={(e) => { const v = e.target.value; setFilterSuite(v ? Number(v) : null); setActiveSuiteId(v ? Number(v) : null) }}
-                  className="appearance-none pl-2.5 pr-7 py-1.5 text-xs font-semibold bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 focus:outline-none focus:border-teal-500 cursor-pointer">
-                  <option value="">All suites</option>
+                  className="appearance-none px-3 py-1.5 text-xs font-medium bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer">
+                  <option value="">All Suites</option>
                   {tc.suites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500">Status:</span>
                 <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as TestStatus | '')}
-                  className="appearance-none pl-2.5 pr-7 py-1.5 text-xs font-semibold bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 focus:outline-none focus:border-teal-500 cursor-pointer">
-                  <option value="">All</option>
+                  className="appearance-none px-3 py-1.5 text-xs font-medium bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer">
+                  <option value="">All Status</option>
                   {FILTER_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                 </select>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500">Priority:</span>
                 <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value as TestPriority | '')}
-                  className="appearance-none pl-2.5 pr-7 py-1.5 text-xs font-semibold bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 focus:outline-none focus:border-teal-500 cursor-pointer">
-                  <option value="">All</option>
-                  {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
+                  className="appearance-none px-3 py-1.5 text-xs font-medium bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer">
+                  <option value="">All Priority</option>
+                  {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
                 </select>
               </div>
             </div>
-
-            {/* My Test Cases toggle */}
-            <button
-              type="button"
-              onClick={() => setFilterAssignedToMe((v) => !v)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-colors cursor-pointer shrink-0 ${
-                filterAssignedToMe
-                  ? 'bg-teal-600 border-teal-600 text-white shadow-sm'
-                  : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-teal-400 dark:hover:border-teal-600'
-              }`}
-            >
-              <UserCircle size={12} />
-              My Cases
-            </button>
           </div>
 
-          {/* Table */}
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+          {/* Results Table */}
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+
             {tc.loading && tc.testCases.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 animate-pulse" />
-                <p className="text-sm text-gray-500">Loading test cases…</p>
+                <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                <p className="text-sm text-gray-400">Loading…</p>
               </div>
             ) : filteredTestCases.length === 0 ? (
-              <div className="flex flex-col items-center py-14 px-6 text-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-100 to-emerald-50 dark:from-teal-900/30 dark:to-emerald-900/10 text-teal-600 dark:text-teal-300 flex items-center justify-center shadow-sm">
-                  <ClipboardCheck size={24} strokeWidth={1.5} />
+              <div className="flex flex-col items-center py-14 px-6 text-center gap-3">
+                <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                  <ClipboardCheck size={20} className="text-gray-400" />
                 </div>
-                <div>
-                  {tc.suites.length === 0 ? (
-                    <>
-                      <p className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-1">No test suites yet</p>
-                      <p className="text-xs text-gray-500 max-w-xs leading-relaxed">Test suites group related test cases together. Create your first suite on the left sidebar, then add test cases to it.</p>
-                      <button type="button" onClick={() => setNewSuiteOpen(true)}
-                        className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl border-none cursor-pointer shadow-sm">
-                        <Plus size={12} strokeWidth={2.5} /> Create First Suite
-                      </button>
-                    </>
-                  ) : filterAssignedToMe ? (
-                    <>
-                      <p className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-1">No cases assigned to you</p>
-                      <p className="text-xs text-gray-500 max-w-xs leading-relaxed">None of the test cases in this project are assigned to you. Toggle off "My Cases" to see all test cases.</p>
-                      <button type="button" onClick={() => setFilterAssignedToMe(false)}
-                        className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl border-none cursor-pointer shadow-sm">
-                        Show All Cases
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-1">No test cases yet</p>
-                      <p className="text-xs text-gray-500 max-w-xs leading-relaxed">Add your first test case to start tracking quality. Each case can have steps, assignees, and execution results.</p>
-                      <button type="button" onClick={() => setNewCaseOpen(true)}
-                        className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl border-none cursor-pointer shadow-sm">
-                        <Plus size={12} strokeWidth={2.5} /> Add First Test Case
-                      </button>
-                    </>
-                  )}
-                </div>
+                {tc.suites.length === 0 ? (
+                  <>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200">No test suites yet</p>
+                    <button type="button" onClick={() => setNewSuiteOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer transition-colors">
+                      <Plus size={12} /> Create First Suite
+                    </button>
+                  </>
+                ) : hasFilters ? (
+                  <>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200">No results found</p>
+                    <button type="button" onClick={() => { setSearch(''); setFilterSuite(null); setFilterStatus(''); setFilterPriority(''); setFilterAssignedToMe(false); setActiveSuiteId(null) }}
+                      className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white underline cursor-pointer">Clear filters</button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200">No test cases yet</p>
+                    <button type="button" onClick={() => setNewCaseOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer transition-colors">
+                      <Plus size={12} /> Add First Test Case
+                    </button>
+                  </>
+                )}
               </div>
             ) : (
-              <div className="overflow-visible">
-                <table className="w-full">
-                  <thead className="bg-gray-50/80 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-800">
-                    <tr>
-                      <th className="text-left px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500 w-12">#</th>
-                      <th className="text-left px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500">Title</th>
-                      <th className="text-left px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500">Suite</th>
-                      <th className="text-left px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500">Priority</th>
-                      <th className="text-left px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500">Status</th>
-                      <th className="text-left px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500">Assigned</th>
-                      <th className="text-left px-4 py-2.5 text-[10px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500">Updated</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredTestCases.map((c, idx) => (
-                      <tr key={c.id} onClick={() => openDetail(c.id)}
-                        className="border-b border-gray-50 dark:border-gray-800/60 last:border-0 hover:bg-teal-50/50 dark:hover:bg-teal-950/25 cursor-pointer transition-all group">
-                        <td className="px-4 py-3 text-[11px] text-gray-400 dark:text-gray-500 font-medium w-12">{idx + 1}</td>
-                        <td className="px-4 py-3 text-sm font-bold text-teal-600 dark:text-teal-300 whitespace-nowrap group-hover:text-teal-700 dark:group-hover:text-teal-200 transition-colors">TC-{c.id}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                          <span className="font-semibold">{c.title}</span>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{c.suite_name || '—'}</td>
-                        {/* Priority — inline dropdown */}
-                        <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                          <InlinePrioritySelect priority={c.priority} onChange={(p) => handleTablePriorityChange(c.id, p)} />
-                        </td>
-                        {/* Status — inline dropdown */}
-                        <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                          <InlineStatusSelect status={(c.effective_status || c.status) as TestStatus} onChange={(s) => handleTableStatusChange(c.id, s)} />
-                        </td>
-                        {/* Assignees — avatar stack */}
-                        <td className="px-4 py-3">
-                          <AvatarStack users={(c as any).assignees || []} max={4} size={5} />
-                        </td>
-                        <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{c.updated_at ? fmtRelative(c.updated_at) : '—'}</td>
+              <>
+                {/* Desktop Table */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="border-b border-gray-100 dark:border-gray-800">
+                      <tr className="text-left">
+                        <th className="px-4 py-2.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-10">#</th>
+                        <th className="px-4 py-2.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Title</th>
+                        <th className="px-4 py-2.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Suite</th>
+                        <th className="px-4 py-2.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Priority</th>
+                        <th className="px-4 py-2.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                        <th className="px-4 py-2.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Assigned</th>
+                        <th className="px-4 py-2.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Updated</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
+                      {filteredTestCases.map((c, idx) => (
+                        <tr key={c.id} onClick={() => openDetail(c.id)}
+                          className="hover:bg-gray-50 dark:hover:bg-gray-800/60 cursor-pointer transition-colors">
+                          <td className="px-4 py-3 text-[11px] text-gray-400">{idx + 1}</td>
+                          <td className="px-4 py-3">
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">TC-{c.id}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white mt-0.5">{c.title}</p>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{c.suite_name || '—'}</td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <InlinePrioritySelect priority={c.priority} onChange={(p) => handleTablePriorityChange(c.id, p)} />
+                          </td>
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <InlineStatusSelect status={(c as any).effective_status || c.status} onChange={(s) => handleTableStatusChange(c.id, s)} />
+                          </td>
+                          <td className="px-4 py-3">
+                            <AvatarStack users={(c as any).assignees || []} max={3} size={5} />
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-400 dark:text-gray-500">{c.updated_at ? fmtRelative(c.updated_at) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Cards */}
+                <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-800">
+                  {filteredTestCases.map((c) => (
+                    <div key={c.id} onClick={() => openDetail(c.id)} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/60 cursor-pointer transition-colors">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="min-w-0">
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">TC-{c.id}</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-white mt-0.5">{c.title}</p>
+                        </div>
+                        <InlinePrioritySelect priority={c.priority} onChange={(p) => handleTablePriorityChange(c.id, p)} />
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <InlineStatusSelect status={(c as any).effective_status || c.status} onChange={(s) => handleTableStatusChange(c.id, s)} />
+                          <span className="text-[11px] text-gray-400 dark:text-gray-500">{c.suite_name || '—'}</span>
+                        </div>
+                        <AvatarStack users={(c as any).assignees || []} max={3} size={4} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
 
             {/* Pagination */}
             {tc.total > 0 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 flex-wrap gap-2">
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  Page <span className="font-bold text-gray-900 dark:text-white">{tc.page}</span> of <span className="font-bold text-gray-900 dark:text-white">{totalPages}</span>
-                  <span className="text-gray-400">·</span>
-                  <span><span className="font-bold text-gray-900 dark:text-white">{tc.total}</span> total</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <select value={tc.perPage} onChange={(e) => tc.setPerPage(Number(e.target.value))}
-                    className="appearance-none pl-2 pr-7 py-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:border-teal-500">
-                    {[10, 15, 20, 50].map((n) => <option key={n} value={n}>{n} / page</option>)}
-                  </select>
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex-wrap gap-2">
+                <p className="text-xs text-gray-500">
+                  Page <span className="font-medium text-gray-900 dark:text-white">{tc.page}</span> of <span className="font-medium text-gray-900 dark:text-white">{totalPages}</span>
+                  <span className="mx-1.5">·</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{tc.total}</span> total
+                </p>
+                <div className="flex items-center gap-1">
                   <button type="button" onClick={() => tc.setPage(Math.max(1, tc.page - 1))} disabled={tc.page <= 1}
-                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 border-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
-                    <ChevronLeft size={13} strokeWidth={2.5} />
+                    className="w-7 h-7 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium transition-colors">
+                    ‹
                   </button>
+                  <span className="px-2 text-xs font-medium text-gray-700 dark:text-gray-200">{tc.page} / {totalPages}</span>
                   <button type="button" onClick={() => tc.setPage(Math.min(totalPages, tc.page + 1))} disabled={tc.page >= totalPages}
-                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 border-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
-                    <ChevronRight size={13} strokeWidth={2.5} />
+                    className="w-7 h-7 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium transition-colors">
+                    ›
                   </button>
                 </div>
               </div>

@@ -462,7 +462,6 @@ function NewTaskModal({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Task title"
-            autoFocus
             className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-base font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <textarea

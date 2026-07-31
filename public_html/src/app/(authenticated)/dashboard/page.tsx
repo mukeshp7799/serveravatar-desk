@@ -95,9 +95,6 @@ export default function DashboardPage() {
 
       {/* Welcome Banner with vibrant gradient */}
       <div className="flex flex-wrap justify-end items-center gap-3">
-        <Link href="/tasks" className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl text-sm font-bold transition no-underline inline-flex items-center gap-1.5">
-              <ClipboardList size={14} strokeWidth={2.25} /> {t('dashboard.viewTasks')}
-            </Link>
         <Link href="/announcements" className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition shadow hover:shadow-lg no-underline inline-flex items-center gap-1.5">
               <Megaphone size={14} strokeWidth={2.25} /> {t('dashboard.announcements')}
             </Link>

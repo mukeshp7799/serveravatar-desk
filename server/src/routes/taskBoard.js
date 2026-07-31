@@ -479,9 +479,9 @@ router.post(
       for (const uid of ids) {
         // Only insert if the user is a project member or the owner.
         const [[allowed]] = await pool.query(
-          `SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? LIMIT 1
+          `(SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? LIMIT 1)
            UNION
-           SELECT 1 FROM projects WHERE id = ? AND manager_id = ? LIMIT 1`,
+           (SELECT 1 FROM projects WHERE id = ? AND manager_id = ? LIMIT 1)`,
           [projectId, uid, projectId, uid]
         );
         if (allowed) {
@@ -597,9 +597,9 @@ router.put("/tasks/:taskId", auth, async (req, res, next) => {
         for (const uid of ids) {
           // Validate user is a project member or the owner
           const [[allowed]] = await conn.query(
-            `SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? LIMIT 1
+            `(SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? LIMIT 1)
              UNION
-             SELECT 1 FROM projects WHERE id = ? AND manager_id = ? LIMIT 1`,
+             (SELECT 1 FROM projects WHERE id = ? AND manager_id = ? LIMIT 1)`,
             [existing.project_id, uid, existing.project_id, uid]
           );
           if (allowed) {

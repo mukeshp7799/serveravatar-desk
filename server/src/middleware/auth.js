@@ -26,7 +26,7 @@ const auth = async (req, res, next) => {
     }
 
     const [users] = await pool.query(
-      "SELECT u.id, u.email, u.first_name, u.last_name, u.role_id, u.status, r.name as role_name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?",
+      "SELECT u.id, u.email, u.first_name, u.last_name, u.role_id, u.status, u.email_verified_at, r.name as role_name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?",
       [decoded.userId],
     );
 
