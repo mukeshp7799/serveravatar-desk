@@ -80,17 +80,30 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 -- ───────────────────────────────────────────────────────────────────
 -- 4. Add email-verification columns to users
+--    Idempotent: skips columns that already exist (re-runs of this
+--    migration are safe).
 -- ───────────────────────────────────────────────────────────────────
-ALTER TABLE users
-  ADD COLUMN email_verified_at             TIMESTAMP    NULL DEFAULT NULL AFTER status,
-  ADD COLUMN email_verification_token      VARCHAR(128) NULL DEFAULT NULL AFTER email_verified_at,
-  ADD COLUMN email_verification_expires_at TIMESTAMP    NULL DEFAULT NULL AFTER email_verification_token,
-  ADD INDEX idx_email_verification_token (email_verification_token);
+SET @sql := (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE users
+       ADD COLUMN email_verified_at             TIMESTAMP    NULL DEFAULT NULL AFTER status,
+       ADD COLUMN email_verification_token      VARCHAR(128) NULL DEFAULT NULL AFTER email_verified_at,
+       ADD COLUMN email_verification_expires_at TIMESTAMP    NULL DEFAULT NULL AFTER email_verification_token,
+       ADD INDEX idx_email_verification_token (email_verification_token)',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name   = 'users'
+    AND column_name  = 'email_verified_at'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- ───────────────────────────────────────────────────────────────────
--- 5. Seed the 2 system roles
+-- 5. Seed the 2 system roles (idempotent via INSERT IGNORE)
 -- ───────────────────────────────────────────────────────────────────
-INSERT INTO roles (id, name, description) VALUES
+INSERT IGNORE INTO roles (id, name, description) VALUES
   (1, 'Administrator', 'Full system access — all permissions'),
   (2, 'User',          'Basic employee access');
 
@@ -98,11 +111,12 @@ INSERT INTO roles (id, name, description) VALUES
 -- 6. Assign permissions
 --    Administrator → all 45
 --    User          → curated 14-permission subset
+--    Idempotent: re-applying on a DB that already has these rows is safe.
 -- ───────────────────────────────────────────────────────────────────
-INSERT INTO role_permissions (role_id, permission_id)
+INSERT IGNORE INTO role_permissions (role_id, permission_id)
   SELECT 1, id FROM permissions;
 
-INSERT INTO role_permissions (role_id, permission_id)
+INSERT IGNORE INTO role_permissions (role_id, permission_id)
   SELECT 2, id FROM permissions
   WHERE name IN (
     'users.view_own',
