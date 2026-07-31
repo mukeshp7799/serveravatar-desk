@@ -8,7 +8,8 @@ import LanguageSwitcher from '../../components/LanguageSwitcher'
 import Scroll from '../../components/Scroll'
 import {
   LayoutDashboard, Users, Palmtree, Network, ShieldCheck,
-  FolderKanban, ListChecks, MessageSquare, Megaphone, Bell, Mail, Settings as SettingsIcon,
+  FolderKanban, ListChecks, MessageSquare, Megaphone, Bell,
+  Settings as SettingsIcon,
   Menu, X as XIcon, LogOut, Sparkles,
   PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
@@ -24,13 +25,9 @@ const navConfig = [
   { href: '/roles', labelKey: 'nav.roles', Icon: ShieldCheck },
   { sectionKey: 'nav.projects' },
   { href: '/projects', labelKey: 'nav.projectsLink', Icon: FolderKanban },
-  { href: '/tasks', labelKey: 'nav.tasks', Icon: ListChecks },
   { href: '/discussions', labelKey: 'nav.discussions', Icon: MessageSquare },
   { sectionKey: 'nav.company' },
   { href: '/announcements', labelKey: 'nav.announcements', Icon: Megaphone },
-  { href: '/notifications', labelKey: 'nav.notifications', Icon: Bell },
-  { href: '/email-logs', labelKey: 'nav.emailLogs', Icon: Mail },
-  { href: '/settings', labelKey: 'nav.settings', Icon: SettingsIcon },
 ]
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
