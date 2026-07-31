@@ -1,0 +1,32 @@
+# Dependencies
+server/node_modules/
+public_html/node_modules/
+public_html/.next/
+
+# Build output
+.next/
+out/
+
+# Uploads (user data)
+uploads/
+
+# Logs
+logs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Backup
+package-lock.json.bak

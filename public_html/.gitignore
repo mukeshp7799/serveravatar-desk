@@ -1,0 +1,72 @@
+# ─── Dependencies ──────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ─── Next.js build outputs ─────────────────────────────────────
+.next/
+out/
+build/
+dist/
+
+# ─── Production runtime ────────────────────────────────────────
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# ─── Typescript ────────────────────────────────────────────────
+*.tsbuildinfo
+next-env.d.ts
+
+# ─── Misc ──────────────────────────────────────────────────────
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+!.env.example
+
+# ─── IDE / Editor ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Coverage / test outputs ───────────────────────────────────
+coverage/
+*.lcov
+.nyc_output/
+
+# ─── Vercel ─────────────────────────────────────────────────────
+.vercel
+
+# ─── Turbo / Turbopack cache ──────────────────────────────────
+.turbo
+.turbo-*
+
+# ─── Local package files (we commit package-lock.json only) ──
+*.tgz
+
+# ─── Logs (system-runtime, not your app code) ─────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── OS junk ──────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ─── Local development helpers (server-side) ──────────────────
+.watch/
+.cache/
+
+# Allow README and explicit config files even if ignored above
+!*.md
+!README.md
+downloads/

@@ -1,0 +1,1005 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/* Let the browser pick form widgets that match the current theme
+   (dark scrollbars / native form controls in dark mode). */
+:root { color-scheme: light; }
+[data-theme="dark"] { color-scheme: dark; }
+
+@theme {
+  /* Custom sidebar width steps — collapse toggle switches between these */
+  --spacing-68: 68px;    /* collapsed sidebar (icon-only) */
+  --spacing-280: 280px;  /* expanded sidebar (full nav with labels) */
+
+  /* Vibrant brand colors */
+  --color-primary: #6366F1;
+  --color-primary-50: #EEF2FF;
+  --color-primary-100: #E0E7FF;
+  --color-primary-500: #6366F1;
+  --color-primary-600: #4F46E5;
+  --color-primary-700: #4338CA;
+  --color-secondary: #EC4899;
+  --color-secondary-500: #EC4899;
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+}
+
+/* Allow `dark:` Tailwind variants to also work when data-theme="dark" is set */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* ─── Light mode tokens ─── */
+:root {
+  --bg-app: #F5F3FF;
+  --bg-app-gradient: linear-gradient(135deg, #FDF4FF 0%, #EEF2FF 50%, #ECFEFF 100%);
+  --bg-surface: #FFFFFF;
+  --bg-muted: #F9FAFB;
+  --bg-subtle: #FAFAFB;
+  --bg-elevated: #FFFFFF;
+  --bg-sidebar: linear-gradient(180deg, #4F46E5 0%, #7C3AED 50%, #DB2777 100%);
+  --text-primary: #111827;
+  --text-secondary: #4B5563;
+  --text-tertiary: #6B7280;
+  --text-muted: #9CA3AF;
+  --border-default: #E5E7EB;
+  --border-muted: #F3F4F6;
+  --border-strong: #D1D5DB;
+  --shadow-card: 0 4px 12px -2px rgba(99, 102, 241, 0.08), 0 2px 4px -1px rgba(99, 102, 241, 0.04);
+}
+
+[data-theme="dark"] {
+  /* Popular neutral dark theme palette (GitHub/Linear style — neutral grays, no purple tint) */
+  --bg-app: #0d1117;                /* GitHub canvas */
+  --bg-app-gradient: linear-gradient(180deg, #0d1117 0%, #161b22 100%);
+  --bg-surface: #161b22;            /* GitHub canvas-overlay — card backgrounds */
+  --bg-muted: #21262d;              /* GitHub muted — sidebar items, dropdowns */
+  --bg-subtle: #0d1117;             /* GitHub canvas — page background areas */
+  --bg-elevated: #1c2128;           /* GitHub overlay — modals, dropdowns, inputs */
+  --bg-sidebar: linear-gradient(180deg, #0d1117 0%, #161b22 100%);
+  --text-primary: #e6edf3;          /* GitHub fg-default — primary text */
+  --text-secondary: #c9d1d9;        /* GitHub fg-muted — secondary text */
+  --text-tertiary: #8b949e;         /* GitHub fg-subtle — tertiary text */
+  --text-muted: #6e7681;            /* GitHub fg-faint — muted text */
+  --border-default: #30363d;        /* GitHub border-default */
+  --border-muted: #21262d;          /* GitHub border-muted */
+  --border-strong: #484f58;         /* GitHub border-strong */
+  --shadow-card: 0 4px 12px -2px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── Backgrounds ─── */
+body {
+  background: var(--bg-app-gradient);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+[data-theme="dark"] body { background: var(--bg-app-gradient); color: var(--text-primary); }
+[data-theme="dark"] .bg-white { background-color: var(--bg-surface) !important; }
+[data-theme="dark"] .bg-gray-50 { background-color: var(--bg-subtle) !important; }
+[data-theme="dark"] .bg-gray-100 { background-color: var(--bg-muted) !important; }
+[data-theme="dark"] .bg-gray-200 { background-color: #374151 !important; }
+[data-theme="dark"] .bg-gray-300 { background-color: #4B5563 !important; }
+[data-theme="dark"] .bg-slate-900 { background-color: var(--bg-sidebar) !important; }
+
+/* Backgrounds with opacity */
+[data-theme="dark"] .bg-white\/80 { background-color: rgb(31 41 55 / 0.8) !important; }
+[data-theme="dark"] .bg-gray-50\/80 { background-color: rgb(17 24 39 / 0.8) !important; }
+[data-theme="dark"] .bg-red-50 { background-color: rgb(127 29 29 / 0.4) !important; }
+[data-theme="dark"] .bg-red-100 { background-color: rgb(127 29 29 / 0.5) !important; }
+[data-theme="dark"] .bg-green-100 { background-color: rgb(20 83 45 / 0.5) !important; }
+[data-theme="dark"] .bg-amber-50 { background-color: rgb(120 53 15 / 0.4) !important; }
+[data-theme="dark"] .bg-amber-100 { background-color: rgb(120 53 15 / 0.5) !important; }
+[data-theme="dark"] .bg-indigo-50 { background-color: rgb(49 46 129 / 0.5) !important; }
+[data-theme="dark"] .bg-indigo-100 { background-color: rgb(49 46 129 / 0.5) !important; }
+[data-theme="dark"] .bg-blue-100 { background-color: rgb(30 58 138 / 0.5) !important; }
+[data-theme="dark"] .bg-gray-100.text-gray-600 { background-color: #374151 !important; }
+
+/* ─── Text ─── */
+[data-theme="dark"] .text-gray-900 { color: var(--text-primary) !important; }
+[data-theme="dark"] .text-gray-800 { color: var(--text-primary) !important; }
+[data-theme="dark"] .text-gray-700 { color: var(--text-secondary) !important; }
+[data-theme="dark"] .text-gray-600 { color: var(--text-secondary) !important; }
+[data-theme="dark"] .text-gray-500 { color: var(--text-tertiary) !important; }
+[data-theme="dark"] .text-gray-400 { color: var(--text-muted) !important; }
+[data-theme="dark"] .text-gray-300 { color: var(--text-muted) !important; }
+[data-theme="dark"] .text-white { color: #F9FAFB; }
+
+/* ─── Borders ─── */
+[data-theme="dark"] .border-gray-100 { border-color: var(--border-muted) !important; }
+[data-theme="dark"] .border-gray-50 { border-color: rgb(255 255 255 / 0.06) !important; }
+[data-theme="dark"] .border-gray-200 { border-color: var(--border-default) !important; }
+[data-theme="dark"] .border-gray-300 { border-color: var(--border-strong) !important; }
+[data-theme="dark"] .border-amber-100 { border-color: rgb(120 53 15 / 0.6) !important; }
+[data-theme="dark"] .border-indigo-300 { border-color: #6366F1 !important; }
+[data-theme="dark"] .divide-gray-200 > * + * { border-color: var(--border-default) !important; }
+
+/* ─── Hover states ─── */
+[data-theme="dark"] .hover\:bg-gray-50:hover { background-color: var(--bg-muted) !important; }
+[data-theme="dark"] .hover\:bg-gray-100:hover { background-color: var(--bg-muted) !important; }
+[data-theme="dark"] .hover\:bg-gray-200:hover { background-color: #374151 !important; }
+[data-theme="dark"] .hover\:bg-red-50:hover { background-color: rgb(127 29 29 / 0.5) !important; }
+[data-theme="dark"] .hover\:bg-indigo-100:hover { background-color: rgb(49 46 129 / 0.6) !important; }
+
+/* ─── Inputs/selects/textareas ─── */
+[data-theme="dark"] input[type="text"],
+[data-theme="dark"] input[type="email"],
+[data-theme="dark"] input[type="password"],
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] input[type="number"],
+[data-theme="dark"] input:not([type]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--bg-elevated) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-default) !important;
+}
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--text-muted) !important;
+}
+[data-theme="dark"] select option {
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+/* ─── Shadows ─── */
+[data-theme="dark"] .shadow-sm { box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.3) !important; }
+[data-theme="dark"] .shadow-lg { box-shadow: 0 10px 25px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5) !important; }
+[data-theme="dark"] .shadow-2xl { box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.6) !important; }
+
+/* ─── Modal backdrop ─── */
+[data-theme="dark"] .bg-black\/50 { background-color: rgb(0 0 0 / 0.7) !important; }
+[data-theme="dark"] .bg-black\/40 { background-color: rgb(0 0 0 / 0.6) !important; }
+
+/* ─── COMPREHENSIVE DARK MODE OVERRIDES ─── */
+
+/* Light pastel backgrounds used in cards/avatars/chat bubbles */
+[data-theme="dark"] .bg-violet-50 { background-color: #312E81 !important; color: #C7D2FE !important; }
+[data-theme="dark"] .bg-pink-50 { background-color: #831843 !important; color: #FBCFE8 !important; }
+[data-theme="dark"] .bg-rose-50 { background-color: rgb(127 29 29 / 0.4) !important; color: #FECDD3 !important; }
+[data-theme="dark"] .bg-emerald-50 { background-color: rgb(6 78 59 / 0.5) !important; color: #A7F3D0 !important; }
+[data-theme="dark"] .bg-cyan-50 { background-color: rgb(14 116 144 / 0.5) !important; color: #A5F3FC !important; }
+[data-theme="dark"] .bg-sky-50 { background-color: rgb(14 116 144 / 0.4) !important; color: #BAE6FD !important; }
+[data-theme="dark"] .bg-orange-50 { background-color: rgb(120 53 15 / 0.4) !important; color: #FED7AA !important; }
+[data-theme="dark"] .bg-amber-50 { background-color: rgb(120 53 15 / 0.4) !important; color: #FDE68A !important; }
+[data-theme="dark"] .bg-yellow-50 { background-color: rgb(113 63 18 / 0.5) !important; color: #FEF3C7 !important; }
+[data-theme="dark"] .bg-fuchsia-50 { background-color: rgb(112 26 117 / 0.5) !important; color: #F5D0FE !important; }
+[data-theme="dark"] .bg-blue-50 { background-color: rgb(30 58 138 / 0.5) !important; color: #BFDBFE !important; }
+[data-theme="dark"] .bg-slate-50 { background-color: #1E293B !important; color: var(--text-secondary) !important; }
+[data-theme="dark"] .bg-purple-50 { background-color: rgb(76 29 149 / 0.5) !important; color: #DDD6FE !important; }
+[data-theme="dark"] .bg-green-50 { background-color: rgb(6 78 59 / 0.5) !important; color: #A7F3D0 !important; }
+[data-theme="dark"] .bg-teal-50 { background-color: rgb(15 76 70 / 0.5) !important; color: #99F6E4 !important; }
+[data-theme="dark"] .bg-lime-50 { background-color: rgb(54 83 20 / 0.5) !important; color: #D9F99D !important; }
+
+/* Text colors on light backgrounds (now readable in dark mode) */
+[data-theme="dark"] .text-violet-700,
+[data-theme="dark"] .text-violet-600 { color: #C4B5FD !important; }
+[data-theme="dark"] .text-pink-700,
+[data-theme="dark"] .text-pink-600 { color: #F9A8D4 !important; }
+[data-theme="dark"] .text-rose-700,
+[data-theme="dark"] .text-rose-600 { color: #FDA4AF !important; }
+[data-theme="dark"] .text-emerald-700,
+[data-theme="dark"] .text-emerald-600 { color: #6EE7B7 !important; }
+[data-theme="dark"] .text-cyan-700,
+[data-theme="dark"] .text-cyan-600 { color: #67E8F9 !important; }
+[data-theme="dark"] .text-sky-700,
+[data-theme="dark"] .text-sky-600 { color: #7DD3FC !important; }
+[data-theme="dark"] .text-orange-700,
+[data-theme="dark"] .text-orange-600 { color: #FDBA74 !important; }
+[data-theme="dark"] .text-amber-700,
+[data-theme="dark"] .text-amber-600 { color: #FCD34D !important; }
+[data-theme="dark"] .text-yellow-700,
+[data-theme="dark"] .text-yellow-600 { color: #FDE047 !important; }
+[data-theme="dark"] .text-fuchsia-700,
+[data-theme="dark"] .text-fuchsia-600 { color: #F0ABFC !important; }
+[data-theme="dark"] .text-blue-700,
+[data-theme="dark"] .text-blue-600 { color: #93C5FD !important; }
+[data-theme="dark"] .text-purple-700,
+[data-theme="dark"] .text-purple-600 { color: #C4B5FD !important; }
+[data-theme="dark"] .text-green-700,
+[data-theme="dark"] .text-green-600 { color: #86EFAC !important; }
+[data-theme="dark"] .text-teal-700,
+[data-theme="dark"] .text-teal-600 { color: #5EEAD4 !important; }
+[data-theme="dark"] .text-lime-700,
+[data-theme="dark"] .text-lime-600 { color: #BEF264 !important; }
+[data-theme="dark"] .text-indigo-700,
+[data-theme="dark"] .text-indigo-600 { color: #A5B4FC !important; }
+
+/* Border colors on light pastel bgs */
+[data-theme="dark"] .border-violet-100 { border-color: #4C1D95 !important; }
+[data-theme="dark"] .border-pink-100 { border-color: #831843 !important; }
+[data-theme="dark"] .border-rose-100,
+[data-theme="dark"] .border-rose-200 { border-color: rgb(159 18 57 / 0.5) !important; }
+[data-theme="dark"] .border-emerald-100,
+[data-theme="dark"] .border-emerald-200 { border-color: rgb(6 78 59 / 0.5) !important; }
+[data-theme="dark"] .border-cyan-100,
+[data-theme="dark"] .border-cyan-200 { border-color: rgb(14 116 144 / 0.5) !important; }
+[data-theme="dark"] .border-sky-100,
+[data-theme="dark"] .border-sky-200 { border-color: rgb(14 116 144 / 0.5) !important; }
+[data-theme="dark"] .border-amber-200 { border-color: rgb(120 53 15 / 0.5) !important; }
+[data-theme="dark"] .border-amber-300 { border-color: rgb(180 83 9 / 0.6) !important; }
+[data-theme="dark"] .border-blue-100,
+[data-theme="dark"] .border-blue-200 { border-color: rgb(30 58 138 / 0.5) !important; }
+[data-theme="dark"] .border-indigo-100,
+[data-theme="dark"] .border-indigo-200 { border-color: rgb(49 46 129 / 0.5) !important; }
+
+/* Badge classes removed (Indigo Calm) — components use inline bg-/text-/border- utility classes */
+
+/* Sidebar section labels (MAIN, HR MANAGEMENT, etc.) */
+[data-theme="dark"] .text-gray-400.font-bold.uppercase,
+[data-theme="dark"] .uppercase.text-gray-400,
+[data-theme="dark"] .uppercase.tracking-wider.text-gray-400 { color: #94A3B8 !important; }
+
+/* Action buttons (Edit/Delete in table rows) */
+[data-theme="dark"] .bg-blue-50\/50,
+[data-theme="dark"] .bg-blue-100 { background-color: rgb(30 58 138 / 0.3) !important; }
+[data-theme="dark"] .hover\:bg-blue-100:hover { background-color: rgb(30 58 138 / 0.5) !important; }
+[data-theme="dark"] .bg-pink-50\/50,
+[data-theme="dark"] .bg-pink-100,
+[data-theme="dark"] .bg-rose-100 { background-color: rgb(159 18 57 / 0.3) !important; }
+[data-theme="dark"] .hover\:bg-pink-100:hover,
+[data-theme="dark"] .hover\:bg-rose-100:hover { background-color: rgb(159 18 57 / 0.5) !important; }
+[data-theme="dark"] .bg-indigo-50\/50,
+[data-theme="dark"] .bg-indigo-50\/30 { background-color: rgb(49 46 129 / 0.45) !important; }
+[data-theme="dark"] .hover\:bg-indigo-50:hover { background-color: rgb(49 46 129 / 0.55) !important; }
+[data-theme="dark"] .text-blue-600,
+[data-theme="dark"] .text-blue-700 { color: #93C5FD !important; }
+[data-theme="dark"] .text-pink-600,
+[data-theme="dark"] .text-pink-700 { color: #F9A8D4 !important; }
+[data-theme="dark"] .text-rose-600,
+[data-theme="dark"] .text-rose-700 { color: #FDA4AF !important; }
+
+/* Form input borders with focus ring */
+[data-theme="dark"] .focus\:border-blue-500:focus { border-color: #818CF8 !important; }
+[data-theme="dark"] .focus\:border-pink-500:focus { border-color: #F472B6 !important; }
+[data-theme="dark"] .focus\:border-indigo-500:focus { border-color: #818CF8 !important; }
+[data-theme="dark"] .focus\:ring-blue-100 { --tw-ring-color: rgb(30 58 138 / 0.4) !important; }
+[data-theme="dark"] .focus\:ring-pink-100 { --tw-ring-color: rgb(159 18 57 / 0.4) !important; }
+[data-theme="dark"] .focus\:ring-indigo-100 { --tw-ring-color: rgb(49 46 129 / 0.4) !important; }
+
+/* Table header backgrounds */
+[data-theme="dark"] .bg-gray-50\/50 { background-color: rgb(15 23 42 / 0.5) !important; }
+[data-theme="dark"] .bg-gradient-to-r.from-blue-50 { background-image: none !important; background-color: #1E293B !important; }
+
+/* Cancel/secondary buttons */
+[data-theme="dark"] .bg-gray-200 { background-color: #334155 !important; color: var(--text-primary) !important; }
+[data-theme="dark"] .hover\:bg-gray-300:hover { background-color: #475569 !important; }
+
+/* Empty field em-dashes */
+[data-theme="dark"] .text-gray-300 { color: #64748B !important; }
+
+/* Spinner */
+[data-theme="dark"] .border-blue-200 { border-color: #334155 !important; }
+[data-theme="dark"] .border-t-blue-600 { border-color: #818CF8 !important; }
+
+/* Login page purple gradient background */
+[data-theme="dark"] .bg-gradient-to-br.from-indigo-50 { background-image: none !important; background-color: var(--bg-app) !important; }
+
+/* Sidebar light bg (when bg-white) */
+[data-theme="dark"] aside.bg-white { background-color: var(--bg-surface) !important; }
+
+/* Active sidebar link gradient stays indigo but slightly muted */
+[data-theme="dark"] .bg-gradient-to-r.from-indigo-500 { background-color: #4F46E5 !important; }
+
+/* Decorative pastel blobs (background decoration in dashboard) */
+[data-theme="dark"] .bg-indigo-200\/30,
+[data-theme="dark"] .bg-pink-200\/30,
+[data-theme="dark"] .bg-purple-200\/30,
+[data-theme="dark"] .bg-cyan-200\/30,
+[data-theme="dark"] .bg-yellow-200\/30,
+[data-theme="dark"] .bg-rose-200\/30,
+[data-theme="dark"] .bg-emerald-200\/30 { opacity: 0.05 !important; }
+
+/* Login/register page specific dark mode */
+[data-theme="dark"] .from-indigo-50 { --tw-gradient-from: var(--bg-app) var(--tw-gradient-from-position) !important; }
+[data-theme="dark"] .via-purple-50 { --tw-gradient-via: var(--bg-app) var(--tw-gradient-via-position) !important; }
+[data-theme="dark"] .to-pink-50 { --tw-gradient-to: var(--bg-app) var(--tw-gradient-to-position) !important; }
+
+/* Gradient text colors (used on stat numbers) */
+[data-theme="dark"] .from-indigo-600 { --tw-gradient-from: #818CF8 var(--tw-gradient-from-position) !important; }
+[data-theme="dark"] .to-purple-600 { --tw-gradient-to: #A78BFA var(--tw-gradient-to-position) !important; }
+[data-theme="dark"] .from-pink-600 { --tw-gradient-from: #F472B6 var(--tw-gradient-from-position) !important; }
+[data-theme="dark"] .to-rose-600 { --tw-gradient-to: #FB7185 var(--tw-gradient-to-position) !important; }
+[data-theme="dark"] .from-amber-600 { --tw-gradient-from: #FBBF24 var(--tw-gradient-from-position) !important; }
+[data-theme="dark"] .to-orange-600 { --tw-gradient-to: #FB923C var(--tw-gradient-to-position) !important; }
+[data-theme="dark"] .from-emerald-600 { --tw-gradient-from: #34D399 var(--tw-gradient-from-position) !important; }
+[data-theme="dark"] .to-teal-600 { --tw-gradient-to: #2DD4BF var(--tw-gradient-to-position) !important; }
+[data-theme="dark"] .from-cyan-600 { --tw-gradient-from: #22D3EE var(--tw-gradient-from-position) !important; }
+[data-theme="dark"] .to-blue-600 { --tw-gradient-to: #60A5FA var(--tw-gradient-to-position) !important; }
+
+/* Table row stripes */
+[data-theme="dark"] .even\:bg-gray-50:nth-child(even),
+[data-theme="dark"] tbody tr:nth-child(even) { background-color: rgba(30, 41, 59, 0.3) !important; }
+
+/* Border colors used in action buttons (focus rings, etc.) */
+[data-theme="dark"] .ring-indigo-300 { --tw-ring-color: rgb(99 102 241 / 0.3) !important; }
+
+/* Empty state icons (paint palette, bell, etc.) */
+[data-theme="dark"] .text-gray-300 { color: #475569 !important; }
+
+
+/* ─── Ring colors ─── */
+[data-theme="dark"] .ring-indigo-400 { --tw-ring-color: #818CF8 !important; }
+
+/* ─── Sidebar text (was text-slate-X) ─── */
+[data-theme="dark"] .text-slate-300 { color: var(--text-secondary) !important; }
+[data-theme="dark"] .text-slate-400 { color: var(--text-tertiary) !important; }
+[data-theme="dark"] .text-slate-500 { color: var(--text-tertiary) !important; }
+[data-theme="dark"] .border-white\/10 { border-color: rgb(255 255 255 / 0.08) !important; }
+[data-theme="dark"] .bg-white\/10 { background-color: rgb(255 255 255 / 0.05) !important; }
+[data-theme="dark"] .hover\:bg-white\/10:hover { background-color: rgb(255 255 255 / 0.1) !important; }
+[data-theme="dark"] .hover\:bg-white\/20:hover { background-color: rgb(255 255 255 / 0.15) !important; }
+[data-theme="dark"] .bg-indigo-600 { background-color: #4F46E5 !important; }
+
+/* Smooth transitions when toggling theme */
+html, body, .bg-white, .bg-gray-50, .bg-gray-100, .bg-gray-200, .bg-slate-900,
+.text-gray-400, .text-gray-500, .text-gray-600, .text-gray-700, .text-gray-800, .text-gray-900,
+.border-gray-100, .border-gray-200, .border-gray-300,
+input, select, textarea, button {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* ─── VIBRANT UTILITIES ─── */
+
+/* Gradient backgrounds */
+.bg-gradient-vibrant {
+  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #EC4899 100%);
+}
+.bg-gradient-sunset {
+  background: linear-gradient(135deg, #F59E0B 0%, #EF4444 50%, #EC4899 100%);
+}
+.bg-gradient-ocean {
+  background: linear-gradient(135deg, #0EA5E9 0%, #6366F1 50%, #8B5CF6 100%);
+}
+.bg-gradient-forest {
+  background: linear-gradient(135deg, #10B981 0%, #0EA5E9 100%);
+}
+.bg-gradient-aurora {
+  background: linear-gradient(135deg, #A855F7 0%, #EC4899 50%, #F59E0B 100%);
+}
+.bg-gradient-mint {
+  background: linear-gradient(135deg, #34D399 0%, #06B6D4 100%);
+}
+.bg-gradient-rose {
+  background: linear-gradient(135deg, #FB7185 0%, #F472B6 100%);
+}
+.bg-gradient-cyan {
+  background: linear-gradient(135deg, #22D3EE 0%, #6366F1 100%);
+}
+
+/* Glassmorphism */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+[data-theme="dark"] .glass {
+  background: rgba(17, 24, 39, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Colored card shadows removed (Indigo Calm theme) — use border + subtle shadow-sm instead */
+/* text-gradient-vibrant removed (Indigo Calm) — use text-indigo-600 */
+
+/* Floating shapes background animation */
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(5deg); }
+}
+@keyframes float-slower {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-30px) rotate(-5deg); }
+}
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.05); }
+}
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
+.animate-float-slower { animation: float-slower 12s ease-in-out infinite; }
+.animate-pulse-slow { animation: pulse-slow 6s ease-in-out infinite; }
+.animate-fade-in-up { animation: fadeInUp 0.5s ease-out; }
+.animate-scale-in { animation: scaleIn 0.3s ease-out; }
+
+/* Smooth hover lift
+   NOTE: deliberately uses box-shadow + border-color instead of `transform`
+   because the message card and any other element with `hover-lift` lives
+   inside the message-board list. When the user hovers a reaction chip,
+   the parent card is also hovered and would receive `transform: translateY`,
+   which creates a new stacking context. That stacking context traps the
+   chip's tooltip portal (z-index 9999) — elementFromPoint at the tooltip's
+   coordinates would still return the card body, because the card's
+   stacking context lives "below" the document body where the tooltip is
+   rendered. Sticking to box-shadow + border-color gives the same visual
+   lift without creating a stacking context, so portaled tooltips always
+   float above the card. */
+.hover-lift {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.hover-lift:hover {
+  box-shadow: 0 10px 25px -5px rgb(99 102 241 / 0.10), 0 8px 10px -6px rgb(99 102 241 / 0.05);
+}
+
+/* Card hover animation: lift + scale + indigo glow + border highlight */
+.card-hover {
+  transition: transform 0.3s cubic-bezier(0, 0, 0.2, 1),
+              box-shadow 0.3s cubic-bezier(0, 0, 0.2, 1),
+              border-color 0.3s cubic-bezier(0, 0, 0.2, 1);
+  will-change: transform, box-shadow;
+}
+.card-hover:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 20px 25px -5px rgba(99, 102, 241, 0.15), 0 8px 10px -6px rgba(99, 102, 241, 0.08);
+  border-color: rgb(129, 140, 248); /* indigo-400 */
+}
+
+/* Consistent row hover for tables and dashboard list items.
+   Light mode: subtle indigo tint. Dark mode: brighter indigo so it's visible on dark surface. */
+.row-hover {
+  transition: background-color 0.15s ease;
+}
+.row-hover:hover {
+  background-color: rgba(99, 102, 241, 0.08); /* indigo-500 @ 8% — subtle in light mode */
+}
+[data-theme="dark"] .row-hover:hover {
+  background-color: rgba(129, 140, 248, 0.14); /* indigo-400 @ 14% — visible on dark surface */
+}
+
+/* btn-gradient removed (Indigo Calm) — use bg-indigo-600 hover:bg-indigo-700 */
+/* Pill badges removed (Indigo Calm) — components use inline bg-/text-/border- utility classes */
+/* ───────── PerfectScrollbar + Native Scrollbar Styling ───────── */
+/* Light gray rail, narrow width, smooth thumb. */
+
+/* CSS-level smooth scroll for all pages */
+html { scroll-behavior: smooth; }
+
+.ps {
+  position: relative;
+  overflow: hidden !important;
+}
+.ps__rail-x,
+.ps__rail-y {
+  background-color: transparent !important;
+  border-radius: 9999px !important;
+  z-index: 10;
+  opacity: 0.6;
+  transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+.ps__rail-x { height: 6px !important; }
+.ps__rail-y { width: 6px !important; }
+
+/* Thumb — soft gray with smooth hover uplift */
+.ps__thumb-x,
+.ps__thumb-y {
+  background-color: #C9CDD4 !important; /* light gray */
+  border-radius: 9999px !important;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+.ps:hover .ps__rail-x,
+.ps:hover .ps__rail-y,
+.ps.ps--active-y .ps__rail-y,
+.ps.ps--active-x .ps__rail-x { opacity: 1; }
+
+.ps__thumb-x:hover,
+.ps__thumb-y:hover { background-color: #9CA3AF !important; }
+.ps__thumb-x:active,
+.ps__thumb-y:active { background-color: #6B7280 !important; }
+
+/* Dark theme for perfect-scrollbar */
+[data-theme="dark"] .ps__rail-y,
+[data-theme="dark"] .ps__rail-x { background-color: transparent !important; }
+[data-theme="dark"] .ps__thumb-x,
+[data-theme="dark"] .ps__thumb-y { background-color: #4B5563 !important; }
+[data-theme="dark"] .ps__thumb-x:hover,
+[data-theme="dark"] .ps__thumb-y:hover { background-color: #6B7280 !important; }
+
+/* Hide native scrollbars inside .ps containers (PerfectScrollbar needs this) */
+.ps > .ps__scrollbar-x-rail,
+.ps > .ps__scrollbar-y-rail { z-index: 10; }
+.ps:hover > .ps__scrollbar-y-rail:hover,
+.ps:hover > .ps__scrollbar-x-rail:hover { background-color: transparent; }
+
+/* Native fallback scrollbars — only on elements WITHOUT .ps wrapper.
+   Use `:not(.ps *)` to avoid showing on PS-internals. */
+*:not(.ps):not(.ps *) {
+  scrollbar-width: thin;
+  scrollbar-color: #C9CDD4 transparent;
+}
+*:not(.ps):not(.ps *)::-webkit-scrollbar { width: 6px; height: 6px; }
+*:not(.ps):not(.ps *)::-webkit-scrollbar-track { background: transparent; border-radius: 9999px; }
+*:not(.ps):not(.ps *)::-webkit-scrollbar-thumb {
+  background-color: #C9CDD4;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.2s ease;
+}
+*:not(.ps):not(.ps *)::-webkit-scrollbar-thumb:hover { background-color: #9CA3AF; }
+*:not(.ps):not(.ps *)::-webkit-scrollbar-thumb:active { background-color: #6B7280; }
+*:not(.ps):not(.ps *)::-webkit-scrollbar-corner { background: transparent; }
+
+/* Slim utility — even narrower scrollbar on demand */
+.scroll-slim::-webkit-scrollbar { width: 5px; height: 5px; }
+
+/* Hide scrollbar entirely (no PS, no native) */
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* ───────── Chat + Kanban helpers ───────── */
+.chat-scroll {
+  min-height: 0;
+}
+
+/* Per-message fade-up entrance */
+@keyframes msgIn {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-msg-in { animation: msgIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+/* Per-reaction chip pop — fires once when the chip's React key changes
+   (new emoji added by anyone, or the current user added one and the chip
+   transitions to "mine" highlight). Tiny scale+fade so the add feels
+   tactile but not noisy. */
+@keyframes emojiPop {
+  0%   { opacity: 0; transform: scale(0.4); }
+  60%  { opacity: 1; transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.animate-emoji-pop { animation: emojiPop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* Per-column animated task entrance */
+@keyframes cardIn {
+  0%   { opacity: 0; transform: translateY(12px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-card-in { animation: cardIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* Column glow on hover */
+@keyframes colPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+  50%      { box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.08); }
+}
+.col-hover-pulse:hover { animation: colPulse 1.6s ease-in-out infinite; }
+
+/* Kanban column colour themes — simple & bold */
+.col-todo        { --col-color: 148, 163, 184; }   /* slate */
+.col-in_progress { --col-color: 59, 130, 246; }    /* blue */
+.col-review      { --col-color: 245, 158, 11; }    /* amber */
+.col-done        { --col-color: 34, 197, 94; }     /* green */
+
+.kanban-col-bg {
+  background: linear-gradient(180deg, rgba(var(--col-color), 0.06) 0%, rgba(var(--col-color), 0.01) 100%);
+}
+.kanban-col-header {
+  background: linear-gradient(135deg, rgb(var(--col-color)) 0%, rgba(var(--col-color), 0.7) 100%);
+  position: relative;
+  overflow: hidden;
+}
+.kanban-col-header::before {
+  content: '';
+  position: absolute; top: 0; right: 0;
+  width: 80px; height: 80px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  filter: blur(12px);
+  transform: translate(20%, -30%);
+}
+.kanban-col-header::after {
+  content: '';
+  position: absolute; bottom: 0; left: -20px;
+  width: 60px; height: 60px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  filter: blur(10px);
+  transform: translateY(40%);
+}
+
+/* Drop-target shimmer */
+@keyframes colShimmer {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.col-drop-active {
+  background: linear-gradient(90deg,
+    rgba(var(--col-color), 0.15) 0%,
+    rgba(var(--col-color), 0.25) 50%,
+    rgba(var(--col-color), 0.15) 100%) !important;
+  background-size: 200% 100% !important;
+  animation: colShimmer 1.4s linear infinite;
+}
+
+/* ─── AUTH PAGES (login/register) — THEME-AWARE BACKGROUNDS ─── */
+/* Light mode: vibrant indigo gradient (Indigo Calm). Dark mode: dark navy with
+   muted violet glow orbs so white text on the login card stays readable. */
+.auth-bg-base {
+  background: linear-gradient(135deg, #4F46E5 0%, #6D28D9 50%, #DB2777 100%);
+}
+[data-theme="dark"] .auth-bg-base {
+  background: linear-gradient(135deg, #0b1020 0%, #1e1b4b 60%, #0f172a 100%);
+}
+
+.auth-glow-a {
+  background-color: #818CF8; /* indigo-400 fallback */
+}
+.auth-glow-b {
+  background-color: #6366F1; /* indigo-500 fallback */
+}
+[data-theme="dark"] .auth-glow-a {
+  background-color: #4338CA; /* indigo-700 — deeper, lower luminosity in dark mode */
+  opacity: 0.25;
+}
+[data-theme="dark"] .auth-glow-b {
+  background-color: #5B21B6; /* violet-800 */
+  opacity: 0.2;
+}
+
+/* On the auth pages, all the white-tinted utility backgrounds become
+   dark-glass equivalents so the floating ThemeSelector/LanguageSwitcher
+   stay visible against the new dark backdrop. */
+[data-theme="dark"] .bg-white\/30 {
+  background-color: rgb(15 23 42 / 0.6) !important;
+  border-color: rgb(255 255 255 / 0.15) !important;
+}
+[data-theme="dark"] .bg-white\/50 {
+  background-color: rgb(15 23 42 / 0.7) !important;
+  border-color: rgb(255 255 255 / 0.15) !important;
+}
+[data-theme="dark"] .bg-white\/40 {
+  background-color: rgb(15 23 42 / 0.55) !important;
+}
+[data-theme="dark"] .border-white\/50 {
+  border-color: rgb(255 255 255 / 0.15) !important;
+}
+[data-theme="dark"] .border-white\/60 {
+  border-color: rgb(255 255 255 / 0.18) !important;
+}
+
+/* Feature pills (`bg-white/15 backdrop-blur-sm`) need readable text in dark mode */
+[data-theme="dark"] .bg-white\/15 {
+  background-color: rgb(255 255 255 / 0.08) !important;
+  color: rgb(226 232 240) !important;
+}
+[data-theme="dark"] .text-white\/80 {
+  color: rgb(203 213 225) !important;
+}
+
+/* ─── Authenticated layout top bar (glassmorphism) ───
+   The header uses `.glass` + utility classes like `bg-white/40` for buttons.
+   In dark mode these need a translucent slate fill, not bright white. */
+[data-theme="dark"] .glass {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+[data-theme="dark"] .border-white\/40 {
+  border-color: rgb(255 255 255 / 0.08) !important;
+}
+[data-theme="dark"] .bg-white\/40 {
+  background-color: rgb(15 23 42 / 0.55) !important;
+}
+[data-theme="dark"] .bg-white\/60 {
+  background-color: rgb(15 23 42 / 0.7) !important;
+}
+[data-theme="dark"] .hover\:bg-white\/60:hover {
+  background-color: rgb(15 23 42 / 0.85) !important;
+}
+[data-theme="dark"] .text-gray-700.hover\:text-gray-900:hover,
+[data-theme="dark"] .text-gray-700 {
+  color: rgb(226 232 240) !important;
+}
+[data-theme="dark"] .text-gray-700.hover\:text-gray-900:hover {
+  color: #FFFFFF !important;
+}
+[data-theme="dark"] .text-gray-700.hover\:bg-white\/60:hover {
+  background-color: rgb(15 23 42 / 0.85) !important;
+}
+
+/* The hero `<span class="text-indigo-600">` accent on the login page sits
+   over the indigo gradient background — make it white in light mode
+   (against the gradient) and a brighter indigo-300 in dark mode. */
+.auth-bg-base ~ .text-indigo-600,
+.text-indigo-600.against-auth-bg {
+  color: #FFFFFF !important;
+}
+[data-theme="dark"] .auth-bg-base ~ .text-indigo-600,
+[data-theme="dark"] .text-indigo-600.against-auth-bg {
+  color: #A5B4FC !important;
+}
+
+/* Login card body text — dark in light mode, light in dark mode */
+[data-theme="dark"] .text-gray-900 {
+  color: #F9FAFB !important;
+}
+[data-theme="dark"] .text-gray-700 {
+  color: #CBD5E1 !important;
+}
+[data-theme="dark"] .text-gray-600 {
+  color: #94A3B8 !important;
+}
+[data-theme="dark"] .text-gray-500 {
+  color: #94A3B8 !important;
+}
+[data-theme="dark"] .placeholder\:text-gray-400::placeholder,
+[data-theme="dark"] input::placeholder {
+  color: #94A3B8 !important;
+  opacity: 1 !important;
+}
+[data-theme="dark"] select {
+  color-scheme: dark;
+}
+
+/* Inputs on auth pages: keep the glass look in both modes */
+[data-theme="dark"] input.border-gray-200,
+[data-theme="dark"] .border-gray-200.bg-white\/70 {
+  background-color: rgb(15 23 42 / 0.55) !important;
+  border-color: rgb(71 85 105 / 0.8) !important;
+  color: #F1F5F9 !important;
+}
+[data-theme="dark"] input.border-gray-200:focus,
+[data-theme="dark"] .border-gray-200.bg-white\/70:focus {
+  border-color: #818CF8 !important;
+}
+
+/* Submit button stays indigo in both modes — already primary, but make
+   sure hover works on dark too. */
+[data-theme="dark"] .bg-indigo-600.hover\:bg-indigo-700:hover {
+  background-color: #6366F1 !important;
+}
+
+/* Demo credentials cards in dark mode: keep their hue identity but use
+   a darker tint so the contrast against the dark glass card works. */
+[data-theme="dark"] .bg-indigo-50 {
+  background-color: rgb(49 46 129 / 0.4) !important;
+  border-color: rgb(99 102 241 / 0.5) !important;
+}
+[data-theme="dark"] .bg-indigo-50 .text-indigo-700 {
+  color: #C7D2FE !important;
+}
+[data-theme="dark"] .bg-pink-50 {
+  background-color: rgb(131 24 67 / 0.4) !important;
+  border-color: rgb(236 72 153 / 0.5) !important;
+}
+[data-theme="dark"] .bg-pink-50 .text-pink-700 {
+  color: #FBCFE8 !important;
+}
+[data-theme="dark"] .bg-pink-50 .text-gray-600,
+[data-theme="dark"] .bg-pink-50 .text-gray-500,
+[data-theme="dark"] .bg-indigo-50 .text-gray-600,
+[data-theme="dark"] .bg-indigo-50 .text-gray-500 {
+  color: #CBD5E1 !important;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Header icon buttons — unified 40×40 squares for the top-bar
+   controls (ThemeSelector, LanguageSwitcher, Notifications, Profile).
+   Matches `.auth-bg-base` half-glass aesthetic and adapts to dark mode.
+   ───────────────────────────────────────────────────────────────── */
+.header-icon-btn {
+  width: 2.5rem;            /* 40px */
+  height: 2.5rem;           /* 40px */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;  /* rounded-xl = 12px */
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  cursor: pointer;
+  text-decoration: none;
+  color: rgb(55 65 81);     /* text-gray-700 */
+  flex-shrink: 0;
+}
+.header-icon-btn:hover {
+  background-color: rgba(255, 255, 255, 0.6);
+  border-color: rgba(255, 255, 255, 0.8);
+  color: rgb(17 24 39);    /* text-gray-900 */
+}
+[data-theme="dark"] .header-icon-btn {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgb(199 210 254);  /* indigo-200 */
+}
+[data-theme="dark"] .header-icon-btn:hover {
+  background-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: rgb(224 231 255); /* indigo-100 */
+}
+/* Active/open state — match the sidebar nav active pill */
+.header-icon-btn[aria-expanded="true"],
+.header-icon-btn.is-open {
+  background-color: rgba(255, 255, 255, 0.75);
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08);
+}
+[data-theme="dark"] .header-icon-btn[aria-expanded="true"],
+[data-theme="dark"] .header-icon-btn.is-open {
+  background-color: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+
+/* ─────────────────────────────────────────────────────────────────
+   react-tooltip — z-index override
+   The default react-tooltip styles set z-index: auto on the wrapper,
+   which means anything inside an aside/nav element with its own
+   stacking context can cover it (notably the sidebar NAV with
+   PerfectScrollbar). Force a high z-index on the tooltip wrapper
+   AND its content so it always renders above page chrome.
+   ───────────────────────────────────────────────────────────────── */
+.__react-tooltip,
+.core-styles-module_tooltip__3vRRp {
+  z-index: 9999 !important;
+}
+.core-styles-module_content__BRKdB {
+  z-index: 10000 !important;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────
+   emoji-picker-react (uses emoji-mart data) — theme-aware overrides.
+   The library's built-in dark colors make the search field and
+   category bar almost black, which looks bad against our app
+   surface and makes the placeholder hard to read. Override the
+   CSS variables the library exposes on its root `.EmojiPickerReact`
+   element so the picker visually matches the rest of the app in
+   both light and dark modes.
+   ───────────────────────────────────────────────────────────────── */
+.EmojiPickerReact.epr-dark-theme {
+  /* Lighter dark surfaces — match GitHub-dark canvas/overlay palette */
+  --epr-dark-bg-color: #21262d;                              /* body bg */
+  --epr-dark-picker-border-color: #30363d;
+  --epr-dark-search-input-bg-color: #1c2128;                 /* search bar — slightly darker than body so it stands out as an input */
+  --epr-dark-search-input-bg-color-active: #2d333b;          /* focus state */
+  --epr-dark-category-label-bg-color: #1c2128;
+  --epr-dark-reactions-bg-color: #21262d;
+  --epr-dark-focus-bg-color: #2d333b;
+  --epr-dark-hover-bg-color: #2d333b;
+  --epr-dark-text-color: #e6edf3;                            /* main text in dark mode — bright enough for placeholder */
+  --epr-dark-category-icon-active-color: #c9d1d9;
+}
+
+/* Light mode: keep the library's defaults but make sure the search
+   field text is readable (the library's default is rgb(133,133,133)
+   which can be too faint against the light gray input). */
+.EmojiPickerReact:not(.epr-dark-theme) {
+  --epr-text-color: #4b5563; /* text-gray-600 — readable on #f6f6f6 */
+}
+
+/* Search input itself — match our app's input style. The library uses
+   inline CSS variables on the input element so we just need to
+   ensure the placeholder and value are visible. */
+.EmojiPickerReact input.epr-_x378x9,
+.EmojiPickerReact input[placeholder*="earch" i] {
+  color: var(--epr-text-color) !important;
+}
+.EmojiPickerReact input.epr-_x378x9::placeholder,
+.EmojiPickerReact input[placeholder*="earch" i]::placeholder {
+  color: var(--epr-text-color) !important;
+  opacity: 0.7 !important;
+}
+
+/* Smaller, denser layout — reduce padding so more emojis fit in the
+   280×340 box. */
+.EmojiPickerReact .epr-body {
+  padding: 4px !important;
+}
+.EmojiPickerReact .epr-emoji-category-content {
+  padding: 0 4px !important;
+}
+
+/* Smaller emoji icons inside the grid (was 30px font + 5px padding = 40px cell).
+   Dropping to 22px font + 3px padding = 28px cell, which fits ~10 emojis per
+   row in the 280px picker (up from 7) and shows ~7 rows in the 208px body
+   (up from 5). */
+.EmojiPickerReact {
+  --epr-emoji-size: 22px !important;
+  --epr-emoji-padding: 3px !important;
+  --epr-emoji-fullsize: calc(var(--epr-emoji-size) + var(--epr-emoji-padding) * 2) !important;
+  --epr-category-label-height: 30px !important;
+  --epr-search-input-height: 32px !important;
+  --epr-header-padding: 10px var(--epr-horizontal-padding) !important;
+}
+
+/* Make the body's scrollbar visible and themed to match the app. The
+   library's default OS scrollbar is too thin to grab on most displays,
+   so users couldn't tell the body is scrollable. */
+.EmojiPickerReact .epr-body {
+  scrollbar-width: thin !important;
+  scrollbar-color: #9CA3AF transparent !important;
+}
+.EmojiPickerReact .epr-body::-webkit-scrollbar {
+  width: 8px !important;
+  height: 8px !important;
+}
+.EmojiPickerReact .epr-body::-webkit-scrollbar-track {
+  background: transparent !important;
+  border-radius: 9999px !important;
+  margin: 4px 0 !important;
+}
+.EmojiPickerReact .epr-body::-webkit-scrollbar-thumb {
+  background-color: #9CA3AF !important;
+  border-radius: 9999px !important;
+  border: 2px solid transparent !important;
+  background-clip: padding-box !important;
+  min-height: 30px !important;
+  transition: background-color 0.2s ease !important;
+}
+.EmojiPickerReact .epr-body::-webkit-scrollbar-thumb:hover {
+  background-color: #6B7280 !important;
+}
+.EmojiPickerReact .epr-body::-webkit-scrollbar-thumb:active {
+  background-color: #4B5563 !important;
+}
+[data-theme="dark"] .EmojiPickerReact .epr-body {
+  scrollbar-color: #6B7280 transparent !important;
+}
+[data-theme="dark"] .EmojiPickerReact .epr-body::-webkit-scrollbar-thumb {
+  background-color: #6B7280 !important;
+}
+[data-theme="dark"] .EmojiPickerReact .epr-body::-webkit-scrollbar-thumb:hover {
+  background-color: #9CA3AF !important;
+}
+
+/* Ensure the search input height matches the new smaller header */
+.EmojiPickerReact .epr-search-container {
+  height: var(--epr-search-input-height) !important;
+}
+
+/* Tiptap Placeholder — shown when the editor is empty.
+ * The Placeholder extension adds `.is-editor-empty` to the ProseMirror root
+ * and injects the placeholder string via `::before`. We style it to look
+ * like a subtle prompt. */
+/* In Tiptap 3.x the Placeholder extension adds `data-placeholder` to the
+ * first empty child paragraph and `is-empty is-editor-empty` classes. The
+ * placeholder text is exposed via the `data-placeholder` attribute, so we
+ * render it with `::before { content: attr(data-placeholder); ... }`. */
+.ProseMirror p.is-editor-empty::before,
+.ProseMirror p[data-placeholder]::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: rgb(156 163 175); /* gray-400 — light mode */
+  pointer-events: none;
+  height: 0;
+}
+.dark .ProseMirror p.is-editor-empty::before,
+.dark .ProseMirror p[data-placeholder]::before {
+  color: rgb(107 114 128); /* gray-500 — dark mode */
+}
+
+/* ── Dropdown fade-in animation ── */
+@keyframes dropdown-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-dropdown-fade {
+  animation: dropdown-fade-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Prevent page scroll when inner overflow container is scrolled ── */
+.overflow-y-auto,
+.overflow-y-scroll,
+.overflow-auto,
+.overflow-scroll {
+  overscroll-behavior: contain;
+}
+
