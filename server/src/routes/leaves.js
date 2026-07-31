@@ -71,15 +71,20 @@ router.get('/', auth, async (req, res, next) => {
     if (startDate) { query += ' AND lr.start_date >= ?'; params.push(startDate); }
     if (endDate) { query += ' AND lr.end_date <= ?'; params.push(endDate); }
 
-    // Employees only see their own; managers see team; HR sees all
-    const roleName = req.user.role_name;
-    if (roleName === 'Employee') {
-      query += ' AND lr.user_id = ?'; params.push(req.user.id);
-    } else if (roleName === 'Project Manager') {
+    // Permission-based scoping:
+    //   leave.view_own        → only their own requests
+    //   leave.view_team       → own + direct reports (managers)
+    //   leave.manage_all      → all requests (HR / Admin)
+    // Default fallback (no matching permission) is "own only" — safest.
+    const perms = req.user.permissions || [];
+    if (perms.includes('leave.manage_all')) {
+      // no extra filter — sees everything
+    } else if (perms.includes('leave.view_team')) {
       query += ' AND (lr.user_id = ? OR lr.user_id IN (SELECT id FROM users WHERE reporting_manager_id = ?))';
       params.push(req.user.id, req.user.id);
+    } else {
+      query += ' AND lr.user_id = ?'; params.push(req.user.id);
     }
-    // HR Admin and System Admin see all
 
     query += ' ORDER BY lr.created_at DESC';
     const [requests] = await pool.query(query, params);
@@ -271,8 +276,7 @@ router.put('/:id/approve', auth, async (req, res, next) => {
 // If the leave was already approved, the used days are refunded to the balance.
 router.put('/:id/cancel', auth, async (req, res, next) => {
   try {
-    const roleName = req.user.role_name;
-    const isHRAdmin = roleName === 'HR Admin' || roleName === 'System Admin';
+    const isHRAdmin = (req.user.permissions || []).includes('leave.manage_all');
 
     const [rows] = await pool.query('SELECT * FROM leave_requests WHERE id = ?', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: t(req.lang, 'errors.leaveRequestNotFound') });

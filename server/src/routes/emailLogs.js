@@ -5,11 +5,11 @@ const { t } = require("../i18n");
 
 const router = express.Router();
 
-// GET /api/email-logs - list recently sent emails (HR Admin / System Admin only)
+// GET /api/email-logs - list recently sent emails (Admin only, via `admin.settings`)
 router.get("/", auth, async (req, res, next) => {
   try {
-    const roleName = req.user.role_name;
-    if (roleName !== "HR Admin" && roleName !== "System Admin") {
+    const perms = req.user.permissions || [];
+    if (!perms.includes("admin.settings")) {
       return res.status(403).json({ error: t(req.lang, "errors.permissionDenied") });
     }
 
@@ -49,11 +49,11 @@ router.get("/", auth, async (req, res, next) => {
   }
 });
 
-// GET /api/email-logs/:id - fetch the full HTML body for a single email (HR/Admin only)
+// GET /api/email-logs/:id - fetch the full HTML body for a single email (Admin only)
 router.get("/:id", auth, async (req, res, next) => {
   try {
-    const roleName = req.user.role_name;
-    if (roleName !== "HR Admin" && roleName !== "System Admin") {
+    const perms = req.user.permissions || [];
+    if (!perms.includes("admin.settings")) {
       return res.status(403).json({ error: t(req.lang, "errors.permissionDenied") });
     }
     const [rows] = await pool.query("SELECT * FROM email_logs WHERE id = ?", [req.params.id]);

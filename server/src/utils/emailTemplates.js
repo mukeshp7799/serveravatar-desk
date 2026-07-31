@@ -120,6 +120,30 @@ function leaveRequestDecidedEmail({ employeeName, action, leaveType, startDate, 
 }
 
 /**
+ * Email Verification email.
+ * Sent right after registration. The link expires in `expiresHours` hours.
+ */
+function emailVerificationEmail({ userName, verificationUrl, expiresHours }) {
+  const subject = `[Action required] Verify your ${SITE_NAME} email`;
+  const body = `
+    <p>Hi <strong>${escapeHtml(userName || "there")}</strong>,</p>
+    <p>Welcome to <strong>${SITE_NAME}</strong>! Please confirm your email address so we know it's really you.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-left:4px solid #6366F1;border-radius:6px;padding:14px 16px;margin:16px 0;width:100%;">
+      <tr><td>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6366F1;">Verify your email</div>
+        <div style="font-size:14px;color:#0f172a;margin-top:6px;">Click the button below to verify your address. This link will expire in <strong>${expiresHours || 24} hours</strong>.</div>
+      </td></tr>
+    </table>
+    <p>If you didn't create this account, you can safely ignore this email.</p>
+  `;
+  return {
+    subject,
+    text: `Hi ${userName || "there"},\n\nWelcome to ${SITE_NAME}! Please verify your email by opening the link below (expires in ${expiresHours || 24} hours):\n\n${verificationUrl}\n\nIf you didn't create this account, you can safely ignore this email.`,
+    html: layout({ accent: "#6366F1", title: "Verify your email", body, ctaText: "Verify email", ctaUrl: verificationUrl }),
+  };
+}
+
+/**
  * Project Invitation email.
  * Sent when a project owner invites an external user by email.
  */
@@ -159,4 +183,5 @@ module.exports = {
   leaveRequestSubmittedEmail,
   leaveRequestDecidedEmail,
   projectInvitationEmail,
+  emailVerificationEmail,
 };

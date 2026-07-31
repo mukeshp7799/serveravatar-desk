@@ -59,7 +59,7 @@ router.post('/', auth, async (req, res, next) => {
   try {
     const { email, password, firstName, lastName, roleId, departmentId, designationId, managerId, hireDate, employeeId, status } = req.body;
 
-    if (req.user.role_name !== 'System Admin' && req.user.role_name !== 'HR Admin') {
+    if (!(req.user.permissions || []).includes('users.create')) {
       return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
     }
     if (!email || !password || !firstName || !lastName) {

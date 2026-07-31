@@ -2,16 +2,18 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
+import toast from 'react-hot-toast'
 import { useTranslation } from 'react-i18next'
 import ThemeSelector from '../../components/ThemeSelector'
 import LanguageSwitcher from '../../components/LanguageSwitcher'
 import Scroll from '../../components/Scroll'
+import api from '../../lib/api'
 import {
   LayoutDashboard, Users, Palmtree, Network, ShieldCheck,
   FolderKanban, ListChecks, MessageSquare, Megaphone, Bell,
   Settings as SettingsIcon,
   Menu, X as XIcon, LogOut, Sparkles,
-  PanelLeftClose, PanelLeftOpen,
+  PanelLeftClose, PanelLeftOpen, Mail, AlertTriangle, RefreshCw,
 } from 'lucide-react'
 
 // Nav keys use i18n keys for the label. We translate them inside the component.
@@ -74,6 +76,31 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
     })
   }, [user, pathname])
 
+  // Resend verification email
+  const [resending, setResending] = useState(false)
+  const handleResendVerification = async () => {
+    if (resending) return
+    setResending(true)
+    try {
+      const res = await api.post('/auth/resend-verification', {})
+      if (res?.sent) {
+        if (res.previewUrl) {
+          toast.success(
+            (t as any)('auth.verifyEmailPreview', 'Verification email sent') +
+              ` — preview: ${res.previewUrl}`,
+            { duration: 8000 }
+          )
+        } else {
+          toast.success(t('auth.verifyEmailSent') || 'Verification email sent')
+        }
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to resend verification email')
+    } finally {
+      setResending(false)
+    }
+  }
+
   // Detect mobile viewport
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024)
@@ -112,6 +139,26 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
 
   return (
     <div className="flex min-h-screen">
+      {/* Persistent banner: unverified email */}
+      {user && user.emailVerified === false && (
+        <div className="fixed top-0 left-0 right-0 z-[60] bg-amber-50 dark:bg-amber-950/90 border-b border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100 px-4 py-2.5 flex items-center gap-3 shadow-sm">
+          <AlertTriangle size={18} strokeWidth={2.25} className="shrink-0 text-amber-600 dark:text-amber-300" />
+          <div className="flex-1 min-w-0 text-xs sm:text-sm font-medium">
+            <span className="hidden sm:inline">Your email address <strong className="font-bold">{user.email}</strong> is not verified. </span>
+            <span className="sm:hidden">Email not verified. </span>
+            Please check your inbox for the verification link.
+          </div>
+          <button
+            type="button"
+            onClick={handleResendVerification}
+            disabled={resending}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-sm cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          >
+            <RefreshCw size={12} strokeWidth={2.5} className={resending ? 'animate-spin' : ''} />
+            {resending ? 'Sending…' : 'Resend verification email'}
+          </button>
+        </div>
+      )}
       {/* Mobile Overlay */}
       {mobileMenuOpen && (
         <div
@@ -255,7 +302,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
       </aside>
 
       {/* Main content */}
-      <div className={`flex flex-col flex-1 min-w-0 h-screen transition-[margin] duration-300 ease-out ${!isMobile ? (collapsed ? 'ml-68' : 'ml-280') : ''}`}>
+      <div className={`flex flex-col flex-1 min-w-0 h-screen transition-[margin] duration-300 ease-out ${!isMobile ? (collapsed ? 'ml-68' : 'ml-280') : ''} ${user?.emailVerified === false ? 'pt-[52px]' : ''}`}>
         {/* Top bar with gradient accent */}
         <header className="sticky top-0 z-20 glass border-b border-white/40 flex items-center justify-between h-16 px-4 sm:px-6 shrink-0 min-w-0">
           <div className="flex items-center gap-3">

@@ -1,13 +1,18 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { randomUUID } = require('crypto');
 const pool = require('../config/database');
 const { auth, JWT_SECRET, revokeToken } = require('../middleware/auth');
 const { t } = require('../i18n');
+const { sendEmail } = require('../utils/mailer');
+const { emailVerificationEmail } = require('../utils/emailTemplates');
+
+const SITE_URL = process.env.SITE_URL || 'https://seravavatar-hub.95.217.8.52.nip.io';
+const VERIFICATION_TTL_HOURS = 24;
 
 // Helper: create notifications for pending invitations (only if not already notified)
 async function createNotificationsForPendingInvitations(conn, userId, email) {
-  const SITE_URL = process.env.SITE_URL || 'https://seravavatar-hub.95.217.8.52.nip.io';
   const emailLower = email.toLowerCase();
   const [pendingInvs] = await conn.query(
     `SELECT pi.id, pi.project_id, pi.token, pi.role_in_project, p.name AS project_name
@@ -37,6 +42,69 @@ async function createNotificationsForPendingInvitations(conn, userId, email) {
   }
 }
 
+// Helper: figure out which role to assign on registration.
+// First user → Administrator (auto-create if missing).
+// Subsequent users → User (auto-create if missing).
+async function resolveRegistrationRole(conn) {
+  const [[{ count }]] = await conn.query('SELECT COUNT(*) AS count FROM users');
+
+  // Ensure both system roles exist (defensive — migration already creates them).
+  await conn.query(
+    `INSERT IGNORE INTO roles (id, name, description) VALUES
+       (1, 'Administrator', 'Full system access — all permissions'),
+       (2, 'User',          'Basic employee access')`
+  );
+  // Ensure Administrator has all permissions if it was just created or empty.
+  if (count === 0) {
+    await conn.query(
+      `INSERT IGNORE INTO role_permissions (role_id, permission_id)
+         SELECT 1, id FROM permissions`
+    );
+  }
+
+  const roleName = count === 0 ? 'Administrator' : 'User';
+  const [[role]] = await conn.query('SELECT id FROM roles WHERE name = ? LIMIT 1', [roleName]);
+  if (!role) {
+    throw new Error(`System role "${roleName}" is missing`);
+  }
+  return role.id;
+}
+
+// Helper: send the verification email. Logs to email_logs even on failure.
+async function sendVerificationEmail(user, token) {
+  const verificationUrl = `${SITE_URL}/verify-email/${token}`;
+  const { subject, text, html } = emailVerificationEmail({
+    userName: user.first_name,
+    verificationUrl,
+    expiresHours: VERIFICATION_TTL_HOURS,
+  });
+  return sendEmail({
+    to: user.email,
+    toName: `${user.first_name} ${user.last_name}`.trim(),
+    subject,
+    text,
+    html,
+    type: 'email_verification',
+    relatedId: user.id,
+    relatedType: 'user',
+  });
+}
+
+// Helper: shape the user object the API returns to the client.
+function shapeUser(user, permissions, emailVerified) {
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.first_name,
+    lastName: user.last_name,
+    roleId: user.role_id,
+    roleName: user.role_name,
+    avatarUrl: user.avatar_url,
+    emailVerified: !!emailVerified,
+    permissions,
+  };
+}
+
 const router = express.Router();
 
 // POST /api/auth/login
@@ -63,32 +131,21 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: t(req.lang, 'errors.invalidCredentials') });
     }
 
-    const jti = require('crypto').randomUUID();
+    const jti = randomUUID();
     const token = jwt.sign({ userId: user.id, roleId: user.role_id, jti }, JWT_SECRET, { expiresIn: '7d' });
 
-    // Get user permissions
     const [perms] = await pool.query(
       `SELECT p.name FROM role_permissions rp JOIN permissions p ON rp.permission_id = p.id WHERE rp.role_id = ?`,
       [user.role_id]
     );
-
     const permissions = perms.map(p => p.name);
 
-    // Create notifications for any pending project invitations
+    // Notify about any pending project invitations
     await createNotificationsForPendingInvitations(pool, user.id, user.email);
 
     res.json({
       token,
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        roleId: user.role_id,
-        roleName: user.role_name,
-        avatarUrl: user.avatar_url,
-        permissions
-      }
+      user: shapeUser(user, permissions, user.email_verified_at),
     });
   } catch (err) {
     next(err);
@@ -96,21 +153,24 @@ router.post('/login', async (req, res, next) => {
 });
 
 // POST /api/auth/register (Public - anyone can register)
-// If the email matches a pending project invitation, the invitation is auto-accepted
-// and the user is added to the project as part of the registration flow.
+// First user → Administrator role + all permissions.
+// Subsequent users → User role + curated 14-permission subset.
+// Every registration marks the email unverified and sends a verification link.
 router.post('/register', async (req, res, next) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    const { email, password, firstName, lastName, roleId, departmentId, designationId, managerId, hireDate, employeeId } = req.body;
+    const {
+      email, password, firstName, lastName,
+      departmentId, designationId, managerId, hireDate, employeeId,
+    } = req.body;
 
     if (!email || !password || !firstName || !lastName) {
       await conn.rollback();
       return res.status(400).json({ error: t(req.lang, 'errors.emailPasswordNameRequired') });
     }
 
-    // Check if email already exists
     const [existing] = await conn.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length > 0) {
       await conn.rollback();
@@ -118,33 +178,51 @@ router.post('/register', async (req, res, next) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
+    const roleId = await resolveRegistrationRole(conn);
+    const verificationToken = randomUUID();
+    const expiresAt = new Date(Date.now() + VERIFICATION_TTL_HOURS * 60 * 60 * 1000)
+      .toISOString().slice(0, 19).replace('T', ' ');
 
     const [result] = await conn.query(
-      `INSERT INTO users (email, password_hash, first_name, last_name, role_id, department_id, designation_id, reporting_manager_id, hire_date, employee_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [email, passwordHash, firstName, lastName, roleId || 1, departmentId || null, designationId || null, managerId || null, hireDate || null, employeeId || null]
+      `INSERT INTO users
+         (email, password_hash, first_name, last_name,
+          role_id, department_id, designation_id, reporting_manager_id,
+          hire_date, employee_id,
+          email_verified_at, email_verification_token, email_verification_expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+      [
+        email, passwordHash, firstName, lastName,
+        roleId,
+        departmentId || null, designationId || null, managerId || null,
+        hireDate || null, employeeId || null,
+        verificationToken, expiresAt,
+      ]
     );
-
-    // Initialize leave balances for the new user
-    const [leaveTypes] = await conn.query('SELECT id, max_allowed FROM leave_types');
-    for (const lt of leaveTypes) {
-      await conn.query(
-        'INSERT INTO leave_balances (user_id, leave_type_id, current_balance) VALUES (?, ?, ?)',
-        [result.insertId, lt.id, lt.max_allowed]
-      );
-    }
+    const newUserId = result.insertId;
 
     await conn.commit();
 
-    // Create notifications for any pending project invitations
-    await createNotificationsForPendingInvitations(conn, result.insertId, email);
+    // Send the verification email after commit (so a mailer failure
+    // doesn't roll back the registration).
+    const emailResult = await sendVerificationEmail(
+      { id: newUserId, email, first_name: firstName, last_name: lastName },
+      verificationToken
+    );
+
+    // Notify about pending project invitations
+    await createNotificationsForPendingInvitations(pool, newUserId, email);
 
     res.status(201).json({
-      id: result.insertId,
+      id: newUserId,
       email,
       firstName,
       lastName,
       message: t(req.lang, 'errors.userCreated'),
+      verification: {
+        sent: emailResult.ok,
+        previewUrl: emailResult.previewUrl || null,
+        expiresInHours: VERIFICATION_TTL_HOURS,
+      },
     });
   } catch (err) {
     await conn.rollback();
@@ -163,17 +241,93 @@ router.get('/me', auth, async (req, res) => {
   const permissions = perms.map(p => p.name);
 
   res.json({
-    user: {
-      id: req.user.id,
-      email: req.user.email,
-      firstName: req.user.first_name,
-      lastName: req.user.last_name,
-      roleId: req.user.role_id,
-      roleName: req.user.role_name,
-      avatarUrl: req.user.avatar_url,
-      permissions
-    }
+    user: shapeUser(req.user, permissions, req.user.email_verified_at),
   });
+});
+
+// POST /api/auth/verify-email  (Public — token in body)
+router.post('/verify-email', async (req, res, next) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ error: t(req.lang, 'errors.verificationTokenRequired') });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id, email, first_name, last_name, email_verified_at, email_verification_expires_at
+         FROM users
+         WHERE email_verification_token = ?
+         LIMIT 1`,
+      [token]
+    );
+    if (rows.length === 0) {
+      return res.status(400).json({ error: t(req.lang, 'errors.invalidVerificationToken') });
+    }
+    const user = rows[0];
+
+    if (user.email_verified_at) {
+      return res.status(200).json({
+        alreadyVerified: true,
+        message: t(req.lang, 'errors.emailAlreadyVerified'),
+      });
+    }
+
+    if (user.email_verification_expires_at && new Date(user.email_verification_expires_at) < new Date()) {
+      return res.status(400).json({ error: t(req.lang, 'errors.verificationTokenExpired') });
+    }
+
+    await pool.query(
+      `UPDATE users
+         SET email_verified_at = NOW(),
+             email_verification_token = NULL,
+             email_verification_expires_at = NULL
+         WHERE id = ?`,
+      [user.id]
+    );
+
+    res.json({
+      verified: true,
+      message: t(req.lang, 'errors.emailVerifiedSuccessfully'),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/auth/resend-verification  (Auth — current user)
+router.post('/resend-verification', auth, async (req, res, next) => {
+  try {
+    const user = req.user;
+    if (user.email_verified_at) {
+      return res.status(400).json({ error: t(req.lang, 'errors.emailAlreadyVerified') });
+    }
+
+    const verificationToken = randomUUID();
+    const expiresAt = new Date(Date.now() + VERIFICATION_TTL_HOURS * 60 * 60 * 1000)
+      .toISOString().slice(0, 19).replace('T', ' ');
+
+    await pool.query(
+      `UPDATE users
+         SET email_verification_token = ?,
+             email_verification_expires_at = ?
+         WHERE id = ?`,
+      [verificationToken, expiresAt, user.id]
+    );
+
+    const emailResult = await sendVerificationEmail(
+      { id: user.id, email: user.email, first_name: user.first_name, last_name: user.last_name },
+      verificationToken
+    );
+
+    res.json({
+      sent: emailResult.ok,
+      previewUrl: emailResult.previewUrl || null,
+      expiresInHours: VERIFICATION_TTL_HOURS,
+      message: t(req.lang, 'errors.verificationEmailResent'),
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // POST /api/auth/logout — revokes the current token

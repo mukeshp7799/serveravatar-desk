@@ -8,21 +8,25 @@ const router = express.Router();
 // GET /api/dashboard
 router.get('/', auth, async (req, res, next) => {
   try {
-    const roleName = req.user.role_name;
+    const perms = req.user.permissions || [];
     const userId = req.user.id;
 
     // Pending approvals for managers and HR
     let pendingApprovals = [];
-    if (roleName === 'Project Manager' || roleName === 'HR Admin' || roleName === 'System Admin') {
+    if (perms.includes('leave.approve')) {
+      const canManageAll = perms.includes('leave.manage_all');
       let query = `SELECT lr.*, u.first_name, u.last_name, lt.name as leave_type
                    FROM leave_requests lr JOIN users u ON lr.user_id = u.id
                    JOIN leave_types lt ON lr.leave_type_id = lt.id
                    WHERE lr.status = 'pending'`;
-      if (roleName === 'Project Manager') {
+      let params = [];
+      // Managers (without `leave.manage_all`) only see their direct reports'
+      // requests. HR/Admins (with `leave.manage_all`) see all.
+      if (!canManageAll) {
         query += ' AND (u.reporting_manager_id = ? OR lr.user_id = ?)';
+        params = [userId, userId];
       }
       query += ' ORDER BY lr.created_at ASC LIMIT 10';
-      const params = roleName === 'Project Manager' ? [userId, userId] : [];
       const [pending] = await pool.query(query, params);
       pendingApprovals = pending;
     }
@@ -79,9 +83,9 @@ router.get('/', auth, async (req, res, next) => {
        JOIN users u ON a.posted_by = u.id WHERE a.is_active = TRUE ORDER BY a.created_at DESC LIMIT 5`
     );
 
-    // HR-specific stats
+    // HR-specific stats (any user with `hr.view_directory` sees them)
     let hrStats = {};
-    if (roleName === 'HR Admin' || roleName === 'System Admin') {
+    if (perms.includes('hr.view_directory')) {
       const [totalEmployees] = await pool.query('SELECT COUNT(*) as count FROM users WHERE status = ?', ['active']);
       const [totalLeavePending] = await pool.query("SELECT COUNT(*) as count FROM leave_requests WHERE status = 'pending'");
       const [deptBreakdown] = await pool.query(

@@ -36,6 +36,15 @@ const auth = async (req, res, next) => {
 
     req.user = users[0];
 
+    // Attach permissions list to req.user so route handlers can do
+    // `req.user.permissions.includes('leave.approve')` instead of
+    // hard-coded role-name comparisons.
+    const [permRows] = await pool.query(
+      "SELECT p.name FROM role_permissions rp JOIN permissions p ON rp.permission_id = p.id WHERE rp.role_id = ?",
+      [req.user.role_id],
+    );
+    req.user.permissions = permRows.map(p => p.name);
+
     // Check permission if specified
     if (req.permission) {
       const [perms] = await pool.query(

@@ -179,7 +179,7 @@ export default function DiscussionsPage() {
     } catch { return 'You' }
   })()
 
-  const canManage = user.roleName === 'HR Admin' || user.roleName === 'System Admin' || user.roleName === 'Project Manager'
+  const canManage = Array.isArray(user.permissions) && user.permissions.includes('discussions.create')
 
   const chatScrollRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {

@@ -20,13 +20,12 @@ router.get('/', auth, async (req, res, next) => {
     if (projectId) { query += ' AND tl.project_id = ?'; params.push(projectId); }
     if (taskId) { query += ' AND tl.task_id = ?'; params.push(taskId); }
 
-    // Users see their own; managers see team
-    const roleName = req.user.role_name;
-    if (roleName === 'Employee') {
+    // Permission-based scoping:
+    //   timelog.view_all → all time logs (HR / Admin)
+    //   (else)           → only the user's own (timelog.view_own is held by everyone)
+    const perms = req.user.permissions || [];
+    if (!perms.includes('timelog.view_all')) {
       query += ' AND tl.user_id = ?'; params.push(req.user.id);
-    } else if (roleName === 'Project Manager') {
-      query += ' AND (tl.user_id = ? OR tl.user_id IN (SELECT id FROM users WHERE reporting_manager_id = ?))';
-      params.push(req.user.id, req.user.id);
     }
 
     query += ' ORDER BY tl.log_date DESC, tl.created_at DESC';

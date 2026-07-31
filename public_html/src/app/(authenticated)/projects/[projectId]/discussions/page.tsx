@@ -196,7 +196,7 @@ export default function DiscussionsPage() {
     return name || user.email || 'You'
   })()
 
-  const isAdmin = user?.roleName === 'HR Admin' || user?.roleName === 'System Admin' || user?.roleName === 'Project Manager'
+  const isAdmin = Array.isArray(user?.permissions) && user.permissions.includes('discussions.create')
 
   const messageEndRef = useRef<HTMLDivElement>(null)
   useEffect(() => {

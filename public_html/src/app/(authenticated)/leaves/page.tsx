@@ -37,8 +37,8 @@ export default function LeavesPage() {
   const [typeForm, setTypeForm] = useState({ name: '', accrual_rate: '0', max_allowed: '0', is_paid: false, carry_over_limit: '0', description: '' })
   const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
 
-  const isManagerOrHR = user.roleName === 'Project Manager' || user.roleName === 'HR Admin' || user.roleName === 'System Admin'
-  const isHRAdmin = user.roleName === 'HR Admin' || user.roleName === 'System Admin'
+  const isManagerOrHR = Array.isArray(user.permissions) && user.permissions.includes('leave.approve')
+  const isHRAdmin = Array.isArray(user.permissions) && user.permissions.includes('leave.manage_all')
 
   useEffect(() => { loadData() }, [])
 

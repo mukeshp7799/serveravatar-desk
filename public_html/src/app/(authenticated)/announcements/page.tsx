@@ -16,7 +16,7 @@ export default function AnnouncementsPage() {
   const [form, setForm] = useState({ title: '', content: '' })
   const [loading, setLoading] = useState(true)
   const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
-  const canPost = user.roleName === 'HR Admin' || user.roleName === 'Project Manager' || user.roleName === 'System Admin'
+  const canPost = Array.isArray(user.permissions) && user.permissions.includes('announcements.create')
 
   useEffect(() => { loadAnnouncements() }, [])
 
@@ -70,9 +70,11 @@ export default function AnnouncementsPage() {
   return (
     <div className="space-y-5 animate-fade-in-up">
       <div className="flex flex-wrap justify-end items-center gap-3">
-        <button onClick={() => { setForm({ title: '', content: '' }); setShowCreate(true) }} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-lg rounded-xl text-sm font-bold transition shadow-lg cursor-pointer border-none flex items-center gap-2">
-          <span className="text-lg">+</span> {t('announcements.postNew')}
-        </button>
+        {canPost && (
+          <button onClick={() => { setForm({ title: '', content: '' }); setShowCreate(true) }} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-lg rounded-xl text-sm font-bold transition shadow-lg cursor-pointer border-none flex items-center gap-2">
+            <span className="text-lg">+</span> {t('announcements.postNew')}
+          </button>
+        )}
       </div>
 
       {loading ? (
