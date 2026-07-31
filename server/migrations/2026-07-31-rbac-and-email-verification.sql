@@ -101,6 +101,24 @@ SET @sql := (
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- ───────────────────────────────────────────────────────────────────
+-- 4b. Add `designation` (free-text string) to users.
+--     The legacy `designation_id` FK column is left in place for
+--     backward compatibility but is no longer written to by the app.
+-- ───────────────────────────────────────────────────────────────────
+SET @sql := (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE users ADD COLUMN designation VARCHAR(100) NULL DEFAULT NULL AFTER designation_id',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name   = 'users'
+    AND column_name  = 'designation'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ───────────────────────────────────────────────────────────────────
 -- 5. Seed the 2 system roles (idempotent via INSERT IGNORE)
 -- ───────────────────────────────────────────────────────────────────
 INSERT IGNORE INTO roles (id, name, description) VALUES

@@ -17,19 +17,27 @@ import {
 } from 'lucide-react'
 
 // Nav keys use i18n keys for the label. We translate them inside the component.
-const navConfig = [
+// `requiredPermission` is the permission a user must hold to see the item.
+// Sections (without `href`) are hidden if no items below them are visible.
+const navConfig: Array<{
+  sectionKey?: string;
+  href?: string;
+  labelKey?: string;
+  Icon?: any;
+  requiredPermission?: string;
+}> = [
   { sectionKey: 'nav.main' },
   { href: '/dashboard', labelKey: 'nav.dashboard', Icon: LayoutDashboard },
   { sectionKey: 'nav.hrManagement' },
-  { href: '/employees', labelKey: 'nav.employees', Icon: Users },
-  { href: '/leaves', labelKey: 'nav.leaves', Icon: Palmtree },
-  { href: '/structure', labelKey: 'nav.departments', Icon: Network },
-  { href: '/roles', labelKey: 'nav.roles', Icon: ShieldCheck },
+  { href: '/employees',     labelKey: 'nav.employees',   Icon: Users,        requiredPermission: 'hr.manage_employees' },
+  { href: '/leaves',        labelKey: 'nav.leaves',      Icon: Palmtree,     requiredPermission: 'leave.view_own' },
+  { href: '/structure',     labelKey: 'nav.departments', Icon: Network,      requiredPermission: 'admin.departments' },
+  { href: '/roles',         labelKey: 'nav.roles',       Icon: ShieldCheck,  requiredPermission: 'admin.roles' },
   { sectionKey: 'nav.projects' },
-  { href: '/projects', labelKey: 'nav.projectsLink', Icon: FolderKanban },
-  { href: '/discussions', labelKey: 'nav.discussions', Icon: MessageSquare },
+  { href: '/projects',      labelKey: 'nav.projectsLink', Icon: FolderKanban, requiredPermission: 'projects.view' },
+  { href: '/discussions',   labelKey: 'nav.discussions',  Icon: MessageSquare, requiredPermission: 'discussions.view' },
   { sectionKey: 'nav.company' },
-  { href: '/announcements', labelKey: 'nav.announcements', Icon: Megaphone },
+  { href: '/announcements', labelKey: 'nav.announcements', Icon: Megaphone,   requiredPermission: 'announcements.view' },
 ]
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
@@ -134,6 +142,34 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
   const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase()
   const currentPage = navConfig.find(n => 'href' in n && pathname.startsWith(n.href as string))
 
+  // ── Permission-aware sidebar filtering ───────────────────────────────
+  // Hide items the user lacks permission for. Hide section headers that
+  // have no visible items underneath them.
+  const userPerms: string[] = Array.isArray(user.permissions) ? user.permissions : []
+  const visibleNav = (() => {
+    // First pass: figure out which sections have at least one visible item.
+    let currentSection: string | undefined = undefined
+    const sectionHasVisibleItem: Record<string, boolean> = {}
+    for (const item of navConfig) {
+      if (item.sectionKey) {
+        currentSection = item.sectionKey
+        sectionHasVisibleItem[currentSection] = false
+      } else {
+        const visible = !item.requiredPermission || userPerms.includes(item.requiredPermission)
+        if (visible && currentSection) sectionHasVisibleItem[currentSection] = true
+      }
+    }
+    // Second pass: keep section header if it has visible items; keep item if visible.
+    currentSection = undefined
+    return navConfig.filter((item) => {
+      if (item.sectionKey) {
+        currentSection = item.sectionKey
+        return sectionHasVisibleItem[currentSection]
+      }
+      return !item.requiredPermission || userPerms.includes(item.requiredPermission)
+    })
+  })()
+
   // Solid indigo (was previously a gradient — now uses Indigo Calm theme)
   const pageBg = 'bg-indigo-600'
 
@@ -234,7 +270,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
         {/* Nav wrapped in PerfectScrollbar */}
         <Scroll containerClassName="flex-1 min-h-0" className="h-full" watch={pathname}>
           <nav className={`${collapsed ? 'px-1.5' : 'px-2'} py-2 flex flex-col items-stretch gap-0.5`}>
-            {navConfig.map((item, i) =>
+            {visibleNav.map((item, i) =>
               'sectionKey' in item ? (
                 collapsed ? (
                   <div key={`s${i}`} className="border-t border-gray-100 dark:border-gray-800 my-2" data-tooltip-id="app-tooltip" data-tooltip-content={t(item.sectionKey as string)} />

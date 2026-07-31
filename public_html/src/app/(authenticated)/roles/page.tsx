@@ -1,5 +1,6 @@
 'use client'
 import PageLoader from '@/components/PageLoader'
+import RequirePermission from '@/components/RequirePermission'
 import Tabs from '@/components/Tabs'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -9,6 +10,14 @@ import api from '@/lib/api'
 import { validateForm, roleSchema } from '@/lib/schemas'
 
 export default function RolesPage() {
+  return (
+    <RequirePermission permission="admin.roles">
+      <RolesPageInner />
+    </RequirePermission>
+  )
+}
+
+function RolesPageInner() {
   const { t } = useTranslation()
   const [tab, setTab] = useState<'roles' | 'permissions'>('roles')
   const [roles, setRoles] = useState<any[]>([])

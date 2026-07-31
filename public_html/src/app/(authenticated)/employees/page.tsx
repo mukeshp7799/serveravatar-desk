@@ -1,15 +1,24 @@
 'use client'
 import PageLoader from '@/components/PageLoader'
+import RequirePermission from '@/components/RequirePermission'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import api from '@/lib/api'
 import { validateForm, employeeSchema, employeeCreateSchema } from '@/lib/schemas'
 
 export default function EmployeesPage() {
+  return (
+    <RequirePermission permission="hr.manage_employees">
+      <EmployeesPageInner />
+    </RequirePermission>
+  )
+}
+
+function EmployeesPageInner() {
   const { t } = useTranslation()
   const [employees, setEmployees] = useState<any[]>([])
   const [departments, setDepartments] = useState<any[]>([])
-  const [designations, setDesignations] = useState<any[]>([])
+  const [designations, setDesignations] = useState<any[]>([]) // eslint-disable-line @typescript-eslint/no-unused-vars
   const [roles, setRoles] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [filterDept, setFilterDept] = useState('')
@@ -22,7 +31,7 @@ export default function EmployeesPage() {
   const [formError, setFormError] = useState('')
   const [form, setForm] = useState({
     firstName: '', lastName: '', email: '', password: '',
-    employeeId: '', departmentId: '', designationId: '', managerId: '',
+    employeeId: '', departmentId: '', designation: '', managerId: '',
     roleId: '', hireDate: '', status: 'active'
   })
 
@@ -31,11 +40,11 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     Promise.all([
-      api.get('/users'), api.get('/departments'), api.get('/designations'), api.get('/roles'),
-    ]).then(([usersData, deptsData, desigsData, rolesData]) => {
+      api.get('/users'), api.get('/departments'), api.get('/roles'),
+    ]).then(([usersData, deptsData, rolesData]) => {
       setEmployees(usersData.users || [])
       setDepartments(deptsData.departments || [])
-      setDesignations(desigsData.designations || [])
+      setDesignations([])
       setRoles(rolesData.roles || [])
     }).catch(console.error).finally(() => setLoading(false))
   }, [])
@@ -48,7 +57,7 @@ export default function EmployeesPage() {
 
   const openCreate = () => {
     setEditEmployee(null)
-    setForm({ firstName: '', lastName: '', email: '', password: '', employeeId: '', departmentId: '', designationId: '', managerId: '', roleId: '', hireDate: '', status: 'active' })
+    setForm({ firstName: '', lastName: '', email: '', password: '', employeeId: '', departmentId: '', designation: '', managerId: '', roleId: '', hireDate: '', status: 'active' })
     setFormError(''); setShowModal(true)
   }
 
@@ -63,7 +72,7 @@ export default function EmployeesPage() {
       // stringified numbers that parseInt() can round-trip in handleSave.
       employeeId: e.employee_id == null ? '' : String(e.employee_id),
       departmentId: e.department_id == null ? '' : String(e.department_id),
-      designationId: e.designation_id == null ? '' : String(e.designation_id),
+      designation: e.designation || '',
       managerId: e.reporting_manager_id == null ? '' : String(e.reporting_manager_id),
       roleId: e.role_id == null ? '' : String(e.role_id),
       hireDate: e.hire_date || '', status: e.status || 'active'
@@ -81,7 +90,7 @@ export default function EmployeesPage() {
           firstName: valid.firstName, lastName: valid.lastName, phone: '', address: '',
           dateOfBirth: '', emergencyContactName: '', emergencyContactPhone: '',
           departmentId: valid.departmentId ? parseInt(valid.departmentId) : null,
-          designationId: valid.designationId ? parseInt(valid.designationId) : null,
+          designation: valid.designation || null,
           managerId: valid.managerId ? parseInt(valid.managerId) : null,
           roleId: valid.roleId ? parseInt(valid.roleId) : null,
           status: valid.status || 'active'
@@ -92,7 +101,7 @@ export default function EmployeesPage() {
           firstName: valid.firstName, lastName: valid.lastName,
           employeeId: valid.employeeId,
           departmentId: valid.departmentId ? parseInt(valid.departmentId) : null,
-          designationId: valid.designationId ? parseInt(valid.designationId) : null,
+          designation: valid.designation || null,
           managerId: valid.managerId ? parseInt(valid.managerId) : null,
           roleId: valid.roleId ? parseInt(valid.roleId) : 1,
           hireDate: valid.hireDate || null
@@ -202,7 +211,7 @@ export default function EmployeesPage() {
                     <td className="px-4 py-3 text-sm">
                       {e.department_name ? <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-full text-xs font-bold">{e.department_name}</span> : <span className="text-gray-400">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{e.designation_name || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{e.designation || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{e.manager_first_name ? `${e.manager_first_name} ${e.manager_last_name}` : '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${e.status === 'active' ? 'bg-gray-50 text-emerald-700 border border-emerald-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'}`}>
@@ -289,10 +298,13 @@ export default function EmployeesPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('employees.designation')}</label>
-                    <select className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" value={form.designationId} onChange={e => setForm({ ...form, designationId: e.target.value })}>
-                      <option value="">{t('employees.selectDesignation')}</option>
-                      {designations.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
+                    <input
+                      className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                      value={form.designation}
+                      onChange={e => setForm({ ...form, designation: e.target.value })}
+                      placeholder="e.g. Senior Software Engineer"
+                      maxLength={100}
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">

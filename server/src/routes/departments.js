@@ -13,9 +13,12 @@ router.get('/', auth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/departments
+// POST /api/departments — admin only (admin.departments permission)
 router.post('/', auth, async (req, res, next) => {
   try {
+    if (!(req.user.permissions || []).includes('admin.departments')) {
+      return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
+    }
     const { name, headId } = req.body;
     if (!name) return res.status(400).json({ error: t(req.lang, 'errors.departmentNameRequired') });
 
@@ -30,9 +33,12 @@ router.post('/', auth, async (req, res, next) => {
   }
 });
 
-// PUT /api/departments/:id
+// PUT /api/departments/:id — admin only
 router.put('/:id', auth, async (req, res, next) => {
   try {
+    if (!(req.user.permissions || []).includes('admin.departments')) {
+      return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
+    }
     const { name, headId } = req.body;
     const fields = [];
     const params = [];
@@ -50,9 +56,12 @@ router.put('/:id', auth, async (req, res, next) => {
   }
 });
 
-// DELETE /api/departments/:id
+// DELETE /api/departments/:id — admin only
 router.delete('/:id', auth, async (req, res, next) => {
   try {
+    if (!(req.user.permissions || []).includes('admin.departments')) {
+      return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
+    }
     await pool.query('DELETE FROM departments WHERE id = ?', [req.params.id]);
     res.json({ message: t(req.lang, 'errors.departmentDeleted') });
   } catch (err) { next(err); }

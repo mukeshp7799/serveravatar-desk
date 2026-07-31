@@ -7,7 +7,6 @@ const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/users");
 const roleRoutes = require("./routes/roles");
 const departmentRoutes = require("./routes/departments");
-const designationRoutes = require("./routes/designations");
 const leaveRoutes = require("./routes/leaves");
 const projectRoutes = require("./routes/projects");
 // NOTE: legacy "tasks.js" routes were removed (the `tasks` table was dropped in favor of `tb_tasks`).
@@ -45,7 +44,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/roles", roleRoutes);
 app.use("/api/departments", departmentRoutes);
-app.use("/api/designations", designationRoutes);
 app.use("/api/leaves", leaveRoutes);
 app.use("/api/projects", projectRoutes);
 // /api/tasks/* comes from taskBoardRoutes below (mounted at /api)

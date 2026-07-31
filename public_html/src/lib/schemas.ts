@@ -36,7 +36,7 @@ export const registerSchema = z.object({
   lastName: z.string().min(1, 'Last name is required').max(50),
   employeeId: z.string().optional(),
   departmentId: z.string().optional(),
-  designationId: z.string().optional(),
+  designation: z.string().max(100, 'Designation is too long (max 100 chars)').optional(),
   hireDate: z.string().optional(),
 }).refine(d => d.password === d.confirmPassword, {
   message: 'Passwords do not match',
@@ -148,7 +148,7 @@ export const employeeSchema = z.object({
   password: z.string().optional(),
   employeeId: z.string().max(50).optional(),
   departmentId: z.string().optional(),
-  designationId: z.string().optional(),
+  designation: z.string().max(100, 'Designation is too long (max 100 chars)').optional(),
   managerId: z.string().optional(),
   roleId: z.string().optional(),
   hireDate: z.string().optional(),

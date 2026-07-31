@@ -163,7 +163,7 @@ router.post('/register', async (req, res, next) => {
 
     const {
       email, password, firstName, lastName,
-      departmentId, designationId, managerId, hireDate, employeeId,
+      departmentId, designation, managerId, hireDate, employeeId,
     } = req.body;
 
     if (!email || !password || !firstName || !lastName) {
@@ -186,14 +186,14 @@ router.post('/register', async (req, res, next) => {
     const [result] = await conn.query(
       `INSERT INTO users
          (email, password_hash, first_name, last_name,
-          role_id, department_id, designation_id, reporting_manager_id,
+          role_id, department_id, designation, reporting_manager_id,
           hire_date, employee_id,
           email_verified_at, email_verification_token, email_verification_expires_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
       [
         email, passwordHash, firstName, lastName,
         roleId,
-        departmentId || null, designationId || null, managerId || null,
+        departmentId || null, designation || null, managerId || null,
         hireDate || null, employeeId || null,
         verificationToken, expiresAt,
       ]

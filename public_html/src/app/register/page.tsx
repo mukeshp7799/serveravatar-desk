@@ -15,7 +15,6 @@ function RegisterForm() {
   const searchParams = useSearchParams();
   const { t } = useTranslation();
   const [departments, setDepartments] = useState<any[]>([]);
-  const [designations, setDesignations] = useState<any[]>([]);
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -24,18 +23,15 @@ function RegisterForm() {
     lastName: "",
     employeeId: "",
     departmentId: "",
-    designationId: "",
+    designation: "",
     hireDate: "",
   });
   const [loading, setLoading] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.get("/departments"), api.get("/designations")])
-      .then(([deptData, desigData]) => {
-        setDepartments(deptData.departments || []);
-        setDesignations(desigData.designations || []);
-      })
+    api.get("/departments")
+      .then((deptData) => setDepartments(deptData.departments || []))
       .catch(() => {});
   }, []);
 
@@ -54,7 +50,7 @@ function RegisterForm() {
         lastName: valid.lastName,
         employeeId: valid.employeeId || null,
         departmentId: valid.departmentId || null,
-        designationId: valid.designationId || null,
+        designation: valid.designation || null,
         hireDate: valid.hireDate || null,
         roleId: 1,
       });
@@ -159,10 +155,7 @@ function RegisterForm() {
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">Designation</label>
-                <select name="designationId" value={form.designationId} onChange={handleChange} className="w-full border-2 border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900">
-                  <option value="">None</option>
-                  {designations.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
+                <input name="designation" value={form.designation} onChange={handleChange} className="w-full border-2 border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900" placeholder="e.g. Senior Software Engineer" maxLength={100} />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">Employee ID</label>
