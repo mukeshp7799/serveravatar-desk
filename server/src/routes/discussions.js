@@ -3,6 +3,7 @@ const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { requireProjectMember, isProjectMember } = require('../middleware/projectMember');
 const { t } = require('../i18n');
+const { processAndNotifyMentions, SOURCE_TYPES } = require('../utils/mentions');
 
 const router = express.Router();
 
@@ -173,13 +174,25 @@ router.post('/:id/messages', auth, async (req, res, next) => {
       'INSERT INTO messages (discussion_id, sender_id, content) VALUES (?, ?, ?)',
       [req.params.id, req.user.id, content]
     );
+    const messageId = result.insertId;
 
-    // Notify other project members
+    // Process @mentions (store + send in-app notifications).
+    const senderName = `${req.user.first_name} ${req.user.last_name}`;
+    await processAndNotifyMentions({
+      projectId: discussion[0].project_id,
+      sourceType: SOURCE_TYPES.DISCUSSION_MESSAGE,
+      sourceId: messageId,
+      content,
+      mentionedByUserId: req.user.id,
+      lang: req.lang,
+      link: `/discussions?id=${req.params.id}&msg=${messageId}`,
+    });
+
+    // Notify other project members about the new message (existing notification logic).
     const [members] = await pool.query(
       'SELECT user_id FROM project_members WHERE project_id = ? AND user_id != ?',
       [discussion[0].project_id, req.user.id]
     );
-    const senderName = `${req.user.first_name} ${req.user.last_name}`;
     const contentSnippet = content.substring(0, 100);
     for (const m of members) {
       await pool.query(
@@ -197,7 +210,7 @@ router.post('/:id/messages', auth, async (req, res, next) => {
       );
     }
 
-    res.status(201).json({ id: result.insertId });
+    res.status(201).json({ id: messageId });
   } catch (err) { next(err); }
 });
 

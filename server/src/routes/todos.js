@@ -22,6 +22,7 @@ const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { requireProjectMember } = require('../middleware/projectMember');
 const { recordActivity } = require('../utils/activity');
+const { processAndNotifyMentions, SOURCE_TYPES } = require('../utils/mentions');
 
 const router = express.Router();
 router.use(auth);
@@ -230,13 +231,29 @@ router.post('/projects/:projectId/todos/lists/:id/items', async (req, res, next)
         req.user.id,
       ]
     );
+    const itemId = r.insertId;
+    const projectId = Number(req.params.projectId);
+
+    // Process @mentions from notes — store records and send in-app notifications.
+    if (notes) {
+      await processAndNotifyMentions({
+        projectId,
+        sourceType: SOURCE_TYPES.TODO_NOTE,
+        sourceId: itemId,
+        content: String(notes).trim(),
+        mentionedByUserId: req.user.id,
+        lang: req.lang,
+        link: `/projects/${projectId}/todos`,
+      });
+    }
+
     await recordActivity(pool, {
-      projectId: Number(req.params.projectId),
+      projectId,
       actorId: req.user.id,
       feature: 'todos',
       action: 'item_created',
       targetType: 'todoitem',
-      targetId: r.insertId,
+      targetId: itemId,
       targetLabel: title.trim(),
       meta: { list_id: Number(req.params.id) },
     });
@@ -294,6 +311,22 @@ router.patch('/projects/:projectId/todos/items/:id', async (req, res, next) => {
       params
     );
     if (!r.affectedRows) return res.status(404).json({ message: 'Item not found' });
+
+    // Process @mentions when notes are updated.
+    if (notes !== undefined) {
+      const newNotes = notes ? String(notes).trim() : null;
+      if (newNotes) {
+        await processAndNotifyMentions({
+          projectId: Number(req.params.projectId),
+          sourceType: SOURCE_TYPES.TODO_NOTE,
+          sourceId: Number(req.params.id),
+          content: newNotes,
+          mentionedByUserId: req.user.id,
+          lang: req.lang,
+          link: `/projects/${req.params.projectId}/todos`,
+        });
+      }
+    }
 
     // Activity: emit a generic 'updated' if anything else changed, OR a
     // dedicated 'completed' / 'reopened' if the completion flag flipped.

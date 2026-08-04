@@ -40,6 +40,7 @@ const { auth } = require("../middleware/auth");
 const { isProjectMember, requireProjectMember } = require("../middleware/projectMember");
 const { t } = require("../i18n");
 const { recordActivity } = require("../utils/activity");
+const { processAndNotifyMentions, SOURCE_TYPES } = require("../utils/mentions");
 
 const router = express.Router({ mergeParams: true });
 
@@ -256,6 +257,17 @@ router.post("/projects/:projectId/chat", auth, requireProjectMember("projectId")
       [projectId, req.user.id, body]
     );
     const messageId = result.insertId;
+
+    // Process @mentions — store records and send in-app notifications.
+    await processAndNotifyMentions({
+      projectId,
+      sourceType: SOURCE_TYPES.CHAT_MESSAGE,
+      sourceId: messageId,
+      content: body,
+      mentionedByUserId: req.user.id,
+      lang: req.lang,
+      link: `/projects/${projectId}/chat`,
+    });
 
     // Optionally attach any pre-uploaded file IDs (currently unused —
     // the frontend uses the post-create attachment endpoint — but kept

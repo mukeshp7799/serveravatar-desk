@@ -31,3 +31,4 @@ Thumbs.db
 # Backup
 package-lock.json.bak
 data.db
+server/src/routes/dashboard.js.bak

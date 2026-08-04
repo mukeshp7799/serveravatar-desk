@@ -30,6 +30,7 @@ const { auth } = require("../middleware/auth");
 const { isProjectMember, requireProjectMember } = require("../middleware/projectMember");
 const { t } = require("../i18n");
 const { recordActivity } = require("../utils/activity");
+const { processAndNotifyMentions, SOURCE_TYPES } = require("../utils/mentions");
 
 const router = express.Router();
 
@@ -191,12 +192,24 @@ router.post("/projects/:projectId/messages", auth, requireProjectMember("project
        VALUES (?, ?, ?, ?, ?)`,
       [projectId, req.user.id, title ? title.trim().slice(0, 255) : null, cleanBody, cat]
     );
+    const messageId = result.insertId;
+
+    // Process @mentions — store records and send in-app notifications.
+    await processAndNotifyMentions({
+      projectId,
+      sourceType: SOURCE_TYPES.PROJECT_MESSAGE,
+      sourceId: messageId,
+      content: cleanBody,
+      mentionedByUserId: req.user.id,
+      lang: req.lang,
+      link: `/projects/${projectId}/message-board`,
+    });
 
     const [rows] = await pool.query(
       `SELECT pm.*, u.first_name, u.last_name, u.email, u.avatar_url
        FROM project_messages pm JOIN users u ON pm.author_id = u.id
        WHERE pm.id = ?`,
-      [result.insertId]
+      [messageId]
     );
     const [hydrated] = await hydrateMessages(rows, req.user.id);
     await recordActivity(pool, {
@@ -205,7 +218,7 @@ router.post("/projects/:projectId/messages", auth, requireProjectMember("project
       feature: 'message-board',
       action: 'message_posted',
       targetType: 'message',
-      targetId: result.insertId,
+      targetId: messageId,
       targetLabel: title ? title.trim() : cleanBody.replace(/<[^>]+>/g, ' ').trim().slice(0, 120),
       meta: { category: cat },
     });

@@ -1,11 +1,13 @@
 'use client'
 import PageLoader from '@/components/PageLoader'
 import { useEffect, useRef, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { ListChecks, MessageCircle, MessageSquare, Smile, Trash2 } from 'lucide-react'
 import api from '@/lib/api'
-import { validateForm, discussionSchema, discussionMessageSchema } from '@/lib/schemas'
+import { discussionSchema, type DiscussionInput } from '@/lib/schemas'
 import Scroll from '@/components/Scroll'
 import ReactionBar from '@/components/project/ReactionBar'
 import type { Reaction } from '@/types/project'
@@ -32,7 +34,19 @@ export default function DiscussionsPage() {
   const [selectedDiscussion, setSelectedDiscussion] = useState<{ discussion: any; messages: DiscussionMessage[] } | null>(null)
   const [newMessage, setNewMessage] = useState('')
   const [showCreate, setShowCreate] = useState(false)
-  const [createForm, setCreateForm] = useState({ projectId: '', title: '' })
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<DiscussionInput>({ resolver: zodResolver(discussionSchema), mode: 'onBlur' })
+  const {
+    register: registerMsg,
+    handleSubmit: handleMsgSubmit,
+    reset: resetMsg,
+    watch,
+    formState: { errors: msgErrors },
+  } = useForm<{ content: string }>({ mode: 'onBlur' })
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>({})
 
@@ -58,16 +72,10 @@ export default function DiscussionsPage() {
     } catch (err: any) { toast.error(err.message || t('common.failedToSave')) }
   }
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const valid = validateForm(discussionSchema, createForm)
-    if (!valid) return
+  const onSubmitCreate = async (data: DiscussionInput) => {
     try {
-      await api.post('/discussions', {
-        projectId: valid.projectId,
-        title: valid.title,
-      })
-      setShowCreate(false); setCreateForm({ projectId: '', title: '' })
+      await api.post('/discussions', { projectId: data.projectId, title: data.title })
+      setShowCreate(false); reset({ projectId: '', title: '' })
       toast.success(t('discussions.created')); loadData()
     } catch (err: any) { toast.error(err.message || t('common.failedToSave')) }
   }
@@ -83,14 +91,11 @@ export default function DiscussionsPage() {
     } catch (err: any) { toast.error(err.message || t('common.failedToDelete')) }
   }
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const onSubmitMessage = async (data: { content: string }) => {
     if (!selectedDiscussion) return
-    const valid = validateForm(discussionMessageSchema, { content: newMessage })
-    if (!valid) return
     try {
-      await api.post(`/discussions/${selectedDiscussion.discussion.id}/messages`, { content: valid.content })
-      setNewMessage('')
+      await api.post(`/discussions/${selectedDiscussion.discussion.id}/messages`, { content: data.content })
+      resetMsg({ content: '' })
       toast.success(t('discussions.sent'), { duration: 2000 })
       openDiscussion(selectedDiscussion.discussion.id)
     } catch (err: any) { toast.error(err.message || t('common.failedToSave')) }
@@ -310,8 +315,15 @@ export default function DiscussionsPage() {
                   </div>
                 </Scroll>
               </div>
-              <form onSubmit={handleSendMessage} className="p-3 border-t border-gray-100 flex gap-2 bg-gray-50 shrink-0">
-                <input value={newMessage} onChange={e => setNewMessage(e.target.value)} className="flex-1 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100" placeholder={t('discussions.messagePlaceholder')} />
+              <form onSubmit={handleMsgSubmit(onSubmitMessage)} className="p-3 border-t border-gray-100 flex gap-2 bg-gray-50 shrink-0">
+                <div className="flex-1">
+                  <input
+                    {...registerMsg('content', { required: true })}
+                    className={`w-full border-2 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-4 transition ${msgErrors.content ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-200 focus:border-cyan-500 focus:ring-cyan-100'}`}
+                    placeholder={t('discussions.messagePlaceholder')}
+                  />
+                  {msgErrors.content && <p className="mt-1 text-xs text-red-500">{msgErrors.content.message || 'Message is required'}</p>}
+                </div>
                 <button type="submit" className="px-5 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl hover:shadow transition border-none cursor-pointer">{t('discussions.send')}</button>
               </form>
             </>
@@ -336,19 +348,27 @@ export default function DiscussionsPage() {
                 <button onClick={() => setShowCreate(false)} className="bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-lg w-8 h-8 flex items-center justify-center cursor-pointer border-none text-lg leading-none">×</button>
               </div>
             </div>
-            <form onSubmit={handleCreate} className="flex flex-col flex-1 min-h-0">
+            <form onSubmit={handleSubmit(onSubmitCreate)} className="flex flex-col flex-1 min-h-0">
               <Scroll containerClassName="flex-1 min-h-0" className="h-full">
                 <div className="p-6 bg-white">
                   <div className="mb-4">
                     <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('discussions.projectLabel')}</label>
-                    <select required value={createForm.projectId} onChange={e => setCreateForm({ ...createForm, projectId: e.target.value })} className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100">
+                    <select
+                    {...register('projectId')}
+                    className={`w-full border-2 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-4 transition ${errors.projectId ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-200 focus:border-cyan-500 focus:ring-cyan-100'}`}
+                  >
                       <option value="">{t('discussions.selectProject')}</option>
                       {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
                   <div className="mb-4">
                     <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('discussions.topicTitle')}</label>
-                    <input required value={createForm.title} onChange={e => setCreateForm({ ...createForm, title: e.target.value })} className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100" placeholder={t('discussions.topicPlaceholder')} />
+                    <input
+                      {...register('title')}
+                      className={`w-full border-2 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-4 transition ${errors.title ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-200 focus:border-cyan-500 focus:ring-cyan-100'}`}
+                      placeholder={t('discussions.topicPlaceholder')}
+                    />
+                    {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
                   </div>
                 </div>
               </Scroll>

@@ -88,7 +88,11 @@
     "announcements": "જાહેરાતો",
     "notifications": "સૂચનાઓ",
     "settings": "સેટિંગ્સ",
-    "emailLogs": "ઈમેલ લૉગ્સ"
+    "emailLogs": "ઈમેલ લૉગ્સ",
+    "attendance": "Attendance",
+    "attendanceAnalytics": "Attendance Analytics",
+    "calendar": "Calendar",
+    "reports": "Reports"
   },
   "header": {
     "logout": "લોગ આઉટ",
@@ -120,7 +124,8 @@
       "featureProjects": "પ્રોજેક્ટ્સ",
       "featureLeaves": "રજાઓ",
       "featureTasks": "કાર્યો",
-      "featureDiscussions": "ચર્ચાઓ"
+      "featureDiscussions": "ચર્ચાઓ",
+      "signin": "સાઇન ઇન કરો"
     },
     "register": {
       "title": "તમારું એકાઉન્ટ બનાવો",
@@ -148,7 +153,43 @@
       "signIn": "સાઈન ઈન",
       "passwordMismatch": "પાસવર્ડ મેળ ખાતા નથી",
       "passwordTooShort": "પાસવર્ડ ઓછામાં ઓછા 6 અક્ષરનો હોવો જોઈએ",
-      "registerFailed": "નોંધણી નિષ્ફળ"
+      "registerFailed": "નોંધણી નિષ્ફળ",
+      "registering": "Creating account...",
+      "heroTitle1": "શરૂ કરો",
+      "heroTitle2": "સરાવતાર હબ સાથે",
+      "heroSubtitle": "તમારું એકાઉન્ટ બનાવો અને HR, પ્રોજેક્ટ્સ, રજાઓ વગેરેનું સંચાલન શરૂ કરો — બધું એક જગ્યાએ.",
+      "feature1": "ઝડપી સેટઅપ",
+      "feature2": "શક્તિશાળી ડેશબોર્ડ",
+      "feature3": "કાયમી માટે ફ્રી"
+    },
+    "forgot": {
+      "title": "પાસવર્ડ ભૂલી ગયા છો?",
+      "subtitle": "તમારો ઈમેલ દાખલ કરો અને અમે તમને રીસેટ લિંક મોકલીશું",
+      "email": "ઈમેલ સરનામું",
+      "emailPlaceholder": "you@company.com",
+      "submit": "રીસેટ લિંક મોકલો",
+      "submitting": "મોકલી રહ્યા છીએ...",
+      "backToLogin": "સાઇન ઇન પર પાછા જાઓ",
+      "successMessage": "જો તે ઈમેલ સાથે કોઈ એકાઉન્ટ છે, તો અમે પાસવર્ડ રીસેટ લિંક મોકલ્યો છે. તમારું ઈનબોક્સ ચેક કરો.",
+      "errorMessage": "રીસેટ ઈમેલ મોકલવામાં નિષ્ફળ. કૃપા કરીને ફરી પ્રયાસ કરો.",
+      "successTitle": "ઈમેલ મોકલ્યો!"
+    },
+    "reset": {
+      "title": "તમારો પાસવર્ડ રીસેટ કરો",
+      "subtitle": "નીચે તમારો નવો પાસવર્ડ દાખલ કરો",
+      "newPassword": "નવો પાસવર્ડ",
+      "confirmPassword": "પાસવર્ડની પુષ્ટિ કરો",
+      "passwordPlaceholder": "ઓછામાં ઓછા 6 અક્ષરો",
+      "confirmPlaceholder": "નવો પાસવર્ડ દોહ્યાવો",
+      "submit": "રીસેટ પાસવર્ડ",
+      "submitting": "રીસેટ થઈ રહ્યું છે...",
+      "backToLogin": "સાઇન ઇન પર પાછા જાઓ",
+      "successTitle": "પાસવર્ડ રીસેટ!",
+      "successMessage": "તમારો પાસવર્ડ રીસેટ થઈ ગયો છે. તમે હવે સાઇન ઇન કરી શકો છો.",
+      "errorInvalid": "આ રીસેટ લિંક અમાન્ય છે અથવા સમાપ્ત થઈ ગઈ છે.",
+      "errorGeneric": "પાસવર્ડ રીસેટ કરવામાં નિષ્ફળ. કૃપા કરીને ફરી પ્રયાસ કરો.",
+      "passwordMismatch": "પાસવર્ડ મળતા નથી",
+      "passwordTooShort": "પાસવર્ડ ઓછામાં ઓછા 6 અક્ષરોનો હોવો જોઈએ"
     }
   },
   "dashboard": {
@@ -417,7 +458,10 @@
     "published": "જાહેરાત પોસ્ટ થઈ!",
     "updated": "જાહેરાત અપડેટ થઈ!",
     "deleteConfirm": "શું તમે ખરેખર આ જાહેરાત કાઢી નાખવા માંગો છો?",
-    "emptyHint": "બધાને અપડેટ રાખવા માટે એક પોસ્ટ કરો!"
+    "emptyHint": "બધાને અપડેટ રાખવા માટે એક પોસ્ટ કરો!",
+    "restoreConfirm": "આ જાહેરાતને પ્રકાશિતમાં પુનઃસ્થાપિત કરશો? તે ફરી દર્શકોને સૂચિત કરશે.",
+    "unpinned": "જાહેરાત અનપિન કરી",
+    "restored": "જાહેરાત પ્રકાશિતમાં પુનઃસ્થાપિત"
   },
   "notifications": {
     "title": "સૂચનાઓ",

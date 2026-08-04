@@ -2,7 +2,7 @@
 // All templates share a common wrapper with a colored top bar and a CTA button.
 
 const SITE_NAME = "Serveravatar Hub";
-const SITE_URL = process.env.SITE_URL || "https://serveravatar-hub.95.217.8.52.nip.io";
+const SITE_URL = process.env.SITE_URL || "https://seravavatar-hub.95.217.8.52.nip.io";
 
 function fmtDate(raw) {
   if (!raw) return "";
@@ -178,10 +178,30 @@ function escapeHtml(s) {
     .replace(/'/g, "&#39;");
 }
 
+function passwordResetEmail({ userName, resetUrl, expiresHours }) {
+  const subject = `[Security] Reset your ${SITE_NAME} password`;
+  const body = `
+    <p>Hi <strong>${escapeHtml(userName || "there")}</strong>,</p>
+    <p>We received a request to reset your password. Click the button below to set a new one. This link will expire in <strong>${expiresHours || 1} hour${expiresHours === 1 ? "" : "s"}</strong>.</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="background:#f8fafc;border-left:4px solid #F59E0B;border-radius:6px;padding:14px 16px;margin:16px 0;width:100%;">
+      <tr><td>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#F59E0B;">Password Reset</div>
+        <div style="font-size:14px;color:#0f172a;margin-top:6px;">If you didn't request this, you can safely ignore this email — your password will not change.</div>
+      </td></tr>
+    </table>
+  `;
+  return {
+    subject,
+    text: `Hi ${userName || "there"},\n\nWe received a password reset request for your ${SITE_NAME} account. Click the link below to set a new password (expires in ${expiresHours || 1} hour${expiresHours === 1 ? "" : "s"}):\n\n${resetUrl}\n\nIf you didn't request this, you can safely ignore this email.`,
+    html: layout({ accent: "#F59E0B", title: "Reset your password", body, ctaText: "Reset password", ctaUrl: resetUrl }),
+  };
+}
+
 module.exports = {
   taskAssignedEmail,
   leaveRequestSubmittedEmail,
   leaveRequestDecidedEmail,
   projectInvitationEmail,
   emailVerificationEmail,
+  passwordResetEmail,
 };

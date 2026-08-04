@@ -248,11 +248,13 @@ function htmlToText(html: string | null | undefined): string {
   return html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-/** True if `dueDate` (YYYY-MM-DD) is strictly before today. */
+/** True if `dueDate` (YYYY-MM-DD) is strictly before today (local time). */
 function isOverdue(dueDate: string): boolean {
-  // Compare by date string (YYYY-MM-DD) which is lexicographically ordered
-  const today = new Date().toISOString().slice(0, 10)
-  return dueDate < today
+  const today = new Date()
+  const [y, m, d] = dueDate.split('-').map(Number)
+  const target = new Date(y, m - 1, d)
+  today.setHours(0, 0, 0, 0)
+  return target < today
 }
 
 function SortableTask({

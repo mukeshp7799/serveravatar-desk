@@ -12,6 +12,7 @@ import {
   LayoutDashboard, Users, Palmtree, Network, ShieldCheck,
   FolderKanban, ListChecks, MessageSquare, Megaphone, Bell,
   Settings as SettingsIcon,
+  Clock, Calendar, BarChart3,
   Menu, X as XIcon, LogOut, Sparkles,
   PanelLeftClose, PanelLeftOpen, Mail, AlertTriangle, RefreshCw,
 } from 'lucide-react'
@@ -31,6 +32,9 @@ const navConfig: Array<{
   { sectionKey: 'nav.hrManagement' },
   { href: '/employees',     labelKey: 'nav.employees',   Icon: Users,        requiredPermission: 'hr.manage_employees' },
   { href: '/leaves',        labelKey: 'nav.leaves',      Icon: Palmtree,     requiredPermission: 'leave.view_own' },
+  { href: '/attendance', labelKey: 'nav.attendance', Icon: Clock, requiredPermission: 'attendance.clock_in_out' },
+  { href: '/calendar', labelKey: 'nav.calendar', Icon: Calendar, requiredPermission: 'calendar.view' },
+  { href: '/reports', labelKey: 'nav.reports', Icon: BarChart3, requiredPermission: 'reports.view' },
   { href: '/structure',     labelKey: 'nav.departments', Icon: Network,      requiredPermission: 'admin.departments' },
   { href: '/roles',         labelKey: 'nav.roles',       Icon: ShieldCheck,  requiredPermission: 'admin.roles' },
   { sectionKey: 'nav.projects' },
@@ -435,7 +439,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
 
         <main className="flex-1 min-w-0 overflow-hidden h-[calc(100vh-4rem)]">
           <Scroll containerClassName="h-full" className="h-full" watch={pathname}>
-            <div className="p-4 sm:p-6 max-w-full">{children}</div>
+            <div className="p-4 sm:p-6 w-full">{children}</div>
           </Scroll>
         </main>
       </div>

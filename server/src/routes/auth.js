@@ -6,10 +6,11 @@ const pool = require('../config/database');
 const { auth, JWT_SECRET, revokeToken } = require('../middleware/auth');
 const { t } = require('../i18n');
 const { sendEmail } = require('../utils/mailer');
-const { emailVerificationEmail } = require('../utils/emailTemplates');
+const { emailVerificationEmail, passwordResetEmail } = require('../utils/emailTemplates');
 
 const SITE_URL = process.env.SITE_URL || 'https://seravavatar-hub.95.217.8.52.nip.io';
 const VERIFICATION_TTL_HOURS = 24;
+const RESET_TTL_HOURS = 1;
 
 // Helper: create notifications for pending invitations (only if not already notified)
 async function createNotificationsForPendingInvitations(conn, userId, email) {
@@ -389,6 +390,108 @@ router.post('/change-password', auth, async (req, res, next) => {
     });
 
     res.json({ message: t(req.lang, 'errors.passwordChangedSuccessfully') });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/auth/forgot-password — send password reset email
+router.post('/forgot-password', async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: t(req.lang, 'errors.emailRequired') });
+    }
+
+    const [users] = await pool.query(
+      'SELECT id, email, first_name, last_name FROM users WHERE email = ? LIMIT 1',
+      [email]
+    );
+
+    // Always return 200 to prevent email enumeration attacks
+    if (users.length === 0) {
+      return res.json({ message: t(req.lang, 'errors.passwordResetEmailSent') });
+    }
+
+    const user = users[0];
+    const resetToken = randomUUID();
+    const expiresAt = new Date(Date.now() + RESET_TTL_HOURS * 60 * 60 * 1000)
+      .toISOString().slice(0, 19).replace('T', ' ');
+
+    await pool.query(
+      'UPDATE users SET password_reset_token = ?, password_reset_expires_at = ? WHERE id = ?',
+      [resetToken, expiresAt, user.id]
+    );
+
+    const resetUrl = `${SITE_URL}/reset-password/${resetToken}`;
+    const { subject, text, html } = passwordResetEmail({
+      userName: `${user.first_name} ${user.last_name}`.trim(),
+      resetUrl,
+      expiresHours: RESET_TTL_HOURS,
+    });
+
+    const emailResult = await sendEmail({
+      to: user.email,
+      toName: `${user.first_name} ${user.last_name}`.trim(),
+      subject,
+      text,
+      html,
+      type: 'password_reset',
+      relatedId: user.id,
+      relatedType: 'user',
+    });
+
+    res.json({
+      message: t(req.lang, 'errors.passwordResetEmailSent'),
+      previewUrl: emailResult.previewUrl || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/auth/reset-password — reset password with token
+router.post('/reset-password', async (req, res, next) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: t(req.lang, 'errors.tokenAndPasswordRequired') });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: t(req.lang, 'errors.passwordTooShort') });
+    }
+
+    const [users] = await pool.query(
+      `SELECT id, email, first_name, last_name, password_reset_expires_at
+       FROM users
+       WHERE password_reset_token = ?
+       LIMIT 1`,
+      [token]
+    );
+
+    if (users.length === 0) {
+      return res.status(400).json({ error: t(req.lang, 'errors.invalidResetToken') });
+    }
+
+    const user = users[0];
+
+    if (!user.password_reset_expires_at || new Date(user.password_reset_expires_at) < new Date()) {
+      return res.status(400).json({ error: t(req.lang, 'errors.resetTokenExpired') });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool.query(
+      `UPDATE users
+         SET password_hash = ?,
+             password_reset_token = NULL,
+             password_reset_expires_at = NULL
+         WHERE id = ?`,
+      [hash, user.id]
+    );
+
+    res.json({ message: t(req.lang, 'errors.passwordResetSuccess') });
   } catch (err) {
     next(err);
   }

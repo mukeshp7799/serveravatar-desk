@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import {
   Bell, BellOff, Check, CheckCircle2, FileText, ListChecks,
   Megaphone, MessageSquare, XCircle, Building, Mail, Clock,
-  CheckCircle, XCircle as XCircleIcon, AlertTriangle
+  CheckCircle, XCircle as XCircleIcon, AlertTriangle, AtSign
 } from 'lucide-react'
 import api from '@/lib/api'
 import { acceptInvitation, declineInvitation } from '@/lib/invitations-api'
@@ -103,7 +103,7 @@ export default function NotificationsPage() {
   const typeIcon: Record<string, any> = {
     leave_request: FileText, leave_approved: CheckCircle2, leave_rejected: XCircle,
     task_assigned: ListChecks, new_message: MessageSquare, announcement: Megaphone,
-    project_invitation: Building, default: Bell
+    project_invitation: Building, mention: AtSign, default: Bell
   }
 
   const allItems: NotificationItem[] = [
@@ -112,6 +112,17 @@ export default function NotificationsPage() {
   ]
 
   const unreadCount = allItems.filter(n => !n.is_read).length
+
+  const handleNotificationClick = (n: NotificationItem) => {
+    // Mark as read
+    if (!n.is_read) {
+      markRead(n.id)
+    }
+    // Navigate to the link if it exists
+    if (n.link && n.link !== '#') {
+      router.push(n.link)
+    }
+  }
 
   return (
     <div className="space-y-5 animate-fade-in-up">
@@ -213,7 +224,7 @@ export default function NotificationsPage() {
             return (
               <div
                 key={n.id}
-                onClick={() => !n.is_read && markRead(n.id)}
+                onClick={() => handleNotificationClick(n)}
                 className={`relative px-5 py-4 border-b border-gray-100 transition cursor-pointer ${
                   !n.is_read ? 'bg-indigo-50/50 hover:bg-indigo-50' : 'bg-white hover:bg-gray-50'
                 }`}
@@ -222,7 +233,9 @@ export default function NotificationsPage() {
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500"></div>
                 )}
                 <div className="flex items-start gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                    n.type === 'mention' ? 'bg-violet-600 text-white' : 'bg-indigo-600 text-white'
+                  }`}>
                     <Icon size={20} strokeWidth={2.25} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -235,6 +248,11 @@ export default function NotificationsPage() {
                     <div className="text-xs text-gray-400 mt-1.5 font-semibold">
                       {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
                     </div>
+                    {n.type === 'mention' && n.link && (
+                      <div className="text-xs text-violet-600 dark:text-violet-400 mt-1 font-medium">
+                        Click to view mention →
+                      </div>
+                    )}
                   </div>
                   {!n.is_read && (
                     <span className="w-3 h-3 rounded-full bg-indigo-500 shrink-0 mt-1.5 animate-pulse"></span>

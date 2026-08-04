@@ -30,6 +30,10 @@ import {
   type ChatMessage,
   type ChatAttachment,
 } from '@/lib/project-chat-api'
+import MentionInput from '@/components/MentionInput'
+import { highlightMentions } from '@/components/MentionBadge'
+import type { ActiveMember } from '@/components/MentionInput'
+import api from '@/lib/api'
 
 export default function ChatPage() {
   const params = useParams<{ projectId: string }>()
@@ -48,6 +52,8 @@ export default function ChatPage() {
   const [pendingPreviewUrl, setPendingPreviewUrl] = useState<string | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [activeMembers, setActiveMembers] = useState<ActiveMember[]>([])
+  const [chatMembers, setChatMembers] = useState<ActiveMember[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Scroll container ref
@@ -94,6 +100,21 @@ export default function ChatPage() {
     textareaRef.current.style.height = 'auto'
     textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px'
   }, [])
+
+  /* ── Fetch active project members for @mentions ────────────────── */
+  useEffect(() => {
+    if (!projectId) return
+    api
+      .get(`/projects/${projectId}/active-members`)
+      .then((data: any) => {
+        setActiveMembers(Array.isArray(data?.members) ? data.members : [])
+        setChatMembers(Array.isArray(data?.members) ? data.members : [])
+      })
+      .catch(() => {
+        setActiveMembers([])
+        setChatMembers([])
+      })
+  }, [projectId])
 
   /* ── File change ─────────────────────────────────────────── */
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -299,16 +320,13 @@ export default function ChatPage() {
 
             {/* Text input */}
             <div className="flex-1 relative">
-              <textarea
-                ref={textareaRef}
+              <MentionInput
+                projectId={projectId}
                 value={draft}
-                onChange={(e) => { setDraft(e.target.value); resizeTextarea() }}
-                onKeyDown={onKeyDown}
-                onPaste={onPaste}
-                rows={1}
-                placeholder="Message…"
-                className="w-full resize-none px-4 py-2 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-cyan-400 dark:focus:border-cyan-600 focus:ring-0 text-sm leading-relaxed"
-                style={{ minHeight: '36px', maxHeight: '120px' }}
+                onChange={(v) => { setDraft(v); }}
+                placeholder="Message… (type @ to mention)"
+                rows={2}
+                disabled={sending}
               />
             </div>
 
@@ -492,7 +510,9 @@ function MessageBubble({
           {/* Bubble */}
           <div className="bg-cyan-500 text-white px-3.5 py-2 rounded-2xl rounded-br-md shadow-sm">
             {message.body && message.body !== '(attachment)' && (
-              <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">{message.body}</p>
+              <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
+                {message.body}
+              </p>
             )}
           </div>
           {/* Inline attachments */}
@@ -532,7 +552,9 @@ function MessageBubble({
           {/* Bubble */}
           <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-3.5 py-2 rounded-2xl rounded-bl-md shadow-sm border border-gray-100 dark:border-gray-700">
             {message.body && message.body !== '(attachment)' && (
-              <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">{message.body}</p>
+              <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
+                {message.body}
+              </p>
             )}
           </div>
           {/* Inline attachments */}

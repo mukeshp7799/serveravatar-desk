@@ -88,7 +88,11 @@
     "announcements": "اعلانات",
     "notifications": "اطلاعات",
     "settings": "ترتیبات",
-    "emailLogs": "ای میل لاگز"
+    "emailLogs": "ای میل لاگز",
+    "attendance": "Attendance",
+    "attendanceAnalytics": "Attendance Analytics",
+    "calendar": "Calendar",
+    "reports": "Reports"
   },
   "header": {
     "logout": "لاگ آؤٹ",
@@ -120,7 +124,8 @@
       "featureProjects": "پروجیکٹس",
       "featureLeaves": "چھٹیاں",
       "featureTasks": "کام",
-      "featureDiscussions": "بحث"
+      "featureDiscussions": "بحث",
+      "signin": "سائن ان کریں"
     },
     "register": {
       "title": "اپنا اکاؤنٹ بنائیں",
@@ -148,7 +153,43 @@
       "signIn": "سائن ان",
       "passwordMismatch": "پاس ورڈ مماثل نہیں ہیں",
       "passwordTooShort": "پاس ورڈ کم از کم 6 حروف کا ہونا چاہیے",
-      "registerFailed": "رجسٹریشن ناکام"
+      "registerFailed": "رجسٹریشن ناکام",
+      "registering": "اکاؤنٹ بنارہے ہیں...",
+      "heroTitle1": "شروع کریں",
+      "heroTitle2": "سرورواویٹر ہب کے ساتھ",
+      "heroSubtitle": "اپنا اکاؤنٹ بنائیں اور ایچ آر، پروجیکٹس، چھٹیاں اور مزید کا انتظام شروع کریں — سب کچھ ایک ہی جگہ۔",
+      "feature1": "فوری سیٹ اپ",
+      "feature2": "طاقتور ڈیش بورڈ",
+      "feature3": "ہمیشہ کے لیے مفت"
+    },
+    "forgot": {
+      "title": "پاس ورڈ بھول گئے؟",
+      "subtitle": "اپنا ای میل درج کریں اور ہم آپ کو ری سیٹ لنک بھیجیں گے",
+      "email": "ای میل ایڈریس",
+      "emailPlaceholder": "you@company.com",
+      "submit": "ری سیٹ لنک بھیجیں",
+      "submitting": "بھیج رہے ہیں...",
+      "backToLogin": "سائن ان پر واپس جائیں",
+      "successMessage": "اگر اس ای میل سے کوئی اکاؤنٹ ہے تو ہم نے پاس ورڈ ری سیٹ لنک بھیج دی ہے۔ اپنا ان باکس دیکھیں۔",
+      "errorMessage": "ری سیٹ ای میل بھیجنا ناکام۔ براہ کرم دوبارہ کوشش کریں۔",
+      "successTitle": "ای میل بھیج دی گئی!"
+    },
+    "reset": {
+      "title": "اپنا پاس ورڈ ری سیٹ کریں",
+      "subtitle": "ذیل میں اپنا نیا پاس ورڈ درج کریں",
+      "newPassword": "نیا پاس ورڈ",
+      "confirmPassword": "پاس ورڈ کی تصدیق کریں",
+      "passwordPlaceholder": "کم از کم 6 حروف",
+      "confirmPlaceholder": "نیا پاس ورڈ دہرائیں",
+      "submit": "ری سیٹ پاس ورڈ",
+      "submitting": "ری سیٹ ہو رہا ہے...",
+      "backToLogin": "سائن ان پر واپس جائیں",
+      "successTitle": "پاس ورڈ ری سیٹ!",
+      "successMessage": "آپ کا پاس ورڈ ری سیٹ ہو گیا ہے۔ اب آپ سائن ان کر سکتے ہیں۔",
+      "errorInvalid": "یہ ری سیٹ لنک غلط ہے یا ختم ہو گیا ہے۔",
+      "errorGeneric": "پاس ورڈ ری سیٹ کرنا ناکام۔ براہ کرم دوبارہ کوشش کریں۔",
+      "passwordMismatch": "پاس ورڈ میل نہیں کھاتے",
+      "passwordTooShort": "پاس ورڈ کم از کم 6 حروف کا ہونا چاہیے"
     }
   },
   "dashboard": {
@@ -417,7 +458,10 @@
     "published": "اعلان پوسٹ ہو گیا!",
     "updated": "اعلان اپڈیٹ ہو گیا!",
     "deleteConfirm": "کیا آپ واقعی اس اعلان کو حذف کرنا چاہتے ہیں؟",
-    "emptyHint": "سب کو اپڈیٹ رکھنے کے لیے ایک پوسٹ کریں!"
+    "emptyHint": "سب کو اپڈیٹ رکھنے کے لیے ایک پوسٹ کریں!",
+    "restoreConfirm": "کیا اس اعلان کو شائع شدہ میں بحال کریں؟ اس سے سامعین کو دوبارہ نوٹیفکیشن ملے گا۔",
+    "unpinned": "اعلان انپین ہوگیا",
+    "restored": "اعلان شائع شدہ میں بحال ہوگیا"
   },
   "notifications": {
     "title": "اطلاعات",

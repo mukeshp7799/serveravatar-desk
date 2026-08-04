@@ -2,11 +2,13 @@
 import PageLoader from '@/components/PageLoader'
 import RequirePermission from '@/components/RequirePermission'
 import { useEffect, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { Building2, Landmark, Hospital, Warehouse } from 'lucide-react'
 import api from '@/lib/api'
-import { validateForm, structureSchema } from '@/lib/schemas'
+import { structureSchema, type StructureInput } from '@/lib/schemas'
 
 // NOTE: Designations module was removed in Phase 2 of the RBAC refactor.
 // Designation is now a free-text string on `users.designation`, managed
@@ -26,7 +28,15 @@ function StructurePageInner() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editItem, setEditItem] = useState<any>(null)
-  const [itemName, setItemName] = useState('')
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<StructureInput>({
+    resolver: zodResolver(structureSchema),
+    mode: 'onBlur',
+  })
   const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
   const isAdmin = Array.isArray(user.permissions) && user.permissions.includes('admin.departments')
 
@@ -40,23 +50,14 @@ function StructurePageInner() {
       .finally(() => setLoading(false))
   }
 
-  const openCreate = () => { setEditItem(null); setItemName(''); setShowModal(true) }
-  const openEdit = (item: any) => { setEditItem(item); setItemName(item.name || ''); setShowModal(true) }
+  const openCreate = () => { setEditItem(null); reset({ name: '' }); setShowModal(true) }
+  const openEdit = (item: any) => { setEditItem(item); reset({ name: item.name || '' }); setShowModal(true) }
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const valid = validateForm(structureSchema, { name: itemName })
-    if (!valid) return
-    try {
-      if (editItem) {
-        await api.put(`/departments/${editItem.id}`, { name: valid.name })
-        toast.success(t('structure.department'))
-      } else {
-        await api.post('/departments', { name: valid.name })
-        toast.success(t('structure.created'))
-      }
-      setShowModal(false); loadData()
-    } catch (err: any) { toast.error(err.message || t('common.failedToSave')) }
+  const onSubmit = (data: StructureInput) => {
+    const promise = editItem
+      ? api.put(`/departments/${editItem.id}`, { name: data.name }).then(() => toast.success(t('structure.department')))
+      : api.post('/departments', { name: data.name }).then(() => toast.success(t('structure.created')))
+    promise.catch((err: any) => toast.error(err.message || t('common.failedToSave'))).finally(() => { setShowModal(false); loadData() })
   }
 
   const handleDelete = async (id: number) => {
@@ -161,11 +162,16 @@ function StructurePageInner() {
               <h3 className="text-base font-semibold text-gray-900">{editItem ? `${t('common.edit')} ${label}` : `${t('common.add')} ${label}`}</h3>
               <button onClick={() => setShowModal(false)} className="bg-transparent border-none text-gray-400 hover:text-gray-700 cursor-pointer text-lg leading-none">×</button>
             </div>
-            <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0">
+            <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
               <div className="p-6 overflow-y-auto  flex-1 min-h-0">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">{label} {t('common.name')} *</label>
-                  <input required value={itemName} onChange={e => setItemName(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" placeholder={t('structure.deptPlaceholder')} />
+                  <input
+                    {...register('name')}
+                    className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-1 transition ${errors.name ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500'}`}
+                    placeholder={t('structure.deptPlaceholder')}
+                  />
+                  {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
                 </div>
               </div>
               <div className="border-t border-gray-200 px-6 py-4 flex flex-wrap justify-end gap-2 bg-gray-50 shrink-0">

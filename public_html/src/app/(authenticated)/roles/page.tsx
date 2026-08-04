@@ -3,11 +3,13 @@ import PageLoader from '@/components/PageLoader'
 import RequirePermission from '@/components/RequirePermission'
 import Tabs from '@/components/Tabs'
 import { useEffect, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { Check, KeyRound, Pencil, Plus, Shield, Tag, Trash2 } from 'lucide-react'
 import api from '@/lib/api'
-import { validateForm, roleSchema } from '@/lib/schemas'
+import { roleSchema, type RoleInput } from '@/lib/schemas'
 
 export default function RolesPage() {
   return (
@@ -26,7 +28,15 @@ function RolesPageInner() {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [editRole, setEditRole] = useState<any>(null)
-  const [roleName, setRoleName] = useState('')
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<RoleInput>({
+    resolver: zodResolver(roleSchema),
+    mode: 'onBlur',
+  })
   const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
   const isAdmin = Array.isArray(user.permissions) && user.permissions.includes('admin.roles')
 
@@ -47,24 +57,18 @@ function RolesPageInner() {
     }).catch(() => {}).finally(() => setLoading(false))
   }
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const valid = validateForm(roleSchema, { name: roleName })
-    if (!valid) return
+  const onSubmitCreate = async (data: RoleInput) => {
     try {
-      await api.post('/roles', { name: valid.name })
-      setShowCreate(false); setRoleName('')
+      await api.post('/roles', { name: data.name })
+      setShowCreate(false); reset({ name: '' })
       toast.success(t('roles.allRoles')); loadData()
     } catch (err: any) { toast.error(err.message || t('common.failedToSave')) }
   }
 
-  const handleEdit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const valid = validateForm(roleSchema, { name: roleName })
-    if (!valid) return
+  const onSubmitEdit = async (data: RoleInput) => {
     try {
-      await api.put(`/roles/${editRole!.id}`, { name: valid.name })
-      setEditRole(null); setRoleName('')
+      await api.put(`/roles/${editRole!.id}`, { name: data.name })
+      setEditRole(null); reset({ name: '' })
       toast.success(t('roles.roleSaved')); loadData()
     } catch (err: any) { toast.error(err.message || t('common.failedToSave')) }
   }
@@ -93,7 +97,7 @@ function RolesPageInner() {
     <div className="space-y-5 animate-fade-in-up">
       <div className="flex flex-wrap justify-end items-center gap-3">
         {isAdmin && (
-          <button onClick={() => { setEditRole(null); setRoleName(''); setShowCreate(true) }} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-lg rounded-xl text-sm font-bold transition shadow-lg cursor-pointer border-none flex items-center gap-2">
+          <button onClick={() => { setEditRole(null); reset({ name: '' }); setShowCreate(true) }} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-lg rounded-xl text-sm font-bold transition shadow-lg cursor-pointer border-none flex items-center gap-2">
             <span className="text-lg">+</span> {t('common.add')} {t('roles.title')}
           </button>
         )}
@@ -140,7 +144,7 @@ function RolesPageInner() {
                     {isAdmin && (
                       <td className="px-4 py-3">
                         <div className="flex gap-1.5">
-                          <button onClick={() => { setEditRole(r); setRoleName(r.name); setShowCreate(true) }} className="px-3 py-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 rounded-lg transition cursor-pointer border-none inline-flex items-center gap-1"><Pencil size={12} strokeWidth={2.25} /> {t('common.edit')}</button>
+                          <button onClick={() => { setEditRole(r); reset({ name: r.name }); setShowCreate(true) }} className="px-3 py-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 rounded-lg transition cursor-pointer border-none inline-flex items-center gap-1"><Pencil size={12} strokeWidth={2.25} /> {t('common.edit')}</button>
                           <button onClick={() => handleDelete(r.id)} className="px-3 py-1.5 text-xs font-bold text-red-600 hover:text-red-800 rounded-lg transition cursor-pointer border-none inline-flex items-center gap-1"><Trash2 size={12} strokeWidth={2.25} /> {t('common.delete')}</button>
                         </div>
                       </td>
@@ -217,11 +221,16 @@ function RolesPageInner() {
                 <button onClick={() => setShowCreate(false)} className="bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-lg w-8 h-8 flex items-center justify-center cursor-pointer border-none text-lg leading-none">×</button>
               </div>
             </div>
-            <form onSubmit={editRole ? handleEdit : handleCreate} className="flex flex-col flex-1 min-h-0">
+            <form onSubmit={editRole ? handleSubmit(onSubmitEdit) : handleSubmit(onSubmitCreate)} className="flex flex-col flex-1 min-h-0">
               <div className="p-6 bg-white overflow-y-auto  flex-1 min-h-0">
                 <div className="mb-4">
                   <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('roles.roleName')} *</label>
-                  <input required value={roleName} onChange={e => setRoleName(e.target.value)} className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-100" placeholder={t('roles.roleNamePlaceholder')} />
+                  <input
+                    {...register('name')}
+                    className={`w-full border-2 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-4 transition ${errors.name ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-200 focus:border-violet-500 focus:ring-violet-100'}`}
+                    placeholder={t('roles.roleNamePlaceholder')}
+                  />
+                  {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
                 </div>
               </div>
               <div className="border-t border-gray-100 px-6 py-4 flex flex-wrap justify-end gap-2 bg-gray-50 rounded-b-3xl shrink-0">

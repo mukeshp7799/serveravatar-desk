@@ -46,6 +46,7 @@ const { auth } = require("../middleware/auth");
 const { isProjectMember, requireProjectMember } = require("../middleware/projectMember");
 const { t } = require("../i18n");
 const { recordActivity } = require("../utils/activity");
+const { processAndNotifyMentions, SOURCE_TYPES } = require("../utils/mentions");
 
 const router = express.Router();
 
@@ -1199,11 +1200,24 @@ router.post("/tasks/:taskId/comments", auth, async (req, res, next) => {
       "INSERT INTO tb_comments (task_id, user_id, body) VALUES (?, ?, ?)",
       [taskId, req.user.id, clean]
     );
+    const commentId = r.insertId;
+
+    // Process @mentions — store records and send in-app notifications.
+    await processAndNotifyMentions({
+      projectId,
+      sourceType: SOURCE_TYPES.TASK_COMMENT,
+      sourceId: commentId,
+      content: clean,
+      mentionedByUserId: req.user.id,
+      lang: req.lang,
+      link: `/projects/${projectId}/task-board/${taskId}`,
+    });
+
     const [[row]] = await pool.query(
       `SELECT c.id, c.task_id, c.user_id, c.body, c.created_at, c.updated_at,
               u.first_name, u.last_name, u.email, u.avatar_url
          FROM tb_comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?`,
-      [r.insertId]
+      [commentId]
     );
     const comment = {
       id: row.id,
@@ -1221,7 +1235,7 @@ router.post("/tasks/:taskId/comments", auth, async (req, res, next) => {
       reactions: [],
     };
 
-    await recordTaskActivity(taskId, req.user.id, "commented", { comment_id: r.insertId });
+    await recordTaskActivity(taskId, req.user.id, "commented", { comment_id: commentId });
     await recordActivity(pool, {
       projectId,
       actorId: req.user.id,
@@ -1230,7 +1244,7 @@ router.post("/tasks/:taskId/comments", auth, async (req, res, next) => {
       targetType: "task",
       targetId: taskId,
       targetLabel: null,
-      meta: { comment_id: r.insertId },
+      meta: { comment_id: commentId },
     });
 
     res.status(201).json({ comment });

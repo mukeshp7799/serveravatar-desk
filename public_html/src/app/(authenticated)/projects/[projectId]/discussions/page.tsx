@@ -9,6 +9,9 @@ import {
 } from 'lucide-react'
 import FeaturePage from '@/components/project/FeaturePage'
 import ReactionBar from '@/components/project/ReactionBar'
+import MentionInput from '@/components/MentionInput'
+import { highlightMentions } from '@/components/MentionBadge'
+import type { ActiveMember } from '@/components/MentionInput'
 import api from '@/lib/api'
 import { fmtRelative } from '@/components/project/format'
 import type { Reaction } from '@/types/project'
@@ -82,11 +85,23 @@ export default function DiscussionsPage() {
   const [newMessage, setNewMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const [activeMembers, setActiveMembers] = useState<ActiveMember[]>([])
 
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem('user') : null
     if (stored) setUser(JSON.parse(stored))
   }, [])
+
+  // Load active project members for @mention autocomplete.
+  useEffect(() => {
+    if (!projectId) return
+    api
+      .get(`/projects/${projectId}/active-members`)
+      .then((data: any) => {
+        setActiveMembers(Array.isArray(data?.members) ? data.members : [])
+      })
+      .catch(() => setActiveMembers([]))
+  }, [projectId])
 
   const loadDiscussions = () => {
     setLoading(true)
@@ -328,7 +343,7 @@ export default function DiscussionsPage() {
                                         ? 'bg-indigo-600 text-white rounded-br-sm'
                                         : 'bg-white text-gray-800 border border-gray-100 rounded-bl-sm'
                                     }`}>
-                                      {m.content}
+                                      {highlightMentions(m.content || '', activeMembers)}
                                     </div>
                                     {m.reactions?.length > 0 && (
                                       <div className="mt-1">
@@ -350,16 +365,13 @@ export default function DiscussionsPage() {
                         {/* Reply composer */}
                         <form onSubmit={handleSend} className="shrink-0 px-4 py-3 border-t border-gray-200 bg-white flex gap-2 items-end">
                           <div className="flex-1 relative">
-                            <textarea
+                            <MentionInput
+                              projectId={projectId}
                               value={newMessage}
-                              onChange={(e) => setNewMessage(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void handleSend(e) }
-                              }}
-                              placeholder="Write a reply…"
-                              rows={1}
-                              className="w-full resize-none rounded-xl border border-gray-200 px-4 py-2.5 text-sm bg-gray-50 focus:bg-white focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"
-                              style={{ minHeight: '42px', maxHeight: '120px' }}
+                              onChange={setNewMessage}
+                              placeholder="Write a reply… (type @ to mention)"
+                              rows={2}
+                              disabled={sending}
                             />
                           </div>
                           <button

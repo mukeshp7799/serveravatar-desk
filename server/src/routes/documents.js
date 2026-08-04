@@ -35,6 +35,7 @@ const { auth } = require("../middleware/auth");
 const { isProjectMember: sharedIsProjectMember, requireProjectMember } = require("../middleware/projectMember");
 const { t } = require("../i18n");
 const { recordActivity } = require("../utils/activity");
+const { processAndNotifyMentions, SOURCE_TYPES } = require("../utils/mentions");
 
 const router = express.Router();
 
@@ -445,10 +446,26 @@ router.post("/:id/comments", auth, async (req, res, next) => {
       "INSERT INTO document_comments (document_id, user_id, body) VALUES (?, ?, ?)",
       [req.params.id, req.user.id, body]
     );
+    const commentId = result.insertId;
+    const projectId = doc[0].project_id;
+
+    // Process @mentions — store records and send in-app notifications.
+    if (projectId) {
+      await processAndNotifyMentions({
+        projectId,
+        sourceType: SOURCE_TYPES.DOCUMENT_COMMENT,
+        sourceId: commentId,
+        content: body,
+        mentionedByUserId: req.user.id,
+        lang: req.lang,
+        link: `/projects/${projectId}/files/${req.params.id}`,
+      });
+    }
+
     const [rows] = await pool.query(
       `SELECT dc.*, u.first_name, u.last_name, u.email, u.avatar_url
        FROM document_comments dc JOIN users u ON dc.user_id = u.id WHERE dc.id = ?`,
-      [result.insertId]
+      [commentId]
     );
     const hydrated = await hydrateDocumentCommentReactions(hydrateComments(rows), req.user.id);
     const [comment] = hydrated.map((c) => ({ ...c, is_mine: true }));
@@ -459,7 +476,7 @@ router.post("/:id/comments", auth, async (req, res, next) => {
         feature: 'files',
         action: 'commented',
         targetType: 'document_comment',
-        targetId: result.insertId,
+        targetId: commentId,
         targetLabel: `comment on doc #${req.params.id}`,
         meta: { document_id: Number(req.params.id), excerpt: body.slice(0, 120) },
       });

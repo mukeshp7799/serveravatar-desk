@@ -39,21 +39,25 @@ const COLORS: TodoColor[] = ['indigo', 'emerald', 'amber', 'sky', 'pink', 'viole
 
 function fmtDate(d: string | null): string {
   if (!d) return ''
-  const dt = new Date(d)
+  // Parse YYYY-MM-DD in local time to avoid timezone offset issues
+  const [y, m, day] = d.split('-').map(Number)
+  const target = new Date(y, m - 1, day)
   const today = new Date(); today.setHours(0, 0, 0, 0)
-  const target = new Date(dt); target.setHours(0, 0, 0, 0)
   const diffDays = Math.round((target.getTime() - today.getTime()) / 86_400_000)
   if (diffDays === 0) return 'Today'
   if (diffDays === 1) return 'Tomorrow'
   if (diffDays === -1) return 'Yesterday'
+  if (diffDays < -1) return `${Math.abs(diffDays)} days ago`
   if (diffDays > 0 && diffDays <= 7) return `In ${diffDays} days`
-  return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-function isOverdue(d: string | null): boolean {
-  if (!d) return false
+function isOverdue(d: string | null, completed: boolean): boolean {
+  if (!d || completed) return false
+  const [y, m, day] = d.split('-').map(Number)
+  const target = new Date(y, m - 1, day)
   const today = new Date(); today.setHours(0, 0, 0, 0)
-  return new Date(d) < today
+  return target < today
 }
 
 // ─── Avatar helper ──────────────────────────────────────────────────────────
@@ -268,7 +272,7 @@ function ItemRow({
   onDragEnd: () => void
   dragging: boolean
 }) {
-  const overdue = isOverdue(item.due_date)
+  const overdue = isOverdue(item.due_date, item.completed)
   const barColor = COLOR_CLASSES[color]
   return (
     <li

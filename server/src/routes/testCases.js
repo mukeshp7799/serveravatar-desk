@@ -42,6 +42,7 @@ const pool = require("../config/database");
 const { auth } = require("../middleware/auth");
 const { isProjectMember: sharedIsProjectMember, requireProjectMember } = require("../middleware/projectMember");
 const { recordActivity } = require("../utils/activity");
+const { processAndNotifyMentions, SOURCE_TYPES } = require("../utils/mentions");
 
 const router = express.Router();
 
@@ -961,17 +962,31 @@ router.get("/projects/:projectId/test-cases/:caseId/comments", auth, requireCase
 router.post("/projects/:projectId/test-cases/:caseId/comments", auth, requireCaseProjectMember, async (req, res) => {
   try {
     const caseId = Number(req.params.caseId);
+    const projectId = req._caseProjectId;
     const body = String(req.body?.body || "").trim();
     if (!body) return res.status(400).json({ message: "Body required" });
     const [r] = await pool.query(
       "INSERT INTO tb_test_case_comments (test_case_id, author_id, body) VALUES (?, ?, ?)",
       [caseId, req.user.id, body]
     );
+    const commentId = r.insertId;
+
+    // Process @mentions — store records and send in-app notifications.
+    await processAndNotifyMentions({
+      projectId,
+      sourceType: SOURCE_TYPES.TESTCASE_COMMENT,
+      sourceId: commentId,
+      content: body,
+      mentionedByUserId: req.user.id,
+      lang: req.lang,
+      link: `/projects/${projectId}/test-cases?case=${caseId}`,
+    });
+
     await pool.query("UPDATE tb_test_cases SET updated_at = NOW() WHERE id = ?", [caseId]);
     const [rows] = await pool.query(
       `SELECT c.*, u.first_name, u.last_name, u.email, u.avatar_url
          FROM tb_test_case_comments c JOIN users u ON u.id = c.author_id WHERE c.id = ?`,
-      [r.insertId]
+      [commentId]
     );
     return res.json({
       comment: {

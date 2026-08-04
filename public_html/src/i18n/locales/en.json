@@ -88,7 +88,11 @@
     "announcements": "Announcements",
     "notifications": "Notifications",
     "settings": "Settings",
-    "emailLogs": "Email Logs"
+    "emailLogs": "Email Logs",
+    "attendance": "Attendance",
+    "attendanceAnalytics": "Attendance Analytics",
+    "calendar": "Calendar",
+    "reports": "Reports"
   },
   "header": {
     "logout": "Logout",
@@ -120,7 +124,8 @@
       "featureProjects": "Projects",
       "featureLeaves": "Leaves",
       "featureTasks": "Tasks",
-      "featureDiscussions": "Discussions"
+      "featureDiscussions": "Discussions",
+      "signin": "Sign in"
     },
     "register": {
       "title": "Create your account",
@@ -148,7 +153,43 @@
       "signIn": "Sign in",
       "passwordMismatch": "Passwords do not match",
       "passwordTooShort": "Password must be at least 6 characters",
-      "registerFailed": "Registration failed"
+      "registerFailed": "Registration failed",
+      "registering": "Creating account...",
+      "heroTitle1": "Get Started",
+      "heroTitle2": "With Serveravatar Hub",
+      "heroSubtitle": "Create your account and start managing HR, projects, leaves, and more — all in one place.",
+      "feature1": "Quick Setup",
+      "feature2": "Powerful Dashboard",
+      "feature3": "Free Forever"
+    },
+    "forgot": {
+      "title": "Forgot your password?",
+      "subtitle": "Enter your email and we'll send you a reset link",
+      "email": "Email Address",
+      "emailPlaceholder": "you@company.com",
+      "submit": "Send Reset Link",
+      "submitting": "Sending...",
+      "backToLogin": "Back to sign in",
+      "successMessage": "If an account with that email exists, we've sent a password reset link. Check your inbox.",
+      "errorMessage": "Failed to send reset email. Please try again.",
+      "successTitle": "Email Sent!"
+    },
+    "reset": {
+      "title": "Reset your password",
+      "subtitle": "Enter your new password below",
+      "newPassword": "New Password",
+      "confirmPassword": "Confirm Password",
+      "passwordPlaceholder": "Min 6 characters",
+      "confirmPlaceholder": "Repeat new password",
+      "submit": "Reset Password",
+      "submitting": "Resetting...",
+      "backToLogin": "Back to sign in",
+      "successTitle": "Password reset!",
+      "successMessage": "Your password has been reset. You can now sign in.",
+      "errorInvalid": "This reset link is invalid or has expired.",
+      "errorGeneric": "Failed to reset password. Please try again.",
+      "passwordMismatch": "Passwords do not match",
+      "passwordTooShort": "Password must be at least 6 characters"
     }
   },
   "dashboard": {
@@ -417,7 +458,11 @@
     "published": "Announcement posted!",
     "updated": "Announcement updated!",
     "deleteConfirm": "Are you sure you want to delete this announcement?",
-    "emptyHint": "Post one to keep everyone in the loop!"
+    "restoreConfirm": "Restore this announcement to published? It will notify the audience again.",
+    "emptyHint": "Post one to keep everyone in the loop!",
+    "pinned": "Announcement pinned",
+    "unpinned": "Announcement unpinned",
+    "restored": "Announcement restored to published"
   },
   "notifications": {
     "title": "Notifications",

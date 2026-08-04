@@ -29,6 +29,9 @@ const testSuiteRoutes = require("./routes/testSuites");
 const testCaseRoutes = require("./routes/testCases");
 const invitationRoutes = require("./routes/invitations");
 const projectInvitationRoutes = require("./routes/projectInvitations");
+const attendanceRoutes = require("./routes/attendance");
+const calendarRoutes = require("./routes/calendar");
+const reportsRoutes = require("./routes/reports");
 const { langMiddleware } = require("./i18n");
 
 const app = express();
@@ -67,6 +70,9 @@ app.use("/api", testSuiteRoutes);
 app.use("/api", testCaseRoutes);
 app.use("/api/projects", projectInvitationRoutes); // /api/projects/:id/invitations
 app.use("/api/invitations", invitationRoutes);   // /api/invitations/:token + /api/invitations/:id/*
+app.use("/api/attendance", attendanceRoutes);
+app.use("/api/calendar", calendarRoutes);
+app.use("/api/reports", reportsRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

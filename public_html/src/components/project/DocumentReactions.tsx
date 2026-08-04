@@ -29,7 +29,7 @@ import type { DocumentReaction } from '@/types/project'
 
 interface Props {
   reactions: DocumentReaction[]
-  onToggle: (emoji: string) => Promise<void> | void
+  onToggle: (emoji: string, oldEmoji?: string) => Promise<void> | void
   currentUserName: string
 }
 
@@ -174,7 +174,8 @@ export default function DocumentReactions({ reactions, onToggle, currentUserName
       <EmojiPicker
         onEmojiClick={({ emoji }: EmojiClickData) => {
           setPickerOpen(false)
-          onToggle(emoji)
+          const mineEmoji = reactions.find(r => r.mine)?.emoji
+          onToggle(emoji, mineEmoji)
         }}
         theme={pickerTheme}
         emojiStyle={EmojiStyle.NATIVE}

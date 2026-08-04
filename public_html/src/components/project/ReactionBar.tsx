@@ -10,7 +10,8 @@ interface ReactionBarProps {
   reactions: Reaction[]
   /** Toggle or replace a reaction.
    *  - Clicking own reaction → remove it (onToggle(emoji, emoji))
-   *  - Clicking a different reaction → add that emoji (onToggle(newEmoji))
+   *  - Clicking a different reaction → replace old with new (onToggle(newEmoji, oldEmoji))
+   *  - First reaction → add it (onToggle(emoji))
    */
   onToggle: (emoji: string, oldEmoji?: string) => Promise<void> | void
   disabled?: boolean
@@ -90,10 +91,10 @@ export default function ReactionBar({ reactions, onToggle, disabled, currentUser
   }
 
   const handleChipClick = (emoji: string) => {
-    // Clicking own reaction → remove it (pass emoji as both new and old to signal remove)
-    // Clicking a different reaction → add that emoji as new reaction
+    // Clicking own reaction → remove it (pass emoji as both to signal remove)
+    // Clicking a different reaction → REPLACE old with new (pass oldEmoji)
     if (myReaction && myReaction !== emoji) {
-      void onToggle(emoji) // ADD new emoji (different from own)
+      void onToggle(emoji, myReaction) // REPLACE old reaction with new one
     } else if (myReaction === emoji) {
       void onToggle(emoji, emoji) // REMOVE own reaction
     } else {
@@ -116,7 +117,17 @@ export default function ReactionBar({ reactions, onToggle, disabled, currentUser
             tooltipId={tooltipId}
             tooltipText={tooltipFor(r)}
             disabled={!!disabled}
-            onToggle={handleChipClick}
+            onToggle={(emoji, _oldEmoji) => {
+              // _oldEmoji is from ChipWithTooltip's interface but ReactionBar
+              // already knows myReaction via closure — use it for replace flow
+              if (myReaction && myReaction !== emoji) {
+                void onToggle(emoji, myReaction) // replace
+              } else if (myReaction === emoji) {
+                void onToggle(emoji, emoji) // remove own
+              } else {
+                void onToggle(emoji) // add first
+              }
+            }}
           />
         )
       })}
@@ -188,7 +199,7 @@ function ChipWithTooltip({
   tooltipId: string
   tooltipText: string
   disabled: boolean
-  onToggle: (emoji: string) => void
+  onToggle: (emoji: string, oldEmoji?: string) => void
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null)
   const [hovered, setHovered] = useState(false)

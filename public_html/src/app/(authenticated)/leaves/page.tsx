@@ -2,585 +2,787 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
-import { ClipboardList, Clock as ClockIcon, Eye as EyeIcon, FileText, Flower, Inbox, Leaf, Palmtree, Plane, Settings as SettingsIcon, Sun, Umbrella, Waves } from 'lucide-react'
 import api from '@/lib/api'
-import { showActionToast } from '@/lib/etherealToast'
-import { validateForm, leaveApplySchema, leaveTypeSchema } from '@/lib/schemas'
 import Tabs from '@/components/Tabs'
+import PageLoader from '@/components/PageLoader'
+import { Calendar, Check, Clock, Plus, Search, Settings, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
 
 function fmtDate(raw: string | null | undefined): string {
-  if (!raw) return ''
+  if (!raw) return '—'
   const s = String(raw).trim()
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const [, m, d] = s.split('-')
-    return `${d}/${m}/${s.slice(0, 4)}`
+    const [y, m, d] = s.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }
-  const d = new Date(s)
-  if (isNaN(d.getTime())) return s
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+    const [y, m, d] = s.split('T')[0].split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+  return s
 }
 
-const BALANCE_ICONS: any[] = [Palmtree, Umbrella, Flower, Sun, Leaf, Waves]
+const BALANCE_ICONS: Record<string, any> = {
+  'Annual Leave':        '🏖️',
+  'Sick Leave':          '🩺',
+  'Casual Leave':        '🌴',
+  'Maternity Leave':    '🤱',
+  'Paternity Leave':     '👔',
+  'Bereavement Leave':   '🕯️',
+}
+
+type Tab = 'my' | 'team' | 'types' | 'allocations'
 
 export default function LeavesPage() {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<'my' | 'all' | 'types'>('my')
-  const [leaveTypes, setLeaveTypes] = useState<any[]>([])
-  const [myBalances, setMyBalances] = useState<any[]>([])
-  const [requests, setRequests] = useState<any[]>([])
+  const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
+  const isHRAdmin = Array.isArray(user.permissions) && (user.permissions.includes('leave.manage_all') || user.permissions.includes('users.edit_all'))
+  const isManager = Array.isArray(user.permissions) && (user.permissions.includes('leave.view_team') || isHRAdmin)
+
+  const [tab, setTab] = useState<Tab>('my')
   const [loading, setLoading] = useState(true)
+
+  // Data
+  const [allocations, setAllocations] = useState<any[]>([])
+  const [leaveTypes, setLeaveTypes] = useState<any[]>([])
+  const [requests, setRequests] = useState<any[]>([])
+  const [allAllocations, setAllAllocations] = useState<any[]>([])
+  const [departments, setDepartments] = useState<any[]>([])
+
+  // Apply modal
   const [showApply, setShowApply] = useState(false)
+  const [applyForm, setApplyForm] = useState({ leave_type_id: '', start_date: '', end_date: '', reason: '' })
+  const [applying, setApplying] = useState(false)
+
+  // Type modal
   const [showTypeModal, setShowTypeModal] = useState(false)
   const [editType, setEditType] = useState<any>(null)
-  const [viewRequest, setViewRequest] = useState<any>(null)
-  const [form, setForm] = useState({ leaveTypeId: '', startDate: '', endDate: '', reason: '' })
-  const [typeForm, setTypeForm] = useState({ name: '', accrual_rate: '0', max_allowed: '0', is_paid: false, carry_over_limit: '0', description: '' })
-  const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
+  const [typeForm, setTypeForm] = useState({ name: '', code: '', description: '', is_paid: true, default_days: '', max_allowed: '', status: 'active' })
+  const [savingType, setSavingType] = useState(false)
 
-  const isManagerOrHR = Array.isArray(user.permissions) && user.permissions.includes('leave.approve')
-  const isHRAdmin = Array.isArray(user.permissions) && user.permissions.includes('leave.manage_all')
+  // Allocation modal
+  const [showAllocModal, setShowAllocModal] = useState(false)
+  const [editAlloc, setEditAlloc] = useState<any>(null)
+  const [allocForm, setAllocForm] = useState({ allocated_days: '', remark: '' })
+  const [savingAlloc, setSavingAlloc] = useState(false)
 
-  useEffect(() => { loadData() }, [])
+  // Request filter
+  const [reqFilter, setReqFilter] = useState<'pending' | 'approved' | 'rejected' | 'cancelled' | ''>('')
+  const [allocSearch, setAllocSearch] = useState('')
+  const [allocDept, setAllocDept] = useState('')
+  const [allocLeaveType, setAllocLeaveType] = useState('')
+  const [allocPage, setAllocPage] = useState(1)
 
-  const loadData = () => {
+  const loadAll = () => {
     setLoading(true)
-    Promise.all([api.get('/leaves/types'), api.get('/leaves/balance'), api.get('/leaves')])
-      .then(([typesData, balanceData, requestsData]) => {
-        setLeaveTypes(typesData.leaveTypes || [])
-        setMyBalances(balanceData.balances || [])
-        setRequests(requestsData.leaveRequests || [])
-      }).catch(() => {}).finally(() => setLoading(false))
+    Promise.all([
+      api.get('/leaves/balance'),
+      api.get('/leaves/types'),
+      api.get('/leaves'),
+    ]).then(([balData, typesData, reqData]) => {
+      setAllocations(balData.allocations || [])
+      setLeaveTypes(typesData.leaveTypes || [])
+      setRequests(reqData.leaveRequests || [])
+    }).catch(() => {}).finally(() => setLoading(false))
   }
 
+  useEffect(() => { loadAll() }, [])
+
+  useEffect(() => {
+    if (tab === 'team' || tab === 'types' || tab === 'allocations') {
+      Promise.all([
+        api.get('/leaves'),
+        api.get('/departments'),
+      ]).then(([reqData, deptsData]) => {
+        setRequests(reqData.leaveRequests || [])
+        setDepartments(deptsData.departments || [])
+      }).catch(() => {})
+    }
+  }, [tab])
+
+  useEffect(() => {
+    if (tab === 'allocations') {
+      fetchAllAllocs()
+    }
+  }, [tab, allocSearch, allocDept, allocLeaveType, allocPage])
+
+  const fetchAllAllocs = (page = 1) => {
+    const params = new URLSearchParams({ page: String(page), limit: '50' })
+    if (allocSearch) params.set('search', allocSearch)
+    if (allocDept) params.set('departmentId', allocDept)
+    if (allocLeaveType) params.set('leaveTypeId', allocLeaveType)
+    api.get(`/leaves/allocations?${params.toString()}`).then(d => {
+      setAllAllocations(d.allocations || [])
+    }).catch(() => {})
+  }
+
+  // ── Apply for leave ─────────────────────────────────────────
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault()
-    const valid = validateForm(leaveApplySchema, form)
-    if (!valid) return
+    if (!applyForm.leave_type_id || !applyForm.start_date || !applyForm.end_date) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+    setApplying(true)
     try {
       const res = await api.post('/leaves', {
-        leaveTypeId: parseInt(valid.leaveTypeId),
-        startDate: valid.startDate,
-        endDate: valid.endDate,
-        reason: valid.reason || '',
+        leave_type_id: parseInt(applyForm.leave_type_id),
+        start_date: applyForm.start_date,
+        end_date: applyForm.end_date,
+        reason: applyForm.reason,
       })
+      toast.success(res.message || 'Leave request submitted')
       setShowApply(false)
-      setForm({ leaveTypeId: '', startDate: '', endDate: '', reason: '' })
-      showActionToast(toast, t, res, t('leaves.submitted')); loadData()
-    } catch (err: any) { toast.error(err.message || t('common.failedToSave')) }
+      setApplyForm({ leave_type_id: '', start_date: '', end_date: '', reason: '' })
+      loadAll()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to submit')
+    } finally {
+      setApplying(false)
+    }
   }
 
+  // ── Leave type management ───────────────────────────────────
   const openAddType = () => {
     setEditType(null)
-    setTypeForm({ name: '', accrual_rate: '0', max_allowed: '0', is_paid: false, carry_over_limit: '0', description: '' })
+    setTypeForm({ name: '', code: '', description: '', is_paid: true, default_days: '', max_allowed: '', status: 'active' })
     setShowTypeModal(true)
   }
   const openEditType = (lt: any) => {
     setEditType(lt)
     setTypeForm({
-      name: lt.name || '', accrual_rate: String(lt.accrual_rate || '0'),
-      max_allowed: String(lt.max_allowed || '0'), is_paid: Boolean(lt.is_paid),
-      carry_over_limit: String(lt.carry_over_limit || '0'), description: lt.description || ''
+      name: lt.name || '', code: lt.code || '', description: lt.description || '',
+      is_paid: Boolean(lt.is_paid), default_days: String(lt.default_days || ''),
+      max_allowed: String(lt.max_allowed || ''), status: lt.status || 'active',
     })
     setShowTypeModal(true)
   }
-
   const handleTypeSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    const valid = validateForm(leaveTypeSchema, typeForm)
-    if (!valid) return
+    if (!typeForm.name.trim()) { toast.error('Name is required'); return }
+    setSavingType(true)
     try {
       const payload = {
-        name: valid.name,
-        accrual_rate: valid.accrual_rate,
-        max_allowed: valid.max_allowed,
-        is_paid: valid.is_paid,
-        carry_over_limit: valid.carry_over_limit,
-        description: valid.description || ''
+        name: typeForm.name,
+        code: typeForm.code || null,
+        description: typeForm.description || null,
+        is_paid: typeForm.is_paid,
+        default_days: parseInt(typeForm.default_days) || 0,
+        max_allowed: parseInt(typeForm.max_allowed) || 0,
+        status: typeForm.status,
       }
       if (editType) {
-        await api.put(`/leaves/types/${editType.id}`, payload); toast.success(t('leaves.submitted'))
+        await api.put(`/leaves/types/${editType.id}`, payload)
+        toast.success('Leave type updated')
       } else {
-        await api.post('/leaves/types', payload); toast.success(t('leaves.submitted'))
+        await api.post('/leaves/types', payload)
+        toast.success('Leave type created')
       }
-      setShowTypeModal(false); loadData()
-    } catch (err: any) { toast.error(err.message || t('common.failedToSave')) }
+      setShowTypeModal(false)
+      loadAll()
+    } catch (err: any) { toast.error(err.message || 'Failed') }
+    finally { setSavingType(false) }
   }
-
   const handleDeleteType = async (id: number) => {
-    if (!confirm(t('leaves.approveConfirm'))) return
+    if (!confirm('Delete this leave type?')) return
     try {
-      await api.delete(`/leaves/types/${id}`); toast.success(t('common.deletedSuccessfully')); loadData()
-    } catch (err: any) { toast.error(err.message || t('common.failedToDelete')) }
+      await api.delete(`/leaves/types/${id}`)
+      toast.success('Deleted')
+      loadAll()
+    } catch (err: any) { toast.error(err.message || 'Failed') }
+  }
+  const handleSeedAll = async () => {
+    if (!confirm('Re-seed allocations for ALL employees from current default_days? This will reset all custom allocations.')) return
+    try {
+      const res = await api.post('/leaves/allocations/seed', {})
+      toast.success(res.message || 'Seeded')
+      loadAll()
+      if (tab === 'allocations') fetchAllAllocs()
+    } catch (err: any) { toast.error(err.message || 'Failed') }
   }
 
+  // ── Allocation management ───────────────────────────────────
+  const openAllocModal = (alloc: any) => {
+    setEditAlloc(alloc)
+    setAllocForm({ allocated_days: String(alloc.allocated_days), remark: alloc.remark || '' })
+    setShowAllocModal(true)
+  }
+  const handleAllocSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!allocForm.allocated_days) { toast.error('Allocated days required'); return }
+    setSavingAlloc(true)
+    try {
+      await api.put(`/leaves/allocations/${editAlloc.id}`, {
+        allocated_days: parseFloat(allocForm.allocated_days),
+        remark: allocForm.remark || null,
+      })
+      toast.success('Allocation updated')
+      setShowAllocModal(false)
+      fetchAllAllocs(allocPage)
+      loadAll()
+    } catch (err: any) { toast.error(err.message || 'Failed') }
+    finally { setSavingAlloc(false) }
+  }
+
+  // ── Request actions ──────────────────────────────────────────
   const handleApprove = async (id: number, action: 'approved' | 'rejected') => {
+    const reason = action === 'rejected' ? prompt('Rejection reason (optional):') : undefined
     try {
-      const res = await api.put(`/leaves/${id}/approve`, { action })
-      showActionToast(toast, t, res, t(action === 'approved' ? 'leaves.approve' : 'leaves.reject')); loadData()
-      // Keep the modal in sync if it's open on this request
-      setViewRequest((prev: any) => (prev && prev.id === id ? { ...prev, status: action, approved_date: new Date().toISOString() } : prev))
-    } catch (err: any) { toast.error(err.message || t('common.failedToSave')) }
+      await api.put(`/leaves/${id}/approve`, { action, rejection_reason: reason })
+      toast.success(`Leave request ${action}`)
+      loadAll()
+    } catch (err: any) { toast.error(err.message || 'Failed') }
   }
-
   const handleCancel = async (id: number) => {
-    if (!confirm(t('leaves.cancelConfirm'))) return
+    if (!confirm('Cancel this leave request?')) return
     try {
-      const res = await api.put(`/leaves/${id}/cancel`)
-      showActionToast(toast, t, res, t('leaves.cancelled')); loadData()
-      setViewRequest((prev: any) => (prev && prev.id === id ? { ...prev, status: 'cancelled' } : prev))
-    } catch (err: any) { toast.error(err.message || t('common.failedToSave')) }
+      await api.put(`/leaves/${id}/cancel`, {})
+      toast.success('Request cancelled')
+      loadAll()
+    } catch (err: any) { toast.error(err.message || 'Failed') }
   }
 
-  const statusKey = (s: string) => `leaves.${s}`
-  const statusClass = (s: string) =>
-    s === 'approved' ? 'bg-gray-50 text-emerald-700 border border-emerald-200'
-    : s === 'rejected' ? 'bg-red-50 text-red-700 border border-red-200'
-    : 'bg-gray-50 text-amber-700 border border-amber-200'
+  const statusBadge = (s: string) => {
+    const map: Record<string, string> = {
+      approved: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700',
+      rejected: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700',
+      pending: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700',
+      cancelled: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:border-gray-600',
+    }
+    return (
+      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${map[s] || map.pending}`}>
+        {s.charAt(0).toUpperCase() + s.slice(1)}
+      </span>
+    )
+  }
+
+  const filteredRequests = requests.filter(r => !reqFilter || r.status === reqFilter)
+
+  // Tabs
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'my', label: 'My Leave' },
+    ...(isManager ? [{ key: 'team' as Tab, label: 'Team Requests' }] : []),
+    ...(isHRAdmin ? [
+      { key: 'types' as Tab, label: 'Leave Types' },
+      { key: 'allocations' as Tab, label: 'Allocations' },
+    ] : []),
+  ]
+
+  const activeTab = tabs.find(x => x.key === tab) ? tab : 'my'
 
   return (
-    <div className="space-y-5 animate-fade-in-up">
-      {/* Page header */}
-      <div className="flex flex-wrap justify-end items-center gap-3">
-        <button onClick={() => setShowApply(true)} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition cursor-pointer border-none flex items-center gap-2">
-          <Plane size={14} strokeWidth={2.25} /> {t('leaves.applyLeave')}
-        </button>
+    <div className="w-full px-4 py-6 space-y-5 animate-fade-in-up">
+
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Leave Management</h1>
+        <div className="flex items-center gap-2">
+          {isHRAdmin && (
+            <button onClick={handleSeedAll}
+              className="px-4 py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-xl transition cursor-pointer border border-gray-200 dark:border-gray-600">
+              🔄 Re-seed All Allocations
+            </button>
+          )}
+          <button onClick={() => setShowApply(true)}
+            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition cursor-pointer border-none flex items-center gap-2">
+            <Plus size={14} /> Apply for Leave
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
       <Tabs
-        active={tab}
-        onChange={(k) => setTab(k as 'my' | 'all' | 'types')}
-        tabs={[
-          { key: 'my',    label: t('leaves.myLeaves') },
-          { key: 'all',   label: t('leaves.allRequests'), show: isManagerOrHR },
-          { key: 'types', label: t('leaves.balance'),     show: isHRAdmin },
-        ]}
+        active={activeTab}
+        onChange={k => setTab(k as Tab)}
+        tabs={tabs}
       />
 
+      {/* ── MY LEAVE TAB ─────────────────────────────────────── */}
       {tab === 'my' && (
-        <div className="space-y-5">
+        <>
           {/* Balance cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {myBalances.length === 0 && !loading && (
-              <div className="col-span-full bg-white rounded-xl border border-gray-200 p-10 text-center">
-                <Palmtree size={48} strokeWidth={1.75} className="text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">{t('dashboard.noLeaveBalances')}</p>
-              </div>
-            )}
-            {myBalances.map((b: any, i: number) => {
-              const pct = Math.min(100, (parseFloat(b.current_balance) / b.max_allowed) * 100)
-              const Icon = BALANCE_ICONS[i % BALANCE_ICONS.length]
-              return (
-                <div key={b.id} className="bg-white rounded-xl border border-gray-200 p-5 cursor-pointer card-hover">
-                  <div className="w-11 h-11 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3"><Icon size={22} strokeWidth={2.25} /></div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{b.leave_type_name}</div>
-                  <div className="flex items-baseline gap-1.5">
-                    <div className="text-3xl font-bold text-indigo-600">{b.current_balance}</div>
-                    <div className="text-xs text-gray-400 font-medium">/ {b.max_allowed} {t('leaves.days')}</div>
-                  </div>
-                  <div className="bg-gray-100 rounded-full h-2 mt-3 overflow-hidden">
-                    <div className="h-full rounded-full bg-indigo-600" style={{ width: `${pct}%` }}></div>
-                  </div>
+          {loading ? <PageLoader /> : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {allocations.length === 0 && (
+                <div className="col-span-full bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center text-gray-400 dark:text-gray-500">
+                  No leave allocations found. Contact HR.
                 </div>
-              )
-            })}
-          </div>
+              )}
+              {allocations.map((a: any) => (
+                <div key={a.id}
+                  className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 hover:shadow-md transition">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="text-2xl">{BALANCE_ICONS[a.leave_type_name] || '📋'}</div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.is_paid ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
+                      {a.is_paid ? 'Paid' : 'Unpaid'}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">{a.leave_type_name}</h3>
+                  {a.leave_type_code && <p className="text-xs text-gray-400 mb-4">{a.leave_type_code}</p>}
 
-          {/* My leaves table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200">
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2"><FileText size={14} strokeWidth={2.25} /> {t('leaves.myLeaves')}</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse min-w-[600px]">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('leaves.leaveType')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('leaves.startDate')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('leaves.endDate')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('leaves.reason')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('common.status')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {requests.filter((r: any) => r.user_id === user.id).map((r: any, i: number) => (
-                    <tr key={r.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition">
-                      <td className="px-4 py-3 text-sm font-semibold text-gray-800">{r.leave_type_name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{fmtDate(r.start_date)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{fmtDate(r.end_date)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{r.reason || '—'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(r.status)}`}>
-                          {t(statusKey(r.status))}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {requests.filter((r: any) => r.user_id === user.id).length === 0 && (
-              <div className="p-10 text-center">
-                <Inbox size={32} strokeWidth={1.75} className="text-gray-300 mx-auto mb-2" />
-                <p className="text-gray-400 text-sm">{t('leaves.noLeaves')}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+                  {/* 3-column stat */}
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="text-center bg-gray-50 dark:bg-gray-700/50 rounded-lg py-2">
+                      <div className="text-lg font-bold text-gray-900 dark:text-white">{a.allocated_days}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Allocated</div>
+                    </div>
+                    <div className="text-center bg-red-50 dark:bg-red-900/20 rounded-lg py-2">
+                      <div className="text-lg font-bold text-red-600 dark:text-red-400">{a.used}</div>
+                      <div className="text-xs text-red-500 dark:text-red-400">Used</div>
+                    </div>
+                    <div className="text-center bg-emerald-50 dark:bg-emerald-900/20 rounded-lg py-2">
+                      <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{a.available}</div>
+                      <div className="text-xs text-emerald-600 dark:text-emerald-400">Available</div>
+                    </div>
+                  </div>
 
-      {tab === 'all' && isManagerOrHR && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-200 flex items-center gap-2">
-            <ClockIcon size={20} strokeWidth={2.25} className="text-gray-700" />
-            <h3 className="font-semibold text-gray-900">{t('leaves.allRequests')}</h3>
-            <span className="ml-auto text-xs text-gray-500 bg-gray-100 px-2.5 py-0.5 rounded-full font-semibold">{requests.length}</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse min-w-[700px]">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('employees.firstName')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('leaves.leaveType')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('leaves.fromDate')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('leaves.toDate')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('leaves.reason')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('common.status')}</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('common.actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requests.map((r: any) => (
-                  <tr key={r.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold shrink-0">
-                          {r.first_name?.[0]}{r.last_name?.[0]}
-                        </div>
-                        <span className="text-sm font-semibold text-gray-800">{r.first_name} {r.last_name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm font-semibold text-gray-800">{r.leave_type_name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{fmtDate(r.start_date)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{fmtDate(r.end_date)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{r.reason || '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(r.status)}`}>
-                        {t(statusKey(r.status))}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-3 text-sm font-medium items-center">
-                        <button
-                          onClick={() => setViewRequest(r)}
-                          title={t('leaves.viewDetails')}
-                          className="text-indigo-600 hover:text-indigo-800 cursor-pointer border-none bg-transparent p-0 flex items-center gap-1"
-                        >
-                          <EyeIcon size={12} strokeWidth={2.25} /> {t('leaves.view')}
-                        </button>
-                        {r.status === 'pending' && (
-                          <>
-                            <span className="text-gray-300">|</span>
-                            <button onClick={() => handleApprove(r.id, 'approved')} className="text-indigo-600 hover:text-indigo-800 cursor-pointer border-none bg-transparent p-0">{t('leaves.approve')}</button>
-                            <span className="text-gray-300">|</span>
-                            <button onClick={() => handleApprove(r.id, 'rejected')} className="text-red-600 hover:text-red-800 cursor-pointer border-none bg-transparent p-0">{t('leaves.reject')}</button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {requests.length === 0 && (
-            <div className="p-10 text-center">
-              <ClipboardList size={32} strokeWidth={1.75} className="text-gray-300 mx-auto mb-2" />
-              <p className="text-gray-400 text-sm">{t('leaves.noLeaves')}</p>
+                  {a.max_allowed > 0 && (
+                    <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 mt-2">
+                      <div className="h-full rounded-full bg-indigo-500"
+                        style={{ width: `${Math.min(100, (a.used / a.allocated_days) * 100)}%` }} />
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
-        </div>
+
+          {/* My requests */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white">My Leave Requests</h2>
+            </div>
+            {filteredRequests.filter(r => r.user_id === user.id).length === 0 ? (
+              <div className="p-10 text-center text-gray-400 dark:text-gray-500 text-sm">No leave requests yet.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-700/50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Period</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Days</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Applied</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {filteredRequests.filter(r => r.user_id === user.id).map((r: any) => {
+                      const days = Math.ceil((new Date(r.end_date).getTime() - new Date(r.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1
+                      return (
+                        <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                          <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{r.leave_type_name}</td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{fmtDate(r.start_date)} → {fmtDate(r.end_date)}</td>
+                          <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{days}d</td>
+                          <td className="px-4 py-3">{statusBadge(r.status)}</td>
+                          <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs">{fmtDate(r.created_at)}</td>
+                          <td className="px-4 py-3">
+                            {r.status === 'pending' && (
+                              <button onClick={() => handleCancel(r.id)}
+                                className="text-xs text-red-500 hover:text-red-700 font-medium bg-transparent border-0 cursor-pointer">
+                                Cancel
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
-      {tab === 'types' && isHRAdmin && (
-        <div>
-          <div className="flex justify-end">
-            <button onClick={openAddType} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition cursor-pointer border-none flex items-center gap-2">
-              <span>+</span> {t('common.add')} {t('leaves.leaveType')}
-            </button>
+      {/* ── TEAM REQUESTS TAB ─────────────────────────────────── */}
+      {tab === 'team' && (
+        <>
+          <div className="flex flex-wrap gap-2 items-center">
+            {['', 'pending', 'approved', 'rejected', 'cancelled'].map(s => (
+              <button key={s} onClick={() => setReqFilter(s as any)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border ${
+                  reqFilter === s
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-indigo-300'
+                }`}>
+                {s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All'}
+              </button>
+            ))}
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-4">
-            <div className="px-5 py-4 border-b border-gray-200 flex items-center gap-2">
-              <SettingsIcon size={20} strokeWidth={2.25} className="text-gray-700" />
-              <h3 className="font-semibold text-gray-900">{t('leaves.title')}</h3>
-            </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse min-w-[700px]">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('common.name')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('leaves.accrualRate')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('leaves.maxAllowed')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('leaves.isPaid')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('leaves.carryOver')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('common.description')}</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{t('common.actions')}</th>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700/50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Employee</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Period</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Days</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Reason</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {filteredRequests.map((r: any) => {
+                    const days = Math.ceil((new Date(r.end_date).getTime() - new Date(r.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1
+                    const isOwn = r.user_id === user.id
+                    return (
+                      <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-gray-900 dark:text-white">{r.first_name} {r.last_name}</div>
+                          <div className="text-xs text-gray-400">{r.email}</div>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{r.leave_type_name}</td>
+                        <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{fmtDate(r.start_date)} → {fmtDate(r.end_date)}</td>
+                        <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{days}d</td>
+                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400 max-w-[200px] truncate">{r.reason || '—'}</td>
+                        <td className="px-4 py-3">{statusBadge(r.status)}</td>
+                        <td className="px-4 py-3">
+                          {r.status === 'pending' && (
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => handleApprove(r.id, 'approved')}
+                                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition cursor-pointer border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700">
+                                <ThumbsUp size={11} /> Approve
+                              </button>
+                              <button onClick={() => handleApprove(r.id, 'rejected')}
+                                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-700 rounded-lg transition cursor-pointer border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700">
+                                <ThumbsDown size={11} /> Reject
+                              </button>
+                              {!isOwn && (
+                                <button onClick={() => handleCancel(r.id)}
+                                  className="text-xs text-gray-500 hover:text-red-600 font-medium bg-transparent border-0 cursor-pointer ml-1">
+                                  Cancel
+                                </button>
+                              )}
+                            </div>
+                          )}
+                          {r.status !== 'pending' && !isOwn && (
+                            <button onClick={() => handleCancel(r.id)}
+                              className="text-xs text-gray-500 hover:text-red-600 font-medium bg-transparent border-0 cursor-pointer">
+                              Cancel
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {filteredRequests.length === 0 && (
+                    <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500">No requests found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── LEAVE TYPES TAB (HR Admin) ──────────────────────── */}
+      {tab === 'types' && isHRAdmin && (
+        <>
+          <div className="flex justify-end">
+            <button onClick={openAddType}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition cursor-pointer border-none flex items-center gap-2">
+              <Plus size={14} /> Add Leave Type
+            </button>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700/50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Code</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Default Days</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Max Allowed</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Description</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {leaveTypes.map((lt: any) => (
-                    <tr key={lt.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition">
-                      <td className="px-4 py-3 text-sm font-bold text-gray-900">{lt.name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{lt.accrual_rate} {t('leaves.perMonth')}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-gray-700">{lt.max_allowed} {t('leaves.days')}</td>
+                    <tr key={lt.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                      <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{lt.name}</td>
+                      <td className="px-4 py-3 font-mono text-gray-600 dark:text-gray-400">{lt.code || '—'}</td>
+                      <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{lt.default_days}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{lt.max_allowed || '—'}</td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${lt.is_paid ? 'bg-gray-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-700 border border-gray-200'}`}>
-                          {lt.is_paid ? t('common.yes') : t('common.no')}
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${lt.is_paid ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
+                          {lt.is_paid ? 'Paid' : 'Unpaid'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{lt.carry_over_limit} {t('leaves.days')}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{lt.description || '—'}</td>
                       <td className="px-4 py-3">
-                        <div className="flex gap-4 text-sm font-medium">
-                          <button onClick={() => openEditType(lt)} className="text-indigo-600 hover:text-indigo-800 cursor-pointer border-none bg-transparent p-0">{t('common.edit')}</button>
-                          <button onClick={() => handleDeleteType(lt.id)} className="text-red-600 hover:text-red-800 cursor-pointer border-none bg-transparent p-0">{t('common.delete')}</button>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${lt.status === 'active' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
+                          {lt.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 max-w-[200px] truncate">{lt.description || '—'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => openEditType(lt)}
+                            className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition cursor-pointer bg-transparent border-0">
+                            <Settings size={14} />
+                          </button>
+                          <button onClick={() => handleDeleteType(lt.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition cursor-pointer bg-transparent border-0">
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </td>
                     </tr>
                   ))}
+                  {leaveTypes.length === 0 && (
+                    <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500">No leave types defined.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
-            {leaveTypes.length === 0 && (
-              <div className="p-10 text-center">
-                <SettingsIcon size={32} strokeWidth={1.75} className="text-gray-300 mx-auto mb-2" />
-                <p className="text-gray-400 text-sm">{t('leaves.noLeaves')}</p>
-              </div>
-            )}
           </div>
-        </div>
+        </>
       )}
 
-      {/* Apply modal */}
-      {showApply && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowApply(false)}>
-          <div className="bg-white rounded-xl w-full max-w-md shadow-xl flex flex-col max-h-[calc(100vh-2rem)]" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
-              <h3 className="text-base font-semibold text-gray-900">{t('leaves.applyLeave')}</h3>
-              <button onClick={() => setShowApply(false)} className="bg-transparent border-none text-gray-400 hover:text-gray-700 cursor-pointer text-lg leading-none">×</button>
+      {/* ── ALLOCATIONS TAB (HR Admin) ────────────────────────── */}
+      {tab === 'allocations' && isHRAdmin && (
+        <>
+          {/* Filters */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Search size={14} /></div>
+              <input type="text" placeholder="Search employee..."
+                value={allocSearch} onChange={e => { setAllocSearch(e.target.value); setAllocPage(1) }}
+                className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
-            <form onSubmit={handleApply} className="flex flex-col flex-1 min-h-0">
-              <div className="p-6 overflow-y-auto  flex-1 min-h-0">
-                <div className="mb-4">
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">{t('leaves.leaveType')}</label>
-                  <select required value={form.leaveTypeId} onChange={e => setForm({ ...form, leaveTypeId: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
-                    <option value="">{t('leaves.selectLeaveType')}</option>
-                    {leaveTypes.map((lt: any) => <option key={lt.id} value={lt.id}>{lt.name} ({lt.max_allowed} {t('leaves.days')})</option>)}
-                  </select>
+            <select value={allocDept} onChange={e => { setAllocDept(e.target.value); setAllocPage(1) }}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+              <option value="">All Departments</option>
+              {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <select value={allocLeaveType} onChange={e => { setAllocLeaveType(e.target.value); setAllocPage(1) }}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+              <option value="">All Leave Types</option>
+              {leaveTypes.map((lt: any) => <option key={lt.id} value={lt.id}>{lt.name}</option>)}
+            </select>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700/50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Employee</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Department</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Leave Type</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Allocated</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Used</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Available</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Remark</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {allAllocations.map((a: any) => (
+                    <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900 dark:text-white">{a.first_name} {a.last_name}</div>
+                        <div className="text-xs text-gray-400">{a.email}</div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{a.department_name || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className="font-medium text-gray-900 dark:text-white">{a.leave_type_name}</span>
+                        {a.leave_type_code && <span className="ml-1 text-xs text-gray-400">{a.leave_type_code}</span>}
+                      </td>
+                      <td className="px-4 py-3 text-center font-semibold text-indigo-600 dark:text-indigo-400">{a.allocated_days}</td>
+                      <td className="px-4 py-3 text-center font-semibold text-red-500 dark:text-red-400">{a.used}</td>
+                      <td className="px-4 py-3 text-center font-semibold text-emerald-600 dark:text-emerald-400">{a.available}</td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs max-w-[150px] truncate">{a.remark || '—'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={() => openAllocModal(a)}
+                          className="px-3 py-1 text-xs font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50 rounded-lg transition cursor-pointer border border-indigo-200 dark:border-indigo-700">
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {allAllocations.length === 0 && (
+                    <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500">No allocations found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── APPLY FOR LEAVE MODAL ──────────────────────────────── */}
+      {showApply && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
+            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Apply for Leave</h2>
+              <button onClick={() => setShowApply(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
+            </div>
+            <form onSubmit={handleApply} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Leave Type <span className="text-red-500">*</span></label>
+                <select value={applyForm.leave_type_id} onChange={e => setApplyForm({ ...applyForm, leave_type_id: e.target.value })}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                  <option value="">— Select leave type —</option>
+                  {allocations.map((a: any) => (
+                    <option key={a.leave_type_id} value={a.leave_type_id}
+                      disabled={a.available <= 0}>
+                      {a.leave_type_name} ({a.available} days available)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date <span className="text-red-500">*</span></label>
+                  <input type="date" value={applyForm.start_date} onChange={e => setApplyForm({ ...applyForm, start_date: e.target.value })} required
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">{t('leaves.startDate')}</label>
-                    <input type="date" required value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">{t('leaves.endDate')}</label>
-                    <input type="date" required value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">{t('leaves.reason')}</label>
-                  <textarea value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-y min-h-[80px]" placeholder={t('leaves.reasonPlaceholder')} />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date <span className="text-red-500">*</span></label>
+                  <input type="date" value={applyForm.end_date} onChange={e => setApplyForm({ ...applyForm, end_date: e.target.value })} required
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
               </div>
-              <div className="border-t border-gray-200 px-6 py-4 flex flex-wrap justify-end gap-2 bg-gray-50 shrink-0">
-                <button type="button" onClick={() => setShowApply(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition cursor-pointer">{t('common.cancel')}</button>
-                <button type="submit" className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition cursor-pointer border-none">{t('leaves.submitLeave')}</button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
+                <textarea value={applyForm.reason} onChange={e => setApplyForm({ ...applyForm, reason: e.target.value })} rows={3}
+                  placeholder="Brief reason for leave..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowApply(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
+                  Cancel
+                </button>
+                <button type="submit" disabled={applying}
+                  className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
+                  {applying ? 'Submitting...' : 'Submit Request'}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* View request modal */}
-      {viewRequest && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setViewRequest(null)}>
-          <div className="bg-white rounded-xl w-full max-w-lg shadow-xl flex flex-col max-h-[calc(100vh-2rem)]" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
-              <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                <ClipboardList size={14} strokeWidth={2.25} /> {t('leaves.requestDetails')}
-              </h3>
-              <button onClick={() => setViewRequest(null)} className="bg-transparent border-none text-gray-400 hover:text-gray-700 cursor-pointer text-lg leading-none">×</button>
+      {/* ── LEAVE TYPE MODAL ───────────────────────────────────── */}
+      {showTypeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                {editType ? 'Edit Leave Type' : 'Add Leave Type'}
+              </h2>
+              <button onClick={() => setShowTypeModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
             </div>
-            <div className="p-6 space-y-4 overflow-y-auto  flex-1 min-h-0">
-              {/* Employee */}
-              <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-                <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-base font-bold shrink-0">
-                  {viewRequest.first_name?.[0]}{viewRequest.last_name?.[0]}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-bold text-gray-900 truncate">{viewRequest.first_name} {viewRequest.last_name}</div>
-                  <div className="text-xs text-gray-500 truncate">{viewRequest.email}</div>
-                </div>
-                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold shrink-0 ${statusClass(viewRequest.status)}`}>
-                  {t(statusKey(viewRequest.status))}
-                </span>
-              </div>
-
-              {/* Details grid */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">{t('leaves.leaveType')}</div>
-                  <div className="text-sm font-semibold text-gray-900">{viewRequest.leave_type_name}</div>
+            <form onSubmit={handleTypeSave} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name <span className="text-red-500">*</span></label>
+                  <input value={typeForm.name} onChange={e => setTypeForm({ ...typeForm, name: e.target.value })} required
+                    placeholder="e.g. Annual Leave"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">{t('leaves.daysField')}</div>
-                  <div className="text-sm font-semibold text-gray-900">
-                    {(() => {
-                      const s = new Date(viewRequest.start_date).getTime()
-                      const e = new Date(viewRequest.end_date).getTime()
-                      if (isNaN(s) || isNaN(e)) return '—'
-                      return Math.max(1, Math.ceil((e - s) / (1000 * 60 * 60 * 24)) + 1) + ' ' + t('leaves.days')
-                    })()}
-                  </div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Code</label>
+                  <input value={typeForm.code} onChange={e => setTypeForm({ ...typeForm, code: e.target.value })}
+                    placeholder="e.g. AL"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">{t('leaves.fromDate')}</div>
-                  <div className="text-sm font-semibold text-gray-900">{fmtDate(viewRequest.start_date)}</div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+                  <select value={typeForm.status} onChange={e => setTypeForm({ ...typeForm, status: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">{t('leaves.toDate')}</div>
-                  <div className="text-sm font-semibold text-gray-900">{fmtDate(viewRequest.end_date)}</div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Days</label>
+                  <input type="number" min="0" value={typeForm.default_days} onChange={e => setTypeForm({ ...typeForm, default_days: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">{t('leaves.appliedOn')}</div>
-                  <div className="text-sm font-semibold text-gray-900">{fmtDate(viewRequest.created_at)}</div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Max Allowed</label>
+                  <input type="number" min="0" value={typeForm.max_allowed} onChange={e => setTypeForm({ ...typeForm, max_allowed: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
-                {viewRequest.approved_date && (
-                  <div>
-                    <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">{t('leaves.approvedOn')}</div>
-                    <div className="text-sm font-semibold text-gray-900">{fmtDate(viewRequest.approved_date)}</div>
-                  </div>
-                )}
-              </div>
-
-              {/* Reason */}
-              <div>
-                <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">{t('leaves.reason')}</div>
-                <div className="text-sm text-gray-800 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 min-h-[40px]">
-                  {viewRequest.reason || '—'}
+                <div className="col-span-2">
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input type="checkbox" checked={typeForm.is_paid} onChange={e => setTypeForm({ ...typeForm, is_paid: e.target.checked })}
+                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                    Paid Leave
+                  </label>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                  <textarea value={typeForm.description} onChange={e => setTypeForm({ ...typeForm, description: e.target.value })} rows={2}
+                    placeholder="Optional description..."
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
               </div>
-
-              {/* Rejection reason */}
-              {viewRequest.status === 'rejected' && viewRequest.rejection_reason && (
-                <div>
-                  <div className="text-[10px] font-bold text-red-600 uppercase tracking-wider mb-1">{t('leaves.rejectionReason')}</div>
-                  <div className="text-sm text-red-800 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                    {viewRequest.rejection_reason}
-                  </div>
-                </div>
-              )}
-
-              {/* Approver */}
-              {viewRequest.approver_first_name && (
-                <div className="text-xs text-gray-500">
-                  {t('leaves.approvedBy')}: <span className="font-semibold text-gray-700">{viewRequest.approver_first_name} {viewRequest.approver_last_name}</span>
-                </div>
-              )}
-
-              {/* Attachment */}
-              {viewRequest.attachment_url && (
-                <div>
-                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">{t('leaves.attachmentLabel')}</div>
-                  <a href={viewRequest.attachment_url} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-600 hover:text-indigo-800 underline">
-                    {viewRequest.attachment_url}
-                  </a>
-                </div>
-              )}
-            </div>
-
-            {/* Footer with actions */}
-            <div className="border-t border-gray-200 px-6 py-4 flex flex-wrap justify-end gap-2 bg-gray-50 shrink-0">
-              {viewRequest.status === 'pending' && (
-                <>
-                  <button
-                    onClick={() => handleApprove(viewRequest.id, 'rejected')}
-                    className="px-4 py-2 text-sm font-medium text-red-700 bg-white border border-red-300 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                  >
-                    {t('leaves.reject')}
-                  </button>
-                  <button
-                    onClick={() => handleApprove(viewRequest.id, 'approved')}
-                    className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition cursor-pointer border-none"
-                  >
-                    {t('leaves.approve')}
-                  </button>
-                </>
-              )}
-              {isHRAdmin && viewRequest.status !== 'cancelled' && (
-                <button
-                  onClick={() => handleCancel(viewRequest.id)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition cursor-pointer"
-                >
-                  {t('leaves.cancelLeave')}
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowTypeModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
+                  Cancel
                 </button>
-              )}
-              <button
-                onClick={() => setViewRequest(null)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition cursor-pointer"
-              >
-                {t('common.close')}
-              </button>
-            </div>
+                <button type="submit" disabled={savingType}
+                  className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
+                  {savingType ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Type modal */}
-      {showTypeModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowTypeModal(false)}>
-          <div className="bg-white rounded-xl w-full max-w-md shadow-xl flex flex-col max-h-[calc(100vh-2rem)]" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
-              <h3 className="text-base font-semibold text-gray-900">{editType ? t('common.edit') : t('common.add')}</h3>
-              <button onClick={() => setShowTypeModal(false)} className="bg-transparent border-none text-gray-400 hover:text-gray-700 cursor-pointer text-lg leading-none">×</button>
+      {/* ── ALLOCATION EDIT MODAL ──────────────────────────────── */}
+      {showAllocModal && editAlloc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full">
+            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Edit Allocation</h2>
+              <button onClick={() => setShowAllocModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
             </div>
-            <form onSubmit={handleTypeSave} className="flex flex-col flex-1 min-h-0">
-              <div className="p-6 overflow-y-auto  flex-1 min-h-0">
-                <div className="mb-4">
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">{t('common.name')} *</label>
-                  <input required value={typeForm.name} onChange={e => setTypeForm({ ...typeForm, name: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" placeholder={t('leaves.typePlaceholder')} />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">{t('leaves.accrualRate')}</label>
-                    <input type="number" min="0" step="0.5" value={typeForm.accrual_rate} onChange={e => setTypeForm({ ...typeForm, accrual_rate: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">{t('leaves.maxAllowed')}</label>
-                    <input type="number" min="0" value={typeForm.max_allowed} onChange={e => setTypeForm({ ...typeForm, max_allowed: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">{t('leaves.carryOver')}</label>
-                    <input type="number" min="0" value={typeForm.carry_over_limit} onChange={e => setTypeForm({ ...typeForm, carry_over_limit: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide flex items-center gap-2">
-                      <input type="checkbox" checked={typeForm.is_paid} onChange={e => setTypeForm({ ...typeForm, is_paid: e.target.checked })} className="w-4 h-4 accent-indigo-600" />
-                      {t('leaves.isPaid')}
-                    </label>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">{t('common.description')}</label>
-                  <textarea value={typeForm.description} onChange={e => setTypeForm({ ...typeForm, description: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-y min-h-[80px]" placeholder={t('common.description')} />
-                </div>
+            <form onSubmit={handleAllocSave} className="p-6 space-y-4">
+              <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3 mb-2">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">{editAlloc.first_name} {editAlloc.last_name}</p>
+                <p className="text-xs text-gray-500">{editAlloc.leave_type_name}</p>
               </div>
-              <div className="border-t border-gray-200 px-6 py-4 flex flex-wrap justify-end gap-2 bg-gray-50 shrink-0">
-                <button type="button" onClick={() => setShowTypeModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition cursor-pointer">{t('common.cancel')}</button>
-                <button type="submit" className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition cursor-pointer border-none">{editType ? t('common.saveChanges') : t('common.add')}</button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Allocated Days <span className="text-red-500">*</span>
+                </label>
+                <input type="number" min="0" step="0.5" value={allocForm.allocated_days}
+                  onChange={e => setAllocForm({ ...allocForm, allocated_days: e.target.value })} required
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Remarks <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <textarea value={allocForm.remark} onChange={e => setAllocForm({ ...allocForm, remark: e.target.value })} rows={2}
+                  placeholder="e.g. Prorated from mid-year hire"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowAllocModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
+                  Cancel
+                </button>
+                <button type="submit" disabled={savingAlloc}
+                  className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
+                  {savingAlloc ? 'Saving...' : 'Save Changes'}
+                </button>
               </div>
             </form>
           </div>

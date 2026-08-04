@@ -36,6 +36,10 @@ import { fmtRelative, fmtDateShort } from '@/components/project/format'
 import MultiSelectDropdown from '@/components/project/MultiSelectDropdown'
 import ConfirmDialog from '@/components/project/ConfirmDialog'
 import ReactionBar from '@/components/project/ReactionBar'
+import MentionInput from '@/components/MentionInput'
+import { highlightMentions } from '@/components/MentionBadge'
+import type { ActiveMember } from '@/components/MentionInput'
+import api from '@/lib/api'
 import {
   useTaskBoard, useTaskDetail,
   type BoardTask, type BoardColumn, type Priority,
@@ -260,6 +264,16 @@ export default function TaskDetailPage() {
   const [editingComment, setEditingComment] = useState<{ id: string | number; body: string } | null>(null)
   const [editCommentBody, setEditCommentBody] = useState('')
   const [savingComment, setSavingComment] = useState(false)
+
+  // Active project members for @mentions
+  const [activeMembers, setActiveMembers] = useState<ActiveMember[]>([])
+
+  useEffect(() => {
+    if (!projectId) return
+    api.get(`/projects/${projectId}/active-members`)
+      .then((data: any) => setActiveMembers(Array.isArray(data?.members) ? data.members : []))
+      .catch(() => setActiveMembers([]))
+  }, [projectId])
 
   useEffect(() => {
     if (!task) return
@@ -761,7 +775,9 @@ export default function TaskDetailPage() {
                       </span>
                     </div>
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-3">
-                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">{c.body}</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
+                        {highlightMentions(c.body || '', activeMembers)}
+                      </p>
                     </div>
                     {(c.author?.name === currentUserName || isProjectOwner) && (
                       <div className="flex items-center gap-1 mt-1.5 ml-1">
@@ -801,13 +817,13 @@ export default function TaskDetailPage() {
             <div className="flex items-start gap-3 px-1 pt-3 pb-1 border-t border-gray-100 dark:border-gray-800">
               <Avatar name={currentUserName || 'Me'} size={8} />
               <div className="flex-1 min-w-0">
-                <textarea
+                <MentionInput
+                  projectId={projectId}
                   value={commentBody}
-                  onChange={(e) => setCommentBody(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitComment() } }}
-                  placeholder="Write a comment… (Ctrl+Enter to send)"
+                  onChange={setCommentBody}
+                  placeholder="Write a comment… (type @ to mention, Ctrl+Enter to send)"
                   rows={2}
-                  className="w-full resize-none bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors"
+                  disabled={commenting}
                 />
                 <div className="flex justify-end mt-2">
                   <button

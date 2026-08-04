@@ -2,12 +2,14 @@
 import PageLoader from '@/components/PageLoader'
 import ConfirmDialog from '@/components/project/ConfirmDialog'
 import { useEffect, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Briefcase, Calendar, Check, Folder, Gem, Pencil, Rocket, Sparkles, Target, Trash2, User, X as XIcon, Zap } from 'lucide-react'
 import api from '@/lib/api'
-import { validateForm, projectSchema } from '@/lib/schemas'
+import { projectSchema, type ProjectInput } from '@/lib/schemas'
 
 function fmtDate(raw: string | null | undefined): string {
   if (!raw) return ''
@@ -37,7 +39,16 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [editProject, setEditProject] = useState<any>(null)
-  const [form, setForm] = useState({ name: '', description: '' })
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm<ProjectInput>({
+    resolver: zodResolver(projectSchema),
+    mode: 'onBlur',
+  })
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
 
   const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
@@ -52,26 +63,18 @@ export default function ProjectsPage() {
 
   const openCreate = () => {
     setEditProject(null)
-    setForm({ name: '', description: '' })
+    reset({ name: '', description: '' })
     setShowCreate(true)
   }
 
   const openEdit = (p: any) => {
     setEditProject(p)
-    setForm({ name: p.name || '', description: p.description || '' })
+    reset({ name: p.name || '', description: p.description || '' })
     setShowCreate(true)
   }
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const valid = validateForm(projectSchema, form)
-    if (!valid) return
-    // The owner / manager is always derived from the authenticated session on
-    // the server side — we never send owner / managerId from the client.
-    const payload = {
-      name: valid.name,
-      description: valid.description || '',
-    }
+  const onSubmit = async (data: ProjectInput) => {
+    const payload = { name: data.name, description: data.description || '' }
     try {
       if (editProject) {
         await api.put(`/projects/${editProject.id}`, payload)
@@ -194,15 +197,24 @@ export default function ProjectsPage() {
                 <button onClick={() => setShowCreate(false)} data-tooltip-id="app-tooltip" data-tooltip-content={`✕ ${t('common.close')}`} className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg w-8 h-8 flex items-center justify-center cursor-pointer border-none"><XIcon size={20} strokeWidth={2.25} /></button>
               </div>
             </div>
-            <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0">
-              <div className="p-6 bg-white overflow-y-auto  flex-1 min-h-0">
+            <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
+              <div className="p-6 bg-white overflow-y-auto flex-1 min-h-0">
                 <div className="mb-4">
                   <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('projects.projectName')} *</label>
-                  <input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-100" placeholder={t('projects.projectName')} />
+                  <input
+                    {...register('name')}
+                    className={`w-full border-2 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-4 transition ${errors.name ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-200 focus:border-pink-500 focus:ring-pink-100'}`}
+                    placeholder={t('projects.projectName')}
+                  />
+                  {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
                 </div>
                 <div className="mb-4">
                   <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('common.description')}</label>
-                  <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-100 resize-y min-h-[80px]" placeholder={t('common.description')} />
+                  <textarea
+                    {...register('description')}
+                    className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-100 resize-y min-h-[80px]"
+                    placeholder={t('common.description')}
+                  />
                 </div>
               </div>
               <div className="border-t border-gray-100 px-6 py-4 flex flex-wrap justify-end gap-2 bg-gray-50 rounded-b-3xl shrink-0">

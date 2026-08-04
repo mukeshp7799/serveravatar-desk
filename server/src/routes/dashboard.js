@@ -60,11 +60,15 @@ router.get('/', auth, async (req, res, next) => {
       [userId]
     );
 
-    // Leave balances
-    const [leaveBalances] = await pool.query(
-      `SELECT lb.*, lt.name as leave_type_name FROM leave_balances lb
-       JOIN leave_types lt ON lb.leave_type_id = lt.id WHERE lb.user_id = ?`,
-      [userId]
+    // Leave allocations with dynamic used/available
+    const [leaveAllocs] = await pool.query(
+      `SELECT la.leave_type_id, la.allocated_days, lt.name as leave_type_name, lt.is_paid,
+              lt.max_allowed,
+              (SELECT COALESCE(SUM(GREATEST(0, DATEDIFF(lr.end_date, lr.start_date)) + 1), 0)
+               FROM leave_requests lr WHERE lr.user_id = la.user_id AND lr.leave_type_id = la.leave_type_id AND lr.status = 'approved') as used
+       FROM leave_allocations la
+       JOIN leave_types lt ON la.leave_type_id = lt.id
+       WHERE la.user_id = ?`, [userId]
     );
 
     // My projects
@@ -77,11 +81,47 @@ router.get('/', auth, async (req, res, next) => {
       [userId]
     );
 
-    // Announcements
-    const [announcements] = await pool.query(
-      `SELECT a.*, u.first_name, u.last_name FROM announcements a
-       JOIN users u ON a.posted_by = u.id WHERE a.is_active = TRUE ORDER BY a.created_at DESC LIMIT 5`
+    // Announcements (respects audience targeting, shows published only, top 5)
+    const userDept = (await pool.query('SELECT department_id FROM users WHERE id = ?', [userId]))[0][0]?.department_id;
+    const userRole = (await pool.query('SELECT role_id FROM users WHERE id = ?', [userId]))[0][0]?.role_id;
+    let annWhere = "a.status = 'published' AND (a.audience_target = 'everyone'";
+    let annParams = [];
+    if (userDept) { annWhere += " OR (a.audience_target = 'departments' AND JSON_CONTAINS(a.target_ids, ?))"; annParams.push(String(userDept)); }
+    if (userRole) { annWhere += " OR (a.audience_target = 'roles' AND JSON_CONTAINS(a.target_ids, ?))"; annParams.push(String(userRole)); }
+    annWhere += " OR (a.audience_target = 'employees' AND JSON_CONTAINS(a.target_ids, ?))"; annParams.push(String(userId));
+    annWhere += ")";
+    const [announcementsRaw] = await pool.query(
+      `SELECT a.id, a.title, a.content, a.priority, a.status, a.publish_date, a.expiry_date, a.audience_target, a.posted_by, a.created_at, a.is_pinned, u.first_name, u.last_name FROM announcements a JOIN users u ON a.posted_by = u.id WHERE ${annWhere} ORDER BY a.is_pinned DESC, a.created_at DESC LIMIT 5`,
+      annParams
     );
+    // Get reaction counts for these announcements
+    const annIds = announcementsRaw.map(a => a.id);
+    let reactionsMap = {};
+    if (annIds.length > 0) {
+      const [reactionCounts] = await pool.query(
+        'SELECT announcement_id, emoji, COUNT(*) as count FROM announcement_reactions WHERE announcement_id IN (?) GROUP BY announcement_id, emoji',
+        [annIds]
+      );
+      const [totalPerAnn] = await pool.query(
+        'SELECT announcement_id, COUNT(*) as total FROM announcement_reactions WHERE announcement_id IN (?) GROUP BY announcement_id',
+        [annIds]
+      );
+      const totalMap = {};
+      totalPerAnn.forEach(r => { totalMap[r.announcement_id] = r.total; });
+      reactionCounts.forEach(rc => {
+        if (!reactionsMap[rc.announcement_id]) reactionsMap[rc.announcement_id] = { emojis: [], total: 0 };
+        reactionsMap[rc.announcement_id].emojis.push({ emoji: rc.emoji, count: rc.count });
+        reactionsMap[rc.announcement_id].total = totalMap[rc.announcement_id] || 0;
+      });
+    }
+    const announcements = announcementsRaw.map(a => ({
+      id: a.id, title: a.title, content: a.content && a.content.length > 200 ? a.content.substring(0, 200) + '...' : a.content,
+      priority: a.priority, status: a.status, publish_date: a.publish_date, expiry_date: a.expiry_date,
+      audience_target: a.audience_target, posted_by: a.posted_by, created_at: a.created_at,
+      is_pinned: Boolean(a.is_pinned),
+      poster_name: a.first_name + ' ' + a.last_name,
+      reactions: reactionsMap[a.id] || { emojis: [], total: 0 }
+    }));
 
     // HR-specific stats (any user with `hr.view_directory` sees them)
     let hrStats = {};
@@ -99,15 +139,66 @@ router.get('/', auth, async (req, res, next) => {
       };
     }
 
+    // Attendance stats (users with attendance.view_team or attendance.manage_all)
+    let attendanceStats = null;
+    if (perms.includes('attendance.view_team') || perms.includes('attendance.manage_all')) {
+      const today = new Date().toISOString().slice(0, 10);
+      const [allToday] = await pool.query(
+        `SELECT a.status, a.is_late FROM attendance a WHERE a.date = ?`,
+        [today]
+      );
+      attendanceStats = {
+        present_today:    allToday.filter(r => ['clocked_in','working','on_break','completed'].includes(r.status)).length,
+        absent_today:     allToday.filter(r => r.status === 'absent').length,
+        working_now:      allToday.filter(r => r.status === 'working').length,
+        on_break:        allToday.filter(r => r.status === 'on_break').length,
+        completed_today:  allToday.filter(r => r.status === 'completed').length,
+        late_checkins:    allToday.filter(r => r.is_late === 1).length,
+      };
+    }
+
+    // My today's attendance
+    const [myTodayRows] = await pool.query(
+      'SELECT * FROM attendance WHERE user_id = ? AND date = ? LIMIT 1',
+      [userId, new Date().toISOString().slice(0, 10)]
+    );
+    const myToday = myTodayRows.length > 0 ? myTodayRows[0] : null;
+
+    // Break count for today
+    let breakCount = 0;
+    if (myToday) {
+      const [breakRows] = await pool.query(
+        'SELECT COUNT(*) as cnt FROM attendance_breaks WHERE attendance_id = ?',
+        [myToday.id]
+      );
+      breakCount = breakRows[0]?.cnt || 0;
+    }
+
     res.json({
       pendingApprovals,
       myTasks,
       myUpcomingLeave,
       notifications: translateNotifications(notifications, req.lang),
-      leaveBalances,
+      leaveBalances: leaveAllocs,
       myProjects,
       announcements,
-      hrStats
+      hrStats,
+      attendanceStats,
+      myToday: myToday ? {
+        id: myToday.id,
+        status: myToday.status,
+        clock_in_time: myToday.clock_in_time,
+        clock_out_time: myToday.clock_out_time,
+        total_break_minutes: myToday.total_break_minutes,
+        is_late: Boolean(myToday.is_late),
+        late_minutes: myToday.late_minutes || 0,
+        break_count: breakCount,
+        working_hours: (() => {
+          if (!myToday.clock_in_time || !myToday.clock_out_time) return null;
+          const ms = new Date(myToday.clock_out_time) - new Date(myToday.clock_in_time);
+          return Math.max(0, (ms / 60000 - (myToday.total_break_minutes || 0)) / 60);
+        })(),
+      } : null,
     });
   } catch (err) {
     next(err);

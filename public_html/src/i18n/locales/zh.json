@@ -88,7 +88,11 @@
     "announcements": "公告",
     "notifications": "通知",
     "settings": "设置",
-    "emailLogs": "邮件日志"
+    "emailLogs": "邮件日志",
+    "attendance": "Attendance",
+    "attendanceAnalytics": "Attendance Analytics",
+    "calendar": "Calendar",
+    "reports": "Reports"
   },
   "header": {
     "logout": "退出登录",
@@ -120,7 +124,8 @@
       "featureProjects": "项目",
       "featureLeaves": "请假",
       "featureTasks": "任务",
-      "featureDiscussions": "讨论"
+      "featureDiscussions": "讨论",
+      "signin": "登录"
     },
     "register": {
       "title": "创建您的账户",
@@ -148,7 +153,43 @@
       "signIn": "登录",
       "passwordMismatch": "密码不一致",
       "passwordTooShort": "密码至少需要 6 个字符",
-      "registerFailed": "注册失败"
+      "registerFailed": "注册失败",
+      "registering": "正在创建账户...",
+      "heroTitle1": "立即开始",
+      "heroTitle2": "使用 Serveravatar Hub",
+      "heroSubtitle": "创建您的账户，开始管理人力资源、项目、休假等 — 所有内容尽在一处。",
+      "feature1": "快速设置",
+      "feature2": "强大仪表板",
+      "feature3": "永久免费"
+    },
+    "forgot": {
+      "title": "忘记密码？",
+      "subtitle": "输入您的邮箱，我们会发送重置链接",
+      "email": "邮箱地址",
+      "emailPlaceholder": "you@company.com",
+      "submit": "发送重置链接",
+      "submitting": "发送中...",
+      "backToLogin": "返回登录",
+      "successMessage": "如果该邮箱存在账户，我们已发送密码重置链接。请检查您的收件箱。",
+      "errorMessage": "发送重置邮件失败。请重试。",
+      "successTitle": "邮件已发送！"
+    },
+    "reset": {
+      "title": "重置密码",
+      "subtitle": "请在下方输入您的新密码",
+      "newPassword": "新密码",
+      "confirmPassword": "确认密码",
+      "passwordPlaceholder": "至少6个字符",
+      "confirmPlaceholder": "再次输入新密码",
+      "submit": "重置密码",
+      "submitting": "重置中...",
+      "backToLogin": "返回登录",
+      "successTitle": "密码已重置！",
+      "successMessage": "您的密码已重置。现在可以登录了。",
+      "errorInvalid": "此重置链接无效或已过期。",
+      "errorGeneric": "重置密码失败。请重试。",
+      "passwordMismatch": "两次输入的密码不一致",
+      "passwordTooShort": "密码必须至少6个字符"
     }
   },
   "dashboard": {
@@ -417,7 +458,10 @@
     "published": "公告已发布!",
     "updated": "公告已更新!",
     "deleteConfirm": "确定要删除此公告吗?",
-    "emptyHint": "发布一条让所有人了解最新动态!"
+    "emptyHint": "发布一条让所有人了解最新动态!",
+    "restoreConfirm": "将此公告恢复到已发布状态？将再次通知受众。",
+    "unpinned": "公告已取消置顶",
+    "restored": "公告已恢复到已发布"
   },
   "notifications": {
     "title": "通知",

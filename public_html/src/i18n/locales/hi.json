@@ -88,7 +88,11 @@
     "announcements": "घोषणाएं",
     "notifications": "सूचनाएं",
     "settings": "सेटिंग्स",
-    "emailLogs": "ईमेल लॉग"
+    "emailLogs": "ईमेल लॉग",
+    "attendance": "Attendance",
+    "attendanceAnalytics": "Attendance Analytics",
+    "calendar": "Calendar",
+    "reports": "Reports"
   },
   "header": {
     "logout": "लॉग आउट",
@@ -120,7 +124,8 @@
       "featureProjects": "प्रोजेक्ट्स",
       "featureLeaves": "छुट्टियाँ",
       "featureTasks": "कार्य",
-      "featureDiscussions": "चर्चाएं"
+      "featureDiscussions": "चर्चाएं",
+      "signin": "साइन इन करें"
     },
     "register": {
       "title": "अपना खाता बनाएं",
@@ -148,7 +153,43 @@
       "signIn": "साइन इन",
       "passwordMismatch": "पासवर्ड मेल नहीं खाते",
       "passwordTooShort": "पासवर्ड कम से कम 6 अक्षर का होना चाहिए",
-      "registerFailed": "पंजीकरण विफल"
+      "registerFailed": "पंजीकरण विफल",
+      "registering": "खाता बना रहे हैं...",
+      "heroTitle1": "शुरू करें",
+      "heroTitle2": "सरावतार हब के साथ",
+      "heroSubtitle": "अपना खाता बनाएं और एचआर, प्रोजेक्ट्स, छुट्टियों और बहुत कुछ का प्रबंधन शुरू करें — सब कुछ एक ही जगह।",
+      "feature1": "त्वरित सेटअप",
+      "feature2": "शक्तिशाली डैशबोर्ड",
+      "feature3": "हमेशा के लिए फ्री"
+    },
+    "forgot": {
+      "title": "पासवर्ड भूल गए?",
+      "subtitle": "अपना ईमेल दर्ज करें और हम आपको रीसेट लिंक भेजेंगे",
+      "email": "ईमेल पता",
+      "emailPlaceholder": "you@company.com",
+      "submit": "रीसेट लिंक भेजें",
+      "submitting": "भेज रहे हैं...",
+      "backToLogin": "साइन इन पर वापस जाएं",
+      "successMessage": "यदि उस ईमेल से कोई खाता मौजूद है, तो हमने पासवर्ड रीसेट लिंक भेज दिया है। अपना इनबॉक्स देखें।",
+      "errorMessage": "रीसेट ईमेल भेजने में विफल। कृपया पुनः प्रयास करें।",
+      "successTitle": "ईमेल भेज दिया!"
+    },
+    "reset": {
+      "title": "अपना पासवर्ड रीसेट करें",
+      "subtitle": "नीचे अपना नया पासवर्ड दर्ज करें",
+      "newPassword": "नया पासवर्ड",
+      "confirmPassword": "पासवर्ड की पुष्टि करें",
+      "passwordPlaceholder": "कम से कम 6 अक्षर",
+      "confirmPlaceholder": "नया पासवर्ड दोहराएं",
+      "submit": "रीसेट पासवर्ड",
+      "submitting": "रीसेट हो रहा है...",
+      "backToLogin": "साइन इन पर वापस जाएं",
+      "successTitle": "पासवर्ड रीसेट!",
+      "successMessage": "आपका पासवर्ड रीसेट हो गया। अब आप साइन इन कर सकते हैं।",
+      "errorInvalid": "यह रीसेट लिंक अमान्य है या समाप्त हो गई है।",
+      "errorGeneric": "पासवर्ड रीसेट करने में विफल। कृपया पुनः प्रयास करें।",
+      "passwordMismatch": "पासवर्ड मेल नहीं खाते",
+      "passwordTooShort": "पासवर्ड कम से कम 6 अक्षर का होना चाहिए"
     }
   },
   "dashboard": {
@@ -417,6 +458,9 @@
     "published": "घोषणा पोस्ट की गई!",
     "updated": "घोषणा अपडेट की गई!",
     "deleteConfirm": "क्या आप वाकई इस घोषणा को हटाना चाहते हैं?",
+    "restoreConfirm": "इस घोषणा को प्रकाशित में पुनर्स्थापित करें? यह दर्शकों को फिर से सूचित करेगा।",
+    "unpinned": "घोषणा अनपिन की गई",
+    "restored": "घोषणा प्रकाशित में पुनर्स्थापित",
     "emptyHint": "सबको अपडेट रखने के लिए एक पोस्ट करें!"
   },
   "notifications": {

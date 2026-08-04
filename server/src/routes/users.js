@@ -1,5 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { t } = require('../i18n');
@@ -85,12 +88,14 @@ router.post('/', auth, async (req, res, next) => {
       [email, hash, firstName, lastName, roleId || 1, departmentId || null, designation || null, managerId || null, hireDate || null, employeeId || null, status || 'active']
     );
 
-    // Initialize leave balances
-    const [leaveTypes] = await pool.query('SELECT id, max_allowed FROM leave_types');
+    // Initialize leave allocations for new employee
+    const [leaveTypes] = await pool.query(
+      'SELECT id, default_days FROM leave_types WHERE status = \'active\' AND default_days > 0'
+    );
     for (const lt of leaveTypes) {
       await pool.query(
-        'INSERT INTO leave_balances (user_id, leave_type_id, current_balance) VALUES (?, ?, ?)',
-        [result.insertId, lt.id, lt.max_allowed]
+        'INSERT INTO leave_allocations (user_id, leave_type_id, allocated_days, description) VALUES (?, ?, ?, ?)',
+        [result.insertId, lt.id, lt.default_days, 'Auto-allocated on registration']
       );
     }
 
@@ -126,6 +131,38 @@ router.put('/:id', auth, async (req, res, next) => {
     params.push(req.params.id);
     await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
     res.json({ message: t(req.lang, 'errors.userUpdated') });
+  } catch (err) { next(err); }
+});
+
+// POST /api/users/avatar — upload avatar for current user
+const UPLOAD_DIR = path.join(__dirname, '../../../uploads/avatars');
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      cb(null, UPLOAD_DIR);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname) || '.jpg';
+      const filename = `avatar_${req.user.id}_${Date.now()}${ext}`;
+      cb(null, filename);
+    },
+  }),
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    cb(null, allowed.includes(file.mimetype));
+  },
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+router.post('/avatar', auth, upload.single('avatar'), async (req, res, next) => {
+  try {
+    if (req.file) {
+      const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+      await pool.query('UPDATE users SET avatar_url = ? WHERE id = ?', [avatarUrl, req.user.id]);
+      return res.json({ avatar_url: avatarUrl });
+    }
+    return res.status(400).json({ error: 'No avatar file provided' });
   } catch (err) { next(err); }
 });
 

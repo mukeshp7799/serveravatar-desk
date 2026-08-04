@@ -41,6 +41,39 @@ router.get('/', auth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/projects/:id/active-members — returns only active members for @mention autocomplete
+// Excludes: pending invitations, removed members, archived/inactive users.
+router.get('/:id/active-members', auth, requireProjectMember('id'), async (req, res, next) => {
+  try {
+    const projectId = Number(req.params.id);
+    if (!projectId) return res.status(400).json({ error: t(req.lang, 'errors.invalidRequest') });
+
+    const [rows] = await pool.query(
+      `SELECT u.id, u.first_name, u.last_name, u.email, u.avatar_url
+       FROM project_members pm
+       JOIN users u ON u.id = pm.user_id
+       WHERE pm.project_id = ? AND pm.status = 'active' AND u.status = 'active'
+       UNION
+       SELECT u.id, u.first_name, u.last_name, u.email, u.avatar_url
+       FROM projects p
+       JOIN users u ON u.id = p.manager_id
+       WHERE p.id = ? AND u.status = 'active'
+      `,
+      [projectId, projectId]
+    );
+
+    // Deduplicate in case the owner is also in project_members.
+    const seen = new Set();
+    const members = rows.filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+
+    res.json({ members });
+  } catch (err) { next(err); }
+});
+
 // GET /api/projects/:id
 router.get('/:id', auth, requireProjectMember('id'), async (req, res, next) => {
   try {
