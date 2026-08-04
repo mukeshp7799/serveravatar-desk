@@ -439,7 +439,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
 
         <main className="flex-1 min-w-0 overflow-hidden h-[calc(100vh-4rem)]">
           <Scroll containerClassName="h-full" className="h-full" watch={pathname}>
-            <div className="p-4 sm:p-6 w-full">{children}</div>
+            <div className="p-4 sm:p-6 w-full animate-fade-in-up">{children}</div>
           </Scroll>
         </main>
       </div>
