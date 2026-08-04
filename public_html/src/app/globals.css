@@ -414,6 +414,13 @@ input, select, textarea, button {
 .animate-fade-in-up { animation: fadeInUp 0.5s ease-out; }
 .animate-scale-in { animation: scaleIn 0.3s ease-out; }
 
+/* Zoom-in page entrance: fade + scale + slight slide up — visible enough to notice */
+@keyframes pageZoomIn {
+  0%   { opacity: 0; transform: translateY(12px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0)   scale(1); }
+}
+.animate-page-zoom-in { animation: pageZoomIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
 /* Smooth hover lift
    NOTE: deliberately uses box-shadow + border-color instead of `transform`
    because the message card and any other element with `hover-lift` lives
