@@ -101,6 +101,8 @@ export interface MentionInputProps {
   disabled?: boolean
   /** Max character count. No limit when omitted. */
   maxLength?: number
+  /** Called when Ctrl+Enter (or Cmd+Enter) is pressed in the textarea. */
+  onCtrlEnter?: () => void
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -116,6 +118,7 @@ export default function MentionInput({
   rows = 3,
   disabled = false,
   maxLength,
+  onCtrlEnter,
 }: MentionInputProps) {
   const uid = useId()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -220,6 +223,12 @@ export default function MentionInput({
   /* ── Keyboard navigation in dropdown ──────────────────────── */
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // Ctrl+Enter / Cmd+Enter → send (outside dropdown)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault()
+        if (onCtrlEnter) onCtrlEnter()
+        return
+      }
       if (!open) return
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -239,7 +248,7 @@ export default function MentionInput({
         setTriggerAt(null)
       }
     },
-    [open, filtered, selectedIndex]
+    [open, filtered, selectedIndex, onCtrlEnter]
   )
 
   /* ── Insert a selected mention into the textarea ───────────── */

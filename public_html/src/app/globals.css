@@ -1041,3 +1041,27 @@ html { scroll-behavior: smooth; }
   overscroll-behavior: contain;
 }
 
+/* ── Chat message list — smooth custom scrollbar ── */
+.chat-scrollbar {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.chat-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.chat-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 9999px;
+}
+.chat-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+}
+.dark .chat-scrollbar {
+  scrollbar-color: #374151 transparent;
+}
+.dark .chat-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #374151;
+}
+

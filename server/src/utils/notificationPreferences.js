@@ -10,6 +10,10 @@
  *     → company_announcements
  *   new_message (project discussions)
  *     → project_task_notifications
+ *   task_assigned (task board)
+ *     → project_task_notifications
+ *   task_commented (task board comments)
+ *     → project_task_notifications
  *   (mention type is always sent — direct @mention is opt-in by nature)
  */
 
@@ -32,6 +36,8 @@ async function isNotificationAllowed(userId, notificationType) {
     leave_cancelled:     'leave_updates',
     announcement_published: 'company_announcements',
     new_message:          'project_task_notifications',
+    task_assigned:       'project_task_notifications',
+    task_commented:      'project_task_notifications',
     attendance_reminder:  'attendance_reminders',
   };
 

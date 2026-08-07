@@ -47,6 +47,7 @@ const { isProjectMember, requireProjectMember } = require("../middleware/project
 const { t } = require("../i18n");
 const { recordActivity } = require("../utils/activity");
 const { processAndNotifyMentions, SOURCE_TYPES } = require("../utils/mentions");
+const { isNotificationAllowed } = require("../utils/notificationPreferences");
 
 const router = express.Router();
 
@@ -493,6 +494,26 @@ router.post(
         }
       }
 
+      // Send notifications to newly assigned users (respecting their preferences)
+      const senderName = `${req.user.first_name} ${req.user.last_name}`;
+      const taskTitle = title.trim();
+      const link = `/projects/${projectId}/task-board/${r.insertId}`;
+      for (const uid of ids) {
+        if (uid !== req.user.id && await isNotificationAllowed(uid, "task_assigned")) {
+          await pool.query(
+            `INSERT INTO notifications (user_id, type, title, message, link)
+             VALUES (?, ?, ?, ?, ?)`,
+            [
+              uid,
+              "task_assigned",
+              "Task assigned to you",
+              `${senderName} assigned you to \"${taskTitle}\"`,
+              link,
+            ]
+          );
+        }
+      }
+
       // Hydrate and return
       const [[created]] = await pool.query(
         `SELECT id, project_id, column_id, title, description_html, priority,
@@ -591,6 +612,14 @@ router.put("/tasks/:taskId", auth, async (req, res, next) => {
     // Assignees — full replace
     if (Array.isArray(assignee_ids)) {
       const ids = assignee_ids.map((x) => Number(x)).filter(Boolean);
+
+      // Fetch previous assignees before the update so we can diff
+      const [prevRows] = await pool.query(
+        "SELECT user_id FROM tb_assignees WHERE task_id = ?",
+        [taskId]
+      );
+      const previousAssigneeIds = new Set(prevRows.map((r) => r.user_id));
+
       const conn = await pool.getConnection();
       try {
         await conn.beginTransaction();
@@ -618,6 +647,29 @@ router.put("/tasks/:taskId", auth, async (req, res, next) => {
         conn.release();
       }
       await recordTaskActivity(taskId, req.user.id, "assignees_updated", { assignee_ids: ids });
+
+      // Send notifications to newly added assignees (respecting their preferences)
+      const senderName = `${req.user.first_name} ${req.user.last_name}`;
+      const taskTitle = existing.title;
+      const link = `/projects/${existing.project_id}/task-board/${taskId}`;
+      const newAssigneeIds = ids.filter(
+        (uid) => uid !== req.user.id && !previousAssigneeIds.has(uid)
+      );
+      for (const uid of newAssigneeIds) {
+        if (await isNotificationAllowed(uid, "task_assigned")) {
+          await pool.query(
+            `INSERT INTO notifications (user_id, type, title, message, link)
+             VALUES (?, ?, ?, ?, ?)`,
+            [
+              uid,
+              "task_assigned",
+              "Task assigned to you",
+              `${senderName} assigned you to "${taskTitle}"`,
+              link,
+            ]
+          );
+        }
+      }
     }
 
     // Return the hydrated task so the UI can patch its local state without a refetch
@@ -1246,6 +1298,30 @@ router.post("/tasks/:taskId/comments", auth, async (req, res, next) => {
       targetLabel: null,
       meta: { comment_id: commentId },
     });
+
+    // Notify other project members about the new comment (respecting preferences)
+    const [members] = await pool.query(
+      "SELECT user_id FROM project_members WHERE project_id = ? AND user_id != ?",
+      [projectId, req.user.id]
+    );
+    const senderName = `${req.user.first_name} ${req.user.last_name}`;
+    const contentSnippet = clean.substring(0, 100);
+    const link = `/projects/${projectId}/task-board/${taskId}`;
+    for (const m of members) {
+      if (await isNotificationAllowed(m.user_id, "task_commented")) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, type, title, message, link)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            m.user_id,
+            "task_commented",
+            "New comment on a task",
+            `${senderName}: ${contentSnippet}`,
+            link,
+          ]
+        );
+      }
+    }
 
     res.status(201).json({ comment });
   } catch (err) { next(err); }

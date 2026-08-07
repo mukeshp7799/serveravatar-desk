@@ -91,7 +91,7 @@ const normaliseBody = (raw) => {
  *      reactions:   [{ emoji, count, mine, users: string[] }]
  *   }]
  */
-const hydrateMessages = async (rows, currentUserId) => {
+const hydrateMessages = async (rows, currentUserId, currentUserEmail) => {
   if (!rows || rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
 
@@ -120,7 +120,7 @@ const hydrateMessages = async (rows, currentUserId) => {
       updated_at: r.updated_at,
       edited_at: r.edited_at,
       deleted_at: r.deleted_at,
-      is_mine: r.author_id === currentUserId,
+      is_mine: r.email === currentUserEmail,
       attachments: [],
       reactions: [],
     };
@@ -228,7 +228,7 @@ router.get("/projects/:projectId/chat", auth, requireProjectMember("projectId"),
     }
     sql += " ORDER BY pcm.created_at ASC LIMIT 200";
     const [rows] = await pool.query(sql, params);
-    const messages = await hydrateMessages(rows, req.user.id);
+    const messages = await hydrateMessages(rows, req.user.id, req.user.email);
     res.json({ messages });
   } catch (e) {
     console.error("[chat GET]", e);
@@ -289,7 +289,7 @@ router.post("/projects/:projectId/chat", auth, requireProjectMember("projectId")
        WHERE pcm.id = ?`,
       [messageId]
     );
-    const messages = await hydrateMessages(rows, req.user.id);
+    const messages = await hydrateMessages(rows, req.user.id, req.user.email);
     await recordActivity(pool, {
       projectId,
       actorId: req.user.id,
@@ -341,7 +341,7 @@ router.put("/projects/:projectId/chat/:messageId", auth, requireProjectMember("p
        WHERE pcm.id = ?`,
       [messageId]
     );
-    const messages = await hydrateMessages(updatedRows, req.user.id);
+    const messages = await hydrateMessages(updatedRows, req.user.id, req.user.email);
     await recordActivity(pool, {
       projectId,
       actorId: req.user.id,
