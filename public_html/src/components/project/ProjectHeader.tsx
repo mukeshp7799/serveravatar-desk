@@ -101,7 +101,7 @@ export default function ProjectHeader({ project, actions, members = [], memberCo
   }, [menuOpen])
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-visible">
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-visible card-hover">
       {/* Cover band — gradient + soft blurred blobs */}
       <div className="relative h-16 sm:h-20 bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-500 overflow-hidden">
         <div className="absolute inset-0 opacity-30">

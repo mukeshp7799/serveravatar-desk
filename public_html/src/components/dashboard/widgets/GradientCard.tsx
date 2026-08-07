@@ -12,7 +12,7 @@ interface GradientCardProps {
 
 export default function GradientCard({ gradient, icon: Icon, label, title, subtitle, delay = 0 }: GradientCardProps) {
   return (
-    <div className={`bg-gradient-to-r ${gradient} rounded-2xl p-5 text-white shadow-lg animate-fade-in-up`} style={{ animationDelay: `${delay}ms` }}>
+    <div className={`bg-gradient-to-r ${gradient} rounded-2xl p-5 text-white shadow-lg animate-fade-in-up card-hover`} style={{ animationDelay: `${delay}ms` }}>
       <div className="flex items-center gap-2 mb-1">
         {Icon && <Icon size={18} />}
         <span className="text-xs font-semibold uppercase tracking-wide opacity-80">{label}</span>

@@ -9,9 +9,10 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Briefcase, Calendar, Check, Folder, Gem, Pencil, Rocket, Sparkles, Target, Trash2, User, X as XIcon, Zap } from 'lucide-react'
 import api from '@/lib/api'
+import { useDateSettings } from '@/contexts/CompanySettingsContext'
 import { projectSchema, type ProjectInput } from '@/lib/schemas'
 
-function fmtDate(raw: string | null | undefined): string {
+function fmtDateDefault(raw: string | null | undefined): string {
   if (!raw) return ''
   const s = String(raw).trim()
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
@@ -35,6 +36,19 @@ export default function ProjectsPage() {
     cancelled: { labelKey: 'projects.cancelled', bg: 'bg-red-50 text-red-700 border border-red-200',    text: 'text-rose-700',    dot: 'bg-red-500' },
   }
 
+
+  const { date_format } = useDateSettings();
+  const fmtDate = (raw: string | null | undefined): string => {
+    if (!raw) return '';
+    const parts = String(raw).split('T')[0].split('-');
+    const [y, m, d] = parts.map(Number);
+    if (parts.length < 3 || isNaN(y)) return String(raw);
+    const pattern = date_format || 'YYYY-MM-DD';
+    return pattern
+      .replace('YYYY', String(y)).replace('YY', String(y).slice(-2))
+      .replace('MM', String(m).padStart(2,'0')).replace('M', String(m))
+      .replace('DD', String(d).padStart(2,'0')).replace('D', String(d));
+  };
   const [projects, setProjects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)

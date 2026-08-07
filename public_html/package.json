@@ -52,6 +52,7 @@
     "react-hot-toast": "^2.6.0",
     "react-i18next": "^17.0.8",
     "react-perfect-scrollbar": "^1.5.8",
+    "react-timezone-select": "^3.3.3",
     "react-tooltip": "^6.0.8",
     "recharts": "^3.10.1",
     "typescript": "^6.0.3",

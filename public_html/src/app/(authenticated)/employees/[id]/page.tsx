@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useTranslation } from 'react-i18next'
 import Link from 'next/link'
 import api from '@/lib/api'
+import { useDateSettings } from '@/contexts/CompanySettingsContext'
 import PageLoader from '@/components/PageLoader'
 import toast from 'react-hot-toast'
 
@@ -76,6 +77,20 @@ export default function EmployeeProfilePage() {
   const router = useRouter()
   const id = params.id as string
 
+
+  const { timezone, date_format } = useDateSettings();
+  const fmtDateCtx = (raw: string | null | undefined): string => {
+    if (!raw) return '';
+    const parts = String(raw).split('T')[0].split('-');
+    const [y, m, d] = parts.map(Number);
+    if (parts.length < 3 || isNaN(y)) return String(raw);
+    const pattern = date_format || 'YYYY-MM-DD';
+    return pattern
+      .replace('YYYY', String(y)).replace('YY', String(y).slice(-2))
+      .replace('MM', String(m).padStart(2,'0')).replace('M', String(m))
+      .replace('DD', String(d).padStart(2,'0')).replace('D', String(d));
+  };
+  const fmtDateShort = fmtDateCtx;
   const [employee, setEmployee] = useState<any>(null)
   const [projects, setProjects] = useState<any[]>([])
   const [tasks, setTasks] = useState<any[]>([])
@@ -210,21 +225,20 @@ export default function EmployeeProfilePage() {
         <ArrowLeft /> Back to Employees
       </Link>
 
-      {/* Profile Header Card */}
+      {/* Profile Header Card — white, compact */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
-        <div className="h-28 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500" />
-        <div className="px-6 pb-5">
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 -mt-12">
+        <div className="px-6 py-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             {/* Avatar */}
             <div className="relative shrink-0">
               {employee.avatar_url
-                ? <img src={employee.avatar_url} alt={initials} className="w-20 h-20 rounded-xl border-4 border-white dark:border-gray-800 object-cover shadow-md" />
-                : <div className="w-20 h-20 rounded-xl border-4 border-white dark:border-gray-800 bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center text-white text-xl font-bold shadow-md">{initials}</div>
+                ? <img src={employee.avatar_url} alt={initials} className="w-16 h-16 rounded-xl border-2 border-gray-200 dark:border-gray-700 object-cover shadow-sm" />
+                : <div className="w-16 h-16 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center text-white text-lg font-bold shadow-sm">{initials}</div>
               }
               {canEdit && (
-                <label className="absolute -bottom-1 -right-1 w-7 h-7 bg-indigo-600 hover:bg-indigo-700 rounded-full flex items-center justify-center text-white shadow cursor-pointer transition">
+                <label className="absolute -bottom-1 -right-1 w-6 h-6 bg-indigo-600 hover:bg-indigo-700 rounded-full flex items-center justify-center text-white shadow cursor-pointer transition">
                   {uploadingAvatar
-                    ? <span className="text-xs animate-spin">⟳</span>
+                    ? <span className="text-[10px] animate-spin">⟳</span>
                     : <Upload />
                   }
                   <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
@@ -232,32 +246,36 @@ export default function EmployeeProfilePage() {
               )}
             </div>
 
-            {/* Name & meta */}
+            {/* Name, email & details */}
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white truncate">
                   {employee.first_name} {employee.last_name}
                 </h1>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${statusColors[employee.status] || statusColors.inactive}`}>
                   {employee.status === 'active' ? 'Active' : 'Inactive'}
                 </span>
               </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {employee.designation || employee.designation_name || '—'}
-                {employee.department_name ? ` · ${employee.department_name}` : ''}
-              </p>
-              <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-gray-400 dark:text-gray-500">
-                {employee.employee_id && <span className="font-mono">ID: {employee.employee_id}</span>}
-                {employee.role_name && <span>Role: {employee.role_name}</span>}
-                {employee.employment_type && <span>{empTypeLabels[employee.employment_type] || employee.employment_type}</span>}
-                {employee.hire_date && <span className="flex items-center gap-1"><Calendar /> Joined {fmtDateShort(employee.hire_date)}</span>}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 mt-1 text-sm text-gray-500 dark:text-gray-400">
+                <span className="flex items-center gap-1"><Mail /> {employee.email}</span>
+                {employee.phone && <span className="flex items-center gap-1"><Phone /> {employee.phone}</span>}
+                {employee.department_name && <span className="flex items-center gap-1"><Building /> {employee.department_name}</span>}
               </div>
+            </div>
+
+            {/* Right meta */}
+            <div className="flex flex-wrap gap-3 text-xs text-gray-400 dark:text-gray-500 shrink-0">
+              {employee.employee_id && <span className="font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-lg">ID: {employee.employee_id}</span>}
+              {employee.designation || employee.designation_name ? (
+                <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-lg">{employee.designation || employee.designation_name}</span>
+              ) : null}
+              {employee.hire_date && <span className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-lg"><Calendar /> {fmtDateShort(employee.hire_date)}</span>}
             </div>
 
             {canEdit && (
               <button onClick={() => setEditing(!editing)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow transition no-underline cursor-pointer border-0">
-                <Edit2 /> {editing ? 'Cancel Editing' : 'Edit Profile'}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow transition no-underline cursor-pointer border-0 shrink-0">
+                <Edit2 /> {editing ? 'Cancel' : 'Edit'}
               </button>
             )}
           </div>
@@ -420,9 +438,12 @@ export default function EmployeeProfilePage() {
       {activeTab === 'projects' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.length === 0 ? (
-            <div className="col-span-full text-center py-14 text-gray-500 dark:text-gray-400">
-              <Folder />
-              <p className="mt-2 text-sm font-medium">No projects assigned</p>
+            <div className="col-span-full">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 py-14 px-6 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center mx-auto mb-4 text-gray-400"><Folder /></div>
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">No Projects Yet</h3>
+                <p className="text-xs text-gray-400 dark:text-gray-500">This employee has no projects assigned.</p>
+              </div>
             </div>
           ) : projects.map((p: any) => (
             <Link key={p.id} href={`/projects/${p.id}`}
@@ -446,9 +467,10 @@ export default function EmployeeProfilePage() {
       {activeTab === 'tasks' && (
         <div className="space-y-3">
           {tasks.length === 0 ? (
-            <div className="text-center py-14 text-gray-500 dark:text-gray-400">
-              <CheckSquare />
-              <p className="mt-2 text-sm font-medium">No tasks assigned</p>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 py-14 px-6 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center mx-auto mb-4 text-gray-400"><CheckSquare /></div>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">No Tasks Assigned</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500">This employee has no tasks assigned yet.</p>
             </div>
           ) : tasks.map((task: any) => (
             <div key={task.id}
@@ -497,7 +519,11 @@ export default function EmployeeProfilePage() {
               Direct Reports {directReports.length > 0 && <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded text-xs font-bold ml-1">{directReports.length}</span>}
             </h2>
             {directReports.length === 0 ? (
-              <div className="text-center py-10 text-gray-400 dark:text-gray-500 text-sm">No direct reports</div>
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 py-14 px-6 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center mx-auto mb-4 text-gray-400"><Users /></div>
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">No Direct Reports</h3>
+                <p className="text-xs text-gray-400 dark:text-gray-500">This employee has no direct reports.</p>
+              </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {directReports.map((dr: any) => {
@@ -528,9 +554,10 @@ export default function EmployeeProfilePage() {
       {activeTab === 'activity' && (
         <div className="space-y-3">
           {activity.length === 0 ? (
-            <div className="text-center py-14 text-gray-500 dark:text-gray-400">
-              <ActivityIcon />
-              <p className="mt-2 text-sm font-medium">No activity recorded</p>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 py-14 px-6 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center mx-auto mb-4 text-gray-400"><ActivityIcon /></div>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">No Activity Yet</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500">No activity has been recorded for this employee.</p>
             </div>
           ) : (
             <div className="relative">

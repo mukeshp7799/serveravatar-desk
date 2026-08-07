@@ -32,7 +32,10 @@ const projectInvitationRoutes = require("./routes/projectInvitations");
 const attendanceRoutes = require("./routes/attendance");
 const calendarRoutes = require("./routes/calendar");
 const reportsRoutes = require("./routes/reports");
+const notificationPrefRoutes = require("./routes/notification-preferences");
+const companySettingsRoutes = require("./routes/company-settings");
 const { langMiddleware } = require("./i18n");
+const { startAttendanceReminderCron } = require("./jobs/attendanceReminder");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -73,6 +76,8 @@ app.use("/api/invitations", invitationRoutes);   // /api/invitations/:token + /a
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/notification-preferences", notificationPrefRoutes);
+app.use("/api/company-settings", companySettingsRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -91,4 +96,5 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`Serveravatar Hub API server running on port ${PORT}`);
+  startAttendanceReminderCron();
 });

@@ -1,6 +1,21 @@
 const express = require('express');
 const pool = require('../config/database');
 const { auth, requirePermission } = require('../middleware/auth');
+const {
+  getSetting,
+  getSettings,
+  isWorkday,
+  isHoliday,
+  computeLateStatus,
+  computeWorkingHours,
+  computeLiveWorkingHours,
+  countWorkingDays,
+  countWeekends,
+  overlapDays,
+  computeAttendanceMetrics,
+  getStatusLabel,
+} = require('../services/attendanceCalc');
+const { getCompanySetting, nowInTimezone, todayInTimezone, toTimezone, formatDate, formatTime } = require('../utils/timezone');
 
 const router = express.Router();
 
@@ -8,30 +23,31 @@ const router = express.Router();
 
 /** Get or create today's attendance row for a user */
 async function getOrCreateToday(userId, connection = pool) {
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const tz = await getCompanySetting('general', 'timezone', 'UTC');
+  const today = todayInTimezone(tz);
   const [rows] = await connection.query(
     'SELECT * FROM attendance WHERE user_id = ? AND date = ? LIMIT 1',
     [userId, today]
   );
   if (rows.length > 0) return rows[0];
 
-  // Auto-create absent record for today
-  const [result] = await connection.query(
-    'INSERT INTO attendance (user_id, date, status) VALUES (?, ?, ?)',
-    [userId, today, 'absent']
-  );
-  return { id: result.insertId, user_id: userId, date: today, status: 'absent',
-    clock_in_time: null, clock_out_time: null, total_break_minutes: 0,
-    is_late: 0, late_minutes: 0, remarks: null };
+  // Check auto_mark_absent setting
+  const autoMarkAbsent = await getSetting(pool, 'attendance', 'auto_mark_absent')
+  if (autoMarkAbsent !== false) {
+    // Auto-create absent record for today
+    const [result] = await connection.query(
+      'INSERT INTO attendance (user_id, date, status) VALUES (?, ?, ?)',
+      [userId, today, 'absent']
+    );
+    return { id: result.insertId, user_id: userId, date: today, status: 'absent',
+      clock_in_time: null, clock_out_time: null, total_break_minutes: 0,
+      is_late: 0, late_minutes: 0, remarks: null };
+  }
+
+  return null
 }
 
-/** Compute working hours dynamically */
-function computeWorkingHours(clockIn, clockOut, totalBreakMinutes) {
-  if (!clockIn || !clockOut) return null;
-  const ms = new Date(clockOut) - new Date(clockIn);
-  const totalMinutes = Math.floor(ms / 60000) - (totalBreakMinutes || 0);
-  return Math.max(0, totalMinutes / 60);
-}
+
 
 /** Normalize datetime to nearest minute for comparison */
 function sameMinute(a, b) {
@@ -54,6 +70,11 @@ router.post('/clock-in', async (req, res, next) => {
 
     const today = await getOrCreateToday(userId);
 
+    if (!today) {
+      // auto_mark_absent is false and no attendance record exists
+      return res.status(400).json({ error: 'Attendance record not found. Please contact admin.' });
+    }
+
     if (today.status !== 'absent' && today.status !== 'clocked_in') {
       return res.status(400).json({ error: 'Already clocked in today' });
     }
@@ -61,19 +82,19 @@ router.post('/clock-in', async (req, res, next) => {
       return res.status(400).json({ error: 'Already clocked in today' });
     }
 
-    const now = new Date();
-    // Late check: after 9:30 AM local
-    const hour = now.getHours();
-    const isLate = hour > 9 || (hour === 9 && now.getMinutes() > 30);
-    const [existingLateMin] = await pool.query(
-      'SELECT late_minutes FROM attendance WHERE user_id = ? AND date = ?',
-      [userId, today.date]
-    );
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+    const now = nowInTimezone(tz);
+    // Late check: use office_start_time + late_checkin_grace_minutes from company settings (shared service)
+    const [officeStartTime, graceMinutes] = await Promise.all([
+      getSetting(pool, 'working_schedule', 'office_start_time'),
+      getSetting(pool, 'working_schedule', 'late_checkin_grace_minutes'),
+    ])
+    const { isLate, lateMinutes } = computeLateStatus(now, officeStartTime || '09:30', Number(graceMinutes) || 30)
 
     await pool.query(
       `UPDATE attendance SET status = 'clocked_in', clock_in_time = ?,
        is_late = ?, late_minutes = ? WHERE id = ?`,
-      [now, isLate ? 1 : 0, isLate ? (hour - 9) * 60 + (now.getMinutes() > 30 ? now.getMinutes() - 30 : 0) : 0, today.id]
+      [now, isLate ? 1 : 0, lateMinutes, today.id]
     );
 
     // Reload
@@ -97,6 +118,7 @@ router.post('/start-break', async (req, res, next) => {
     }
 
     const today = await getOrCreateToday(userId);
+    if (!today) return res.status(400).json({ error: 'No attendance record. Please clock in first.' });
 
     if (!['clocked_in', 'working'].includes(today.status)) {
       return res.status(400).json({ error: 'You must be clocked in or working to start a break' });
@@ -111,7 +133,8 @@ router.post('/start-break', async (req, res, next) => {
       return res.status(400).json({ error: 'You are already on a break' });
     }
 
-    const now = new Date();
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+    const now = nowInTimezone(tz);
     await pool.query(
       'INSERT INTO attendance_breaks (attendance_id, start_time) VALUES (?, ?)',
       [today.id, now]
@@ -136,12 +159,14 @@ router.post('/end-break', async (req, res, next) => {
     }
 
     const today = await getOrCreateToday(userId);
+    if (!today) return res.status(400).json({ error: 'No attendance record.' });
 
     if (today.status !== 'on_break') {
       return res.status(400).json({ error: 'You are not on a break' });
     }
 
-    const now = new Date();
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+    const now = nowInTimezone(tz);
     const [openBreaks] = await pool.query(
       'SELECT * FROM attendance_breaks WHERE attendance_id = ? AND end_time IS NULL LIMIT 1',
       [today.id]
@@ -177,6 +202,7 @@ router.post('/clock-out', async (req, res, next) => {
     }
 
     const today = await getOrCreateToday(userId);
+    if (!today) return res.status(400).json({ error: 'No attendance record. Please clock in first.' });
 
     if (!['clocked_in', 'working'].includes(today.status)) {
       return res.status(400).json({ error: 'You must be clocked in or working to clock out' });
@@ -188,7 +214,8 @@ router.post('/clock-out', async (req, res, next) => {
       return res.status(400).json({ error: 'Already clocked out today' });
     }
 
-    const now = new Date();
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+    const now = nowInTimezone(tz);
 
     // Close any open breaks first
     const [openBreaks] = await pool.query(
@@ -230,6 +257,9 @@ router.get('/today', async (req, res, next) => {
     }
 
     const today = await getOrCreateToday(targetId);
+    if (!today) {
+      return res.json({ attendance: null, breaks: [], working_hours: null });
+    }
     const [breaks] = await pool.query(
       'SELECT * FROM attendance_breaks WHERE attendance_id = ? ORDER BY start_time ASC',
       [today.id]
@@ -237,10 +267,18 @@ router.get('/today', async (req, res, next) => {
 
     const wh = computeWorkingHours(today.clock_in_time, today.clock_out_time, today.total_break_minutes);
 
+    // Live hours: compute only when clocked-in but NOT yet clocked-out
+    const activeBreak = breaks.find(b => !b.end_time);
+    const liveWH = (!today.clock_out_time && today.clock_in_time)
+      ? computeLiveWorkingHours(today.clock_in_time, today.total_break_minutes, activeBreak?.start_time || null)
+      : null;
+
     res.json({
       attendance: {
         ...formatAttendance(today),
         working_hours: wh,
+        live_working_hours: liveWH,          // real-time hours while on shift
+        active_break_start: activeBreak?.start_time || null,  // null if no open break
         total_break_minutes: today.total_break_minutes,
         breaks: breaks.map(b => ({
           id: b.id,
@@ -292,6 +330,201 @@ router.get('/history', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── GET /api/attendance/my-history ────────────────────────────────────────
+// Employee self-service: date range filter + summary + day-wise timeline.
+// Uses the same calculation logic as the HR analytics/timeline.
+router.get('/my-history', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(5, parseInt(req.query.limit) || 14));
+    const offset = (page - 1) * limit;
+
+    const { date_from, date_to } = req.query;
+    if (!date_from || !date_to) {
+      return res.status(400).json({ error: 'date_from and date_to are required' });
+    }
+
+    // Get employee info
+    const [[emp]] = await pool.query(
+      `SELECT u.id, u.first_name, u.last_name, u.email, u.hire_date, d.name as department_name
+       FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE u.id = ?`,
+      [userId]
+    );
+    if (!emp) return res.status(404).json({ error: 'Employee not found' });
+
+    // Holidays in range
+    const [holidays] = await pool.query(
+      'SELECT date, name, holiday_type FROM company_holidays WHERE date BETWEEN ? AND ?',
+      [date_from, date_to]
+    );
+    const holidayMap = {};
+    const holidaySet = new Set();
+    for (const h of holidays) {
+      const ds = String(toTimezone(new Date(h.date), tz).toISOString().slice(0, 10));
+      holidayMap[ds] = h;
+      holidaySet.add(ds);
+    }
+
+    // Working days from company settings
+    const { working_schedule: wsTimeline } = await getSettings(pool, 'working_schedule');
+    const workingDays = Array.isArray(wsTimeline?.working_days)
+      ? wsTimeline.working_days
+      : ['mon', 'tue', 'wed', 'thu', 'fri'];
+
+    // Approved leaves for this employee in range
+    const [leaves] = await pool.query(
+      `SELECT start_date, end_date, reason, leave_type_id FROM leave_requests
+       WHERE user_id = ? AND status = 'approved' AND start_date <= ? AND end_date >= ?`,
+      [userId, date_to, date_from]
+    );
+
+    // Attendance records in range
+    const [attRecords] = await pool.query(
+      `SELECT a.*,
+        (SELECT COALESCE(SUM(duration_minutes),0) FROM attendance_breaks WHERE attendance_id = a.id) as break_minutes
+       FROM attendance a
+       WHERE a.user_id = ? AND a.date BETWEEN ? AND ?
+       ORDER BY a.date ASC`,
+      [userId, date_from, date_to]
+    );
+    const attMap = {};
+    for (const r of attRecords) {
+      const ds = String(toTimezone(new Date(r.date), tz).toISOString().slice(0, 10));
+      attMap[ds] = r;
+    }
+
+    // Breaks map
+    const attIds = attRecords.map(r => r.id);
+    const breaksMap = {};
+    if (attIds.length > 0) {
+      const [breaks] = await pool.query(
+        `SELECT * FROM attendance_breaks WHERE attendance_id IN (${attIds.map(() => '?').join(',')}) ORDER BY start_time ASC`,
+        attIds
+      );
+      for (const b of breaks) {
+        if (!breaksMap[b.attendance_id]) breaksMap[b.attendance_id] = [];
+        breaksMap[b.attendance_id].push(b);
+      }
+    }
+
+    // Build FULL day-wise timeline (all days in range, for summary calculation)
+    const presentStatuses = ['clocked_in', 'working', 'on_break', 'completed'];
+    const fullTimeline = [];
+    const cur = new Date(date_from);
+    while (cur <= new Date(date_to)) {
+      const ds = toTimezone(cur, tz).toISOString().slice(0, 10);
+      const dow = cur.getDay();
+      const isWeekend = !isWorkday(ds, workingDays);
+      const holiday = holidayMap[ds];
+      const att = attMap[ds];
+
+      let leaveInfo = null;
+      for (const lv of leaves) {
+        const ls = String(lv.start_date).slice(0, 10);
+        const le = String(lv.end_date).slice(0, 10);
+        if (ds >= ls && ds <= le) { leaveInfo = lv; break; }
+      }
+
+      let status, statusLabel;
+      if (holiday) {
+        status = 'holiday'; statusLabel = 'Holiday';
+      } else if (isWeekend) {
+        status = 'weekend'; statusLabel = 'Weekend';
+      } else if (leaveInfo) {
+        status = 'leave'; statusLabel = 'Leave';
+      } else if (att && presentStatuses.includes(att.status)) {
+        status = 'present'; statusLabel = 'Present';
+      } else {
+        status = 'absent'; statusLabel = 'Absent';
+      }
+
+      const today = todayInTimezone(tz);
+      const wh = att?.clock_out_time
+        ? computeWorkingHours(att.clock_in_time, att.clock_out_time, att.total_break_minutes || 0)
+        : (att?.clock_in_time && ds === today
+          ? computeLiveWorkingHours(att.clock_in_time, att.total_break_minutes || 0)
+          : null);
+
+      fullTimeline.push({
+        date: ds,
+        day_of_week: dow,
+        status,
+        status_label: statusLabel,
+        clock_in_time: att?.clock_in_time || null,
+        clock_out_time: att?.clock_out_time || null,
+        total_break_minutes: att?.total_break_minutes || 0,
+        working_hours: wh,
+        is_live: Boolean(att?.clock_in_time && !att?.clock_out_time && ds === today),
+        is_late: att ? Boolean(att.is_late) : false,
+        late_minutes: att?.late_minutes || 0,
+        remarks: att?.remarks || null,
+        holiday_name: holiday?.name || null,
+        leave_reason: leaveInfo?.reason || null,
+        breaks: att ? (breaksMap[att.id] || []) : [],
+        attendance_id: att?.id || null,
+        raw_status: att?.status || null,
+      });
+
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    // Compute summary from full timeline
+    const totalDays = fullTimeline.length;
+    const weekends = fullTimeline.filter(d => d.status === 'weekend').length;
+    const companyHolidays = fullTimeline.filter(d => d.status === 'holiday').length;
+    const presentDays = fullTimeline.filter(d => d.status === 'present').length;
+    const approvedLeaveDays = fullTimeline.filter(d => d.status === 'leave').length;
+    const absentDays = fullTimeline.filter(d => d.status === 'absent').length;
+    const lateCheckins = fullTimeline.filter(d => d.is_late).length;
+    const totalBreakMinutes = fullTimeline.reduce((s, d) => s + (d.total_break_minutes || 0), 0);
+
+    // Working days = days that are NOT weekend AND NOT holiday
+    const workingDaysCount = totalDays - weekends - companyHolidays;
+
+    // Total and average working hours (only from completed/present days with hours)
+    const daysWithHours = fullTimeline.filter(d => d.working_hours != null);
+    const totalWorkingHours = daysWithHours.reduce((s, d) => s + d.working_hours, 0);
+    const averageWorkingHours = daysWithHours.length > 0 ? totalWorkingHours / daysWithHours.length : 0;
+
+    // Paginate timeline
+    const paginatedTimeline = fullTimeline.slice(offset, offset + limit);
+
+    res.json({
+      employee: {
+        id: emp.id,
+        first_name: emp.first_name,
+        last_name: emp.last_name,
+        email: emp.email,
+        hire_date: emp.hire_date,
+        department_name: emp.department_name,
+      },
+      summary: {
+        total_days: totalDays,
+        working_days: workingDaysCount,
+        weekends,
+        company_holidays: companyHolidays,
+        present_days: presentDays,
+        approved_leave_days: approvedLeaveDays,
+        absent_days: absentDays,
+        late_checkins: lateCheckins,
+        total_break_minutes: totalBreakMinutes,
+        total_working_hours: Math.round(totalWorkingHours * 100) / 100,
+        average_working_hours: Math.round(averageWorkingHours * 100) / 100,
+      },
+      timeline: paginatedTimeline,
+      pagination: {
+        total: totalDays,
+        page,
+        limit,
+        pages: Math.ceil(totalDays / limit),
+      },
+    });
+  } catch (err) { next(err); }
+});
+
 // ─── GET /api/attendance/breaks/:attendanceId ─────────────────────────────────
 router.get('/breaks/:attendanceId', async (req, res, next) => {
   try {
@@ -319,13 +552,14 @@ router.get('/breaks/:attendanceId', async (req, res, next) => {
 // Dashboard cards: present_today, absent_today, working_now, on_break, completed_today, late_checkins
 router.get('/stats', async (req, res, next) => {
   try {
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const perms = req.user.permissions || [];
     if (!perms.includes('attendance.view_team') && !perms.includes('attendance.manage_all')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-    const now = new Date();
+    const today = todayInTimezone(tz);
+    const now = nowInTimezone(tz);
     const currentHour = now.getHours();
     const currentMin = now.getMinutes();
 
@@ -356,19 +590,30 @@ router.get('/stats', async (req, res, next) => {
 // List all employees' today attendance (managers + HR)
 router.get('/team', async (req, res, next) => {
   try {
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const perms = req.user.permissions || [];
     if (!perms.includes('attendance.view_team') && !perms.includes('attendance.manage_all')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(5, parseInt(req.query.limit) || 10));
+    const offset = (page - 1) * limit;
+    const today = todayInTimezone(tz);
+
     const [rows] = await pool.query(
       `SELECT a.*, u.first_name, u.last_name, u.email, d.name as department_name
        FROM attendance a
        JOIN users u ON a.user_id = u.id
        LEFT JOIN departments d ON u.department_id = d.id
        WHERE a.date = ?
-       ORDER BY a.status, u.first_name, u.last_name`,
+       ORDER BY a.status, u.first_name, u.last_name
+       LIMIT ? OFFSET ?`,
+      [today, limit, offset]
+    );
+
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) as total FROM attendance a JOIN users u ON a.user_id = u.id WHERE a.date = ?`,
       [today]
     );
 
@@ -378,6 +623,7 @@ router.get('/team', async (req, res, next) => {
         working_hours: computeWorkingHours(r.clock_in_time, r.clock_out_time, r.total_break_minutes),
       })),
       date: today,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (err) { next(err); }
 });
@@ -453,6 +699,10 @@ router.put('/:id', async (req, res, next) => {
     const updates = [];
     const vals = [];
 
+    // Strip 'Z' suffix from UTC ISO strings (frontend sends via fromDateTimeLocalToUTC)
+    // and store as naive MySQL datetime.
+    const stripUTC = v => v ? (v.endsWith('Z') ? v.slice(0, -1) : v) : null;
+
     const validStatuses = ['absent', 'clocked_in', 'working', 'on_break', 'completed'];
     if (status && validStatuses.includes(status)) {
       updates.push('status = ?');
@@ -460,11 +710,11 @@ router.put('/:id', async (req, res, next) => {
     }
     if (clock_in_time !== undefined) {
       updates.push('clock_in_time = ?');
-      vals.push(clock_in_time || null);
+      vals.push(stripUTC(clock_in_time) || null);
     }
     if (clock_out_time !== undefined) {
       updates.push('clock_out_time = ?');
-      vals.push(clock_out_time || null);
+      vals.push(stripUTC(clock_out_time) || null);
     }
     if (remarks !== undefined) {
       updates.push('remarks = ?');
@@ -508,44 +758,19 @@ function formatAttendance(r) {
 // ANALYTICS ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Count weekends (Sat=6, Sun=0) in [from, to] that are on/after hireDate */
-function countWeekendsInRange(from, to, hireDate) {
-  let count = 0;
-  const start = new Date(Math.max(new Date(from), new Date(hireDate || from)));
-  const end = new Date(to);
-  const cur = new Date(start);
-  while (cur <= end) {
-    const dow = cur.getDay();
-    if (dow === 0 || dow === 6) count++;
-    cur.setDate(cur.getDate() + 1);
-  }
-  return count;
-}
-
-/** Count overlapping days between [leaveStart, leaveEnd] and [queryFrom, queryTo] */
-function overlapDays(leaveStart, leaveEnd, queryFrom, queryTo) {
-  const ls = new Date(leaveStart); const le = new Date(leaveEnd);
-  const qf = new Date(queryFrom);  const qt = new Date(queryTo);
-  const start = ls > qf ? ls : qf;
-  const end   = le < qt ? le : qt;
-  if (start > end) return 0;
-  return Math.round((end - start) / 86400000) + 1;
-}
-
 /** Recompute working hours and store in DB row */
+// Note: working_hours is a MySQL STORED GENERATED column — auto-computed from clock_in_time,
+// clock_out_time, and total_break_minutes. No explicit UPDATE needed.
 async function recalcWorkingHours(attId, connection) {
-  const [[row]] = await connection.query(
-    'SELECT clock_in_time, clock_out_time, total_break_minutes FROM attendance WHERE id = ?', [attId]
-  );
-  if (!row || !row.clock_in_time || !row.clock_out_time) return;
-  const wh = computeWorkingHours(row.clock_in_time, row.clock_out_time, row.total_break_minutes || 0);
-  await connection.query('UPDATE attendance SET working_hours = ? WHERE id = ?', [wh, attId]);
+  // MySQL recomputes working_hours automatically whenever clock_in/out or total_break_minutes changes.
+  // This function is kept for any future side-effects if needed.
 }
 
 // ─── GET /api/attendance/analytics/summary ───────────────────────────────────
 // Returns per-employee aggregated attendance summary for a date range
 router.get('/analytics/summary', async (req, res, next) => {
   try {
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const perms = req.user.permissions || [];
     if (!perms.includes('attendance.manage_all') && !perms.includes('attendance.view_team')) {
       return res.status(403).json({ error: 'Permission denied' });
@@ -562,10 +787,30 @@ router.get('/analytics/summary', async (req, res, next) => {
     if (department_id) { userWhere.push('u.department_id = ?'); userParams.push(department_id); }
     if (user_id) { userWhere.push('u.id = ?'); userParams.push(user_id); }
 
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(5, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
+    const { search } = req.query;
+
+    // Add search filter if provided
+    if (search) {
+      userWhere.push('(u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?)');
+      const s = `%${search}%`;
+      userParams.push(s, s, s);
+    }
+
     const [employees] = await pool.query(
       `SELECT u.id, u.first_name, u.last_name, u.email, u.hire_date, u.department_id, d.name as department_name
        FROM users u LEFT JOIN departments d ON u.department_id = d.id
-       WHERE ${userWhere.join(' AND ')} ORDER BY d.name, u.first_name`,
+       WHERE ${userWhere.join(' AND ')} ORDER BY d.name, u.first_name
+       LIMIT ? OFFSET ?`,
+      [...userParams, limit, offset]
+    );
+
+    // Get total count for pagination
+    const countWhere = userWhere.filter(w => w !== 'u.status = ?' || userParams[0] === 'active');
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) as total FROM users u WHERE ${userWhere.join(' AND ')}`,
       userParams
     );
 
@@ -573,7 +818,13 @@ router.get('/analytics/summary', async (req, res, next) => {
     const [holidays] = await pool.query(
       'SELECT date FROM company_holidays WHERE date BETWEEN ? AND ?', [date_from, date_to]
     );
-    const holidaySet = new Set(holidays.map(h => String(h.date).slice(0, 10)));
+    const holidaySet = new Set(holidays.map(h => String(toTimezone(new Date(h.date), tz).toISOString().slice(0, 10))));
+
+    // Fetch working_days from company settings (shared service — respects configured workweek)
+    const { working_schedule: wsSettings } = await getSettings(pool, 'working_schedule');
+    const workingDays = Array.isArray(wsSettings?.working_days)
+      ? wsSettings.working_days
+      : ['mon', 'tue', 'wed', 'thu', 'fri'];
 
     // Fetch approved leaves overlapping the range
     const [leaves] = await pool.query(
@@ -600,27 +851,52 @@ router.get('/analytics/summary', async (req, res, next) => {
     const attByUser = {};
     for (const r of attRecords) {
       if (!attByUser[r.user_id]) attByUser[r.user_id] = {};
-      attByUser[r.user_id][String(r.date).slice(0, 10)] = r;
+      attByUser[r.user_id][String(toTimezone(new Date(r.date), tz).toISOString().slice(0, 10))] = r;
+    }
+
+    // Fetch today's active (open) breaks for live hours computation
+    // Only needed when date range includes today
+    const today = todayInTimezone(tz);
+    const rangeIncludesToday = today >= date_from && today <= date_to;
+    const activeBreaksMap = {}; // userId → start_time of open break
+    if (rangeIncludesToday) {
+      const [openBreaks] = await pool.query(
+        `SELECT ab.attendance_id, ab.start_time, a.user_id
+         FROM attendance_breaks ab
+         JOIN attendance a ON ab.attendance_id = a.id
+         WHERE a.date = ? AND ab.end_time IS NULL`,
+        [today]
+      );
+      for (const b of openBreaks) {
+        activeBreaksMap[b.user_id] = b.start_time;
+      }
     }
 
     // Compute per-employee summary
+    const presentStatuses = ['clocked_in', 'working', 'on_break', 'completed'];
     const summaries = employees.map(emp => {
       const totalDays = Math.round((new Date(date_to) - new Date(date_from)) / 86400000) + 1;
-      const weekends  = countWeekendsInRange(date_from, date_to, emp.hire_date);
-      const compHol   = holidaySet.size; // same for all employees
-      const workingDays = Math.max(0, totalDays - weekends - compHol);
+      const weekends  = countWeekends(date_from, date_to);
+      const compHol   = holidaySet.size;
+      // Use shared service: respects configured working_days + hire_date
+      const empWorkingDays = countWorkingDays(date_from, date_to, emp.hire_date, workingDays, holidaySet);
 
       const empAtt = attByUser[emp.id] || {};
-      const presentStatuses = ['clocked_in', 'working', 'on_break', 'completed'];
       let presentDays = 0, lateCheckins = 0, totalWH = 0, totalBreak = 0;
-      for (const [, dayRec] of Object.entries(empAtt)) {
+      for (const [ds, dayRec] of Object.entries(empAtt)) {
         if (presentStatuses.includes(dayRec.status)) presentDays++;
         if (dayRec.is_late) lateCheckins++;
         if (dayRec.clock_in_time && dayRec.clock_out_time) {
-          const wh = computeWorkingHours(dayRec.clock_in_time, dayRec.clock_out_time, dayRec.total_break_minutes || 0);
+          // Completed day — use stored/computed hours
+          const wh = computeWorkingHours(dayRec.clock_in_time, dayRec.clock_out_time, Number(dayRec.total_break_minutes) || 0);
           if (wh != null) totalWH += wh;
+        } else if (dayRec.clock_in_time && !dayRec.clock_out_time && ds === today) {
+          // Today (incomplete) — compute live hours from clock-in to now, subtract open break
+          const activeBreakStart = activeBreaksMap[emp.id] || null;
+          const liveWH = computeLiveWorkingHours(dayRec.clock_in_time, Number(dayRec.total_break_minutes) || 0, activeBreakStart);
+          if (liveWH != null) totalWH += liveWH;
         }
-        totalBreak += dayRec.break_minutes || 0;
+        totalBreak += Number(dayRec.break_minutes) || 0;
       }
 
       // Approved leave overlapping days
@@ -631,7 +907,10 @@ router.get('/analytics/summary', async (req, res, next) => {
         }
       }
 
-      const absentDays = Math.max(0, workingDays - presentDays - approvedLeaveDays);
+      // non_working_days = total days not counted as working days
+      // (total calendar days minus working days; holidays are already excluded from working_days)
+      const nonWorkingDays = totalDays - empWorkingDays;
+      const absentDays = Math.max(0, empWorkingDays - presentDays - approvedLeaveDays);
       const avgWH = presentDays > 0 ? totalWH / presentDays : 0;
 
       return {
@@ -642,8 +921,8 @@ router.get('/analytics/summary', async (req, res, next) => {
         department_name: emp.department_name,
         hire_date: emp.hire_date,
         total_days: totalDays,
-        working_days: workingDays,
-        weekends,
+        working_days: empWorkingDays,
+        weekends: nonWorkingDays,
         company_holidays: compHol,
         present_days: presentDays,
         approved_leave_days: approvedLeaveDays,
@@ -659,7 +938,7 @@ router.get('/analytics/summary', async (req, res, next) => {
     const trendMap = {};
     const cur = new Date(date_from);
     while (cur <= new Date(date_to)) {
-      const ds = cur.toISOString().slice(0, 10);
+      const ds = toTimezone(cur, tz).toISOString().slice(0, 10);
       trendMap[ds] = { date: ds, present: 0, absent: 0, holiday: holidaySet.has(ds) ? 1 : 0 };
       cur.setDate(cur.getDate() + 1);
     }
@@ -713,6 +992,7 @@ router.get('/analytics/summary', async (req, res, next) => {
         department_wise: deptWise,
         late_trend: lateTrend,
       },
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (err) { next(err); }
 });
@@ -721,6 +1001,7 @@ router.get('/analytics/summary', async (req, res, next) => {
 // Returns day-wise attendance timeline for ONE employee over a date range
 router.get('/analytics/timeline', async (req, res, next) => {
   try {
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const perms = req.user.permissions || [];
     if (!perms.includes('attendance.manage_all') && !perms.includes('attendance.view_team')) {
       return res.status(403).json({ error: 'Permission denied' });
@@ -744,7 +1025,18 @@ router.get('/analytics/timeline', async (req, res, next) => {
       [date_from, date_to]
     );
     const holidayMap = {};
-    for (const h of holidays) holidayMap[String(h.date).slice(0, 10)] = h;
+    const holidaySet = new Set();
+    for (const h of holidays) {
+      const ds = String(toTimezone(new Date(h.date), tz).toISOString().slice(0, 10));
+      holidayMap[ds] = h;
+      holidaySet.add(ds);
+    }
+
+    // Working days from company settings (shared service)
+    const { working_schedule: wsTimeline } = await getSettings(pool, 'working_schedule');
+    const workingDays = Array.isArray(wsTimeline?.working_days)
+      ? wsTimeline.working_days
+      : ['mon', 'tue', 'wed', 'thu', 'fri'];
 
     // Approved leaves for this employee
     const [leaves] = await pool.query(
@@ -763,7 +1055,10 @@ router.get('/analytics/timeline', async (req, res, next) => {
       [user_id, date_from, date_to]
     );
     const attMap = {};
-    for (const r of attRecords) attMap[String(r.date).slice(0, 10)] = r;
+    for (const r of attRecords) {
+      const ds = String(toTimezone(new Date(r.date), tz).toISOString().slice(0, 10));
+      attMap[ds] = r;
+    }
 
     // Breaks map
     const attIds = attRecords.map(r => r.id);
@@ -783,9 +1078,9 @@ router.get('/analytics/timeline', async (req, res, next) => {
     const timeline = [];
     const cur = new Date(date_from);
     while (cur <= new Date(date_to)) {
-      const ds = cur.toISOString().slice(0, 10);
+      const ds = toTimezone(cur, tz).toISOString().slice(0, 10);
       const dow = cur.getDay(); // 0=Sun, 6=Sat
-      const isWeekend = dow === 0 || dow === 6;
+      const isWeekend = !isWorkday(ds, workingDays); // not a configured workday
       const holiday = holidayMap[ds];
       const att = attMap[ds];
 
@@ -813,7 +1108,13 @@ router.get('/analytics/timeline', async (req, res, next) => {
         status = 'absent'; statusLabel = 'Absent';
       }
 
-      const wh = att ? computeWorkingHours(att.clock_in_time, att.clock_out_time, att.total_break_minutes || 0) : null;
+      const today = todayInTimezone(tz);
+      // Completed day — stored hours; today (incomplete) — live hours
+      const wh = att?.clock_out_time
+        ? computeWorkingHours(att.clock_in_time, att.clock_out_time, att.total_break_minutes || 0)
+        : (att?.clock_in_time && ds === today
+          ? computeLiveWorkingHours(att.clock_in_time, att.total_break_minutes || 0)
+          : null);
 
       timeline.push({
         date: ds,
@@ -824,6 +1125,7 @@ router.get('/analytics/timeline', async (req, res, next) => {
         clock_out_time: att?.clock_out_time || null,
         total_break_minutes: att?.total_break_minutes || 0,
         working_hours: wh,
+        is_live: Boolean(att?.clock_in_time && !att?.clock_out_time && ds === today),
         is_late: att ? Boolean(att.is_late) : false,
         late_minutes: att?.late_minutes || 0,
         remarks: att?.remarks || null,
@@ -855,6 +1157,9 @@ router.post('/:id/breaks', async (req, res, next) => {
     const { start_time, end_time } = req.body;
     if (!start_time) return res.status(400).json({ error: 'start_time is required' });
 
+    // Normalize ISO datetime strings to MySQL DATETIME format (YYYY-MM-DD HH:MM:SS)
+    const toMySQLDate = v => v ? String(v).replace('T', ' ').replace('Z', '').slice(0, 19) : null;
+
     let duration = 0;
     if (end_time) {
       duration = Math.floor((new Date(end_time) - new Date(start_time)) / 60000);
@@ -862,7 +1167,7 @@ router.post('/:id/breaks', async (req, res, next) => {
 
     const [result] = await pool.query(
       'INSERT INTO attendance_breaks (attendance_id, start_time, end_time, duration_minutes) VALUES (?, ?, ?, ?)',
-      [attId, start_time, end_time || null, Math.max(0, duration)]
+      [attId, toMySQLDate(start_time), toMySQLDate(end_time), Math.max(0, duration)]
     );
 
     // Update total_break_minutes on attendance
@@ -891,10 +1196,11 @@ router.put('/:id/breaks/:breakId', async (req, res, next) => {
     if (!br) return res.status(404).json({ error: 'Break record not found' });
 
     const { start_time, end_time } = req.body;
+    const toMySQLDate = v => v ? String(v).replace('T', ' ').replace('Z', '').slice(0, 19) : null;
     const updates = [];
     const vals = [];
-    if (start_time !== undefined) { updates.push('start_time = ?'); vals.push(start_time); }
-    if (end_time !== undefined)   { updates.push('end_time = ?');   vals.push(end_time); }
+    if (start_time !== undefined) { updates.push('start_time = ?'); vals.push(toMySQLDate(start_time)); }
+    if (end_time !== undefined)   { updates.push('end_time = ?');   vals.push(toMySQLDate(end_time)); }
 
     if (end_time !== undefined && start_time !== undefined) {
       const dur = Math.floor((new Date(end_time) - new Date(start_time)) / 60000);
@@ -968,6 +1274,10 @@ router.put('/:id', async (req, res, next) => {
     const updates = [];
     const vals = [];
 
+    // Strip 'Z' suffix from UTC ISO strings (frontend sends via fromDateTimeLocalToUTC)
+    // and store as naive MySQL datetime.
+    const stripUTC = v => v ? (v.endsWith('Z') ? v.slice(0, -1) : v) : null;
+
     const validStatuses = ['absent', 'clocked_in', 'working', 'on_break', 'completed'];
     if (status && validStatuses.includes(status)) {
       updates.push('status = ?');
@@ -975,11 +1285,11 @@ router.put('/:id', async (req, res, next) => {
     }
     if (clock_in_time !== undefined) {
       updates.push('clock_in_time = ?');
-      vals.push(clock_in_time || null);
+      vals.push(stripUTC(clock_in_time) || null);
     }
     if (clock_out_time !== undefined) {
       updates.push('clock_out_time = ?');
-      vals.push(clock_out_time || null);
+      vals.push(stripUTC(clock_out_time) || null);
     }
     if (remarks !== undefined) {
       updates.push('remarks = ?');
@@ -996,6 +1306,19 @@ router.put('/:id', async (req, res, next) => {
     // Recalculate working hours if clock times changed
     if (clock_in_time !== undefined || clock_out_time !== undefined) {
       await recalcWorkingHours(attId, pool);
+    }
+
+    // Recalculate late status if clock_in_time changed
+    if (clock_in_time !== undefined) {
+      const [[row]] = await pool.query('SELECT clock_in_time FROM attendance WHERE id = ?', [attId]);
+      if (row && row.clock_in_time) {
+        const [officeStartTime, graceMinutes] = await Promise.all([
+          getSetting(pool, 'working_schedule', 'office_start_time'),
+          getSetting(pool, 'working_schedule', 'late_checkin_grace_minutes'),
+        ]);
+        const { isLate, lateMinutes } = computeLateStatus(row.clock_in_time, officeStartTime || '09:30', Number(graceMinutes) || 30);
+        await pool.query('UPDATE attendance SET is_late = ?, late_minutes = ? WHERE id = ?', [isLate ? 1 : 0, lateMinutes, attId]);
+      }
     }
 
     const [[updated]] = await pool.query('SELECT * FROM attendance WHERE id = ?', [attId]);

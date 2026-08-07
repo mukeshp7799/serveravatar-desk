@@ -1,4 +1,5 @@
 const express = require('express');
+const { getCompanySetting, nowInTimezone, todayInTimezone, formatDate, formatTime } = require('../utils/timezone');
 const router = express.Router();
 const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
@@ -152,11 +153,12 @@ router.delete('/events/:id', auth, canManageEvents, async (req, res, next) => {
 // GET /api/calendar/view - Full calendar view (month view)
 router.get('/view', auth, async (req, res, next) => {
   try {
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const { year, month } = req.query;
-    const y = parseInt(year) || new Date().getFullYear();
-    const m = parseInt(month) || new Date().getMonth() + 1;
+    const y = parseInt(year) || nowInTimezone(tz).getFullYear();
+    const m = parseInt(month) || nowInTimezone(tz).getMonth() + 1;
     const startOfMonth = `${y}-${String(m).padStart(2,'0')}-01`;
-    const endOfMonth = new Date(y, m, 0).toISOString().slice(0, 10);
+    const endOfMonth = formatDate(new Date(y, m, 0), 'YYYY-MM-DD', tz);
 
     const [holidays] = await pool.query(
       'SELECT id, name, date, holiday_type, description FROM company_holidays WHERE date BETWEEN ? AND ? ORDER BY date',
@@ -203,9 +205,10 @@ router.get('/view', auth, async (req, res, next) => {
 // GET /api/calendar/dashboard - Dashboard widget data
 router.get('/dashboard', auth, async (req, res, next) => {
   try {
-    const today = new Date();
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+    const today = nowInTimezone(tz);
     const y = today.getFullYear(), m = today.getMonth() + 1;
-    const todayStr = today.toISOString().slice(0, 10);
+    const todayStr = todayInTimezone(tz);
     const thirtyDaysLater = new Date(today.getTime() + 30 * 86400000).toISOString().slice(0, 10);
 
     const [todaysHoliday] = await pool.query(
@@ -266,8 +269,9 @@ router.get('/dashboard', auth, async (req, res, next) => {
 // GET /api/calendar/all - Admin: all holidays + events for a year
 router.get('/all', auth, async (req, res, next) => {
   try {
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const { year } = req.query;
-    const y = parseInt(year) || new Date().getFullYear();
+    const y = parseInt(year) || nowInTimezone(tz).getFullYear();
     const [holidays] = await pool.query('SELECT * FROM company_holidays WHERE YEAR(date) = ? ORDER BY date', [y]);
     const [events] = await pool.query('SELECT * FROM company_events WHERE YEAR(start_date) = ? ORDER BY start_date', [y]);
     res.json({ holidays, events });

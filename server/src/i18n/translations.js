@@ -134,11 +134,13 @@ const translations = {
       invalidResetToken: 'Invalid or expired reset token',
       resetTokenExpired: 'Reset token has expired — please request a new one',
       passwordResetSuccess: 'Password has been reset successfully — you can now sign in',
+      preferencesUpdated: 'Preferences updated',
     },
     success: {
       leaveRequestApproved: 'Leave request approved',
       leaveRequestRejected: 'Leave request rejected',
       leaveRequestCancelled: 'Leave request cancelled',
+      companySettingsUpdated: 'Company settings updated successfully',
     },
     // Notifications: titles/messages stored in DB as i18n keys, translated on read.
     // Pattern: titleKey + params (params can include projectName, contentSnippet, etc.)

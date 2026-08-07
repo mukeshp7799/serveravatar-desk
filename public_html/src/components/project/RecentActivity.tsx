@@ -59,7 +59,7 @@ export default function RecentActivity({ projectId, initialPerPage = 10 }: Recen
   const isInitialLoading = loading && items.length === 0
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden card-hover">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-gray-800">
         <div>

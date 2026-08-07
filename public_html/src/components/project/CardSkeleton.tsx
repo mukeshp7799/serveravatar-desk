@@ -4,7 +4,7 @@
  */
 export default function CardSkeleton() {
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm p-5">
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm p-5 card-hover">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="w-11 h-11 rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
         <div className="h-5 w-12 rounded-full bg-gray-100 dark:bg-gray-800 animate-pulse" />

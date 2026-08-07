@@ -4,6 +4,7 @@ const { auth } = require('../middleware/auth');
 const { requireProjectMember, isProjectMember } = require('../middleware/projectMember');
 const { t } = require('../i18n');
 const { processAndNotifyMentions, SOURCE_TYPES } = require('../utils/mentions');
+const { isNotificationAllowed } = require('../utils/notificationPreferences');
 
 const router = express.Router();
 
@@ -195,19 +196,21 @@ router.post('/:id/messages', auth, async (req, res, next) => {
     );
     const contentSnippet = content.substring(0, 100);
     for (const m of members) {
-      await pool.query(
-        `INSERT INTO notifications (user_id, type, title_key, params, title, message, link)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          m.user_id,
-          'new_message',
-          'notifications.newDiscussionMessage',
-          JSON.stringify({ senderName, contentSnippet }),
-          `New message in a discussion`,
-          `${senderName}: ${contentSnippet}`,
-          `/discussions?id=${req.params.id}`,
-        ]
-      );
+      if (await isNotificationAllowed(m.user_id, 'new_message')) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, type, title_key, params, title, message, link)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            m.user_id,
+            'new_message',
+            'notifications.newDiscussionMessage',
+            JSON.stringify({ senderName, contentSnippet }),
+            `New message in a discussion`,
+            `${senderName}: ${contentSnippet}`,
+            `/discussions?id=${req.params.id}`,
+          ]
+        );
+      }
     }
 
     res.status(201).json({ id: messageId });

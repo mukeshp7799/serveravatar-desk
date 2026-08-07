@@ -3,11 +3,12 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import api from '@/lib/api'
+import { useDateSettings } from '@/contexts/CompanySettingsContext'
 import Tabs from '@/components/Tabs'
 import PageLoader from '@/components/PageLoader'
 import { Calendar, Check, Clock, Plus, Search, Settings, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
 
-function fmtDate(raw: string | null | undefined): string {
+function fmtDateDefault(raw: string | null | undefined): string {
   if (!raw) return '—'
   const s = String(raw).trim()
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
@@ -38,6 +39,20 @@ export default function LeavesPage() {
   const isHRAdmin = Array.isArray(user.permissions) && (user.permissions.includes('leave.manage_all') || user.permissions.includes('users.edit_all'))
   const isManager = Array.isArray(user.permissions) && (user.permissions.includes('leave.view_team') || isHRAdmin)
 
+
+  const { timezone, date_format } = useDateSettings();
+  const fmtDateCtx = (raw: string | null | undefined): string => {
+    if (!raw) return '';
+    const parts = String(raw).split('T')[0].split('-');
+    const [y, m, d] = parts.map(Number);
+    if (parts.length !== 3 || isNaN(y)) return String(raw);
+    const pattern = date_format || 'YYYY-MM-DD';
+    return pattern
+      .replace('YYYY', String(y)).replace('YY', String(y).slice(-2))
+      .replace('MM', String(m).padStart(2,'0')).replace('M', String(m))
+      .replace('DD', String(d).padStart(2,'0')).replace('D', String(d));
+  };
+  const fmtDate = fmtDateCtx;
   const [tab, setTab] = useState<Tab>('my')
   const [loading, setLoading] = useState(true)
 
@@ -53,6 +68,18 @@ export default function LeavesPage() {
   const [applyForm, setApplyForm] = useState({ leave_type_id: '', start_date: '', end_date: '', reason: '' })
   const [applying, setApplying] = useState(false)
 
+  // Reject modal
+  const [showRejectModal, setShowRejectModal] = useState(false)
+  const [rejectingId, setRejectingId] = useState<number | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+
+  // Cancel confirmation modal
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancellingId, setCancellingId] = useState<number | null>(null)
+
+  // Reseed confirmation modal
+  const [showReseedModal, setShowReseedModal] = useState(false)
+
   // Type modal
   const [showTypeModal, setShowTypeModal] = useState(false)
   const [editType, setEditType] = useState<any>(null)
@@ -67,51 +94,127 @@ export default function LeavesPage() {
 
   // Request filter
   const [reqFilter, setReqFilter] = useState<'pending' | 'approved' | 'rejected' | 'cancelled' | ''>('')
+  const [teamSearch, setTeamSearch] = useState('')
   const [allocSearch, setAllocSearch] = useState('')
   const [allocDept, setAllocDept] = useState('')
   const [allocLeaveType, setAllocLeaveType] = useState('')
   const [allocPage, setAllocPage] = useState(1)
+  const [allocTotal, setAllocTotal] = useState(0)
+  const ALLOC_LIMIT = 10
+
+  // Pagination: My Requests
+  const [myReqPage, setMyReqPage] = useState(1)
+  const [myReqTotal, setMyReqTotal] = useState(0)
+  const MY_LIMIT = 10
+
+  // Pagination: Team Requests
+  const [teamReqPage, setTeamReqPage] = useState(1)
+  const [teamReqTotal, setTeamReqTotal] = useState(0)
+  const [teamFilter, setTeamFilter] = useState<'pending' | 'approved' | 'rejected' | 'cancelled' | ''>('')
+  const TEAM_LIMIT = 10
+
+  // Pagination: Leave Types
+  const [typesPage, setTypesPage] = useState(1)
+  const [typesTotal, setTypesTotal] = useState(0)
+  const TYPES_LIMIT = 10
 
   const loadAll = () => {
     setLoading(true)
     Promise.all([
       api.get('/leaves/balance'),
-      api.get('/leaves/types'),
-      api.get('/leaves'),
-    ]).then(([balData, typesData, reqData]) => {
+      api.get('/leaves/types?page=1&limit=50'),
+    ]).then(([balData, typesData]) => {
       setAllocations(balData.allocations || [])
       setLeaveTypes(typesData.leaveTypes || [])
-      setRequests(reqData.leaveRequests || [])
+      setTypesTotal(typesData.pagination?.total || 0)
     }).catch(() => {}).finally(() => setLoading(false))
   }
 
-  useEffect(() => { loadAll() }, [])
+  const loadMyRequests = (page = 1) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(MY_LIMIT) })
+    params.set('userId', String(user.id))
+    api.get(`/leaves?${params.toString()}`).then(d => {
+      setRequests(d.leaveRequests || [])
+      setMyReqTotal(d.pagination?.total || 0)
+      setMyReqPage(page)
+    }).catch(() => {})
+  }
+
+  const loadTeamRequests = (page = 1, filter = teamFilter) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(TEAM_LIMIT) })
+    if (filter) params.set('status', filter)
+    if (teamSearch) params.set('search', teamSearch)
+    Promise.all([
+      api.get(`/leaves?${params.toString()}`),
+      api.get('/departments'),
+    ]).then(([d, deptsData]) => {
+      setRequests(d.leaveRequests || [])
+      setTeamReqTotal(d.pagination?.total || 0)
+      setTeamReqPage(page)
+      setDepartments(deptsData.departments || [])
+    }).catch(() => {})
+  }
+
+  const loadLeaveTypes = (page = 1) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(TYPES_LIMIT) })
+    api.get(`/leaves/types?${params.toString()}`).then(d => {
+      setLeaveTypes(d.leaveTypes || [])
+      setTypesTotal(d.pagination?.total || 0)
+      setTypesPage(page)
+    }).catch(() => {})
+  }
+
+  // Reload the current tab's data after a mutation
+  const reloadCurrentTab = () => {
+    if (tab === 'my') {
+      loadMyRequests(myReqPage)
+    } else if (tab === 'team') {
+      loadTeamRequests(teamReqPage, teamFilter)
+    } else if (tab === 'types') {
+      loadLeaveTypes(typesPage)
+    } else if (tab === 'allocations') {
+      fetchAllAllocs(allocPage)
+    }
+    loadAll()
+  }
+
+  useEffect(() => { loadAll() }, [tab])
 
   useEffect(() => {
-    if (tab === 'team' || tab === 'types' || tab === 'allocations') {
+    if (tab === 'my') {
+      loadMyRequests(1)
+    } else if (tab === 'team') {
+      setTeamFilter('')
+      loadTeamRequests(1, '')
+    } else if (tab === 'types') {
+      loadLeaveTypes(1)
+      api.get('/departments').then(d => setDepartments(d.departments || [])).catch(() => {})
+    } else if (tab === 'allocations') {
       Promise.all([
-        api.get('/leaves'),
+        api.get('/leaves/types?page=1&limit=50'),
         api.get('/departments'),
-      ]).then(([reqData, deptsData]) => {
-        setRequests(reqData.leaveRequests || [])
+      ]).then(([typesData, deptsData]) => {
+        setLeaveTypes(typesData.leaveTypes || [])
         setDepartments(deptsData.departments || [])
+        fetchAllAllocs(1)
       }).catch(() => {})
     }
   }, [tab])
 
   useEffect(() => {
     if (tab === 'allocations') {
-      fetchAllAllocs()
+      fetchAllAllocs(allocPage)
     }
   }, [tab, allocSearch, allocDept, allocLeaveType, allocPage])
 
   const fetchAllAllocs = (page = 1) => {
-    const params = new URLSearchParams({ page: String(page), limit: '50' })
+    const params = new URLSearchParams({ page: String(page), limit: String(ALLOC_LIMIT) })
     if (allocSearch) params.set('search', allocSearch)
     if (allocDept) params.set('departmentId', allocDept)
     if (allocLeaveType) params.set('leaveTypeId', allocLeaveType)
     api.get(`/leaves/allocations?${params.toString()}`).then(d => {
       setAllAllocations(d.allocations || [])
+      setAllocTotal(d.pagination?.total || 0)
     }).catch(() => {})
   }
 
@@ -134,6 +237,7 @@ export default function LeavesPage() {
       setShowApply(false)
       setApplyForm({ leave_type_id: '', start_date: '', end_date: '', reason: '' })
       loadAll()
+      loadMyRequests(1)
     } catch (err: any) {
       toast.error(err.message || 'Failed to submit')
     } finally {
@@ -190,8 +294,12 @@ export default function LeavesPage() {
       loadAll()
     } catch (err: any) { toast.error(err.message || 'Failed') }
   }
-  const handleSeedAll = async () => {
-    if (!confirm('Re-seed allocations for ALL employees from current default_days? This will reset all custom allocations.')) return
+  const handleSeedAll = () => {
+    setShowReseedModal(true)
+  }
+
+  const confirmReseed = async () => {
+    setShowReseedModal(false)
     try {
       const res = await api.post('/leaves/allocations/seed', {})
       toast.success(res.message || 'Seeded')
@@ -225,19 +333,53 @@ export default function LeavesPage() {
 
   // ── Request actions ──────────────────────────────────────────
   const handleApprove = async (id: number, action: 'approved' | 'rejected') => {
-    const reason = action === 'rejected' ? prompt('Rejection reason (optional):') : undefined
+    if (action === 'rejected') {
+      setRejectingId(id)
+      setRejectReason('')
+      setShowRejectModal(true)
+      return
+    }
     try {
-      await api.put(`/leaves/${id}/approve`, { action, rejection_reason: reason })
+      await api.put(`/leaves/${id}/approve`, { action })
       toast.success(`Leave request ${action}`)
       loadAll()
+      reloadCurrentTab()
     } catch (err: any) { toast.error(err.message || 'Failed') }
   }
+
+  const handleRejectConfirm = async () => {
+    if (rejectingId === null) return
+    try {
+      await api.put(`/leaves/${rejectingId}/approve`, { action: 'rejected', rejection_reason: rejectReason })
+      toast.success('Leave request rejected')
+      setShowRejectModal(false)
+      setRejectingId(null)
+      setRejectReason('')
+      loadAll()
+      reloadCurrentTab()
+    } catch (err: any) { toast.error(err.message || 'Failed') }
+  }
+
+  // Confirm cancel from modal
+  const confirmCancel = async () => {
+    if (cancellingId === null) return
+    try {
+      await api.put(`/leaves/${cancellingId}/cancel`, {})
+      toast.success('Request cancelled')
+      setShowCancelModal(false)
+      setCancellingId(null)
+      loadAll()
+      reloadCurrentTab()
+    } catch (err: any) { toast.error(err.message || 'Failed') }
+  }
+
   const handleCancel = async (id: number) => {
-    if (!confirm('Cancel this leave request?')) return
+    // Confirmation is handled by the cancel modal
     try {
       await api.put(`/leaves/${id}/cancel`, {})
       toast.success('Request cancelled')
       loadAll()
+      reloadCurrentTab()
     } catch (err: any) { toast.error(err.message || 'Failed') }
   }
 
@@ -269,7 +411,53 @@ export default function LeavesPage() {
 
   const activeTab = tabs.find(x => x.key === tab) ? tab : 'my'
 
-  return (
+  
+  // ── Unified Pagination Bar ──────────────────────────────────
+  const PaginationBar = ({ page, total, limit, onPage }: { page: number; total: number; limit: number; onPage: (p: number) => void }) => {
+    const totalPages = Math.ceil(total / limit) || 1
+    const start = Math.min((page - 1) * limit + 1, total)
+    const end = Math.min(page * limit, total)
+    const pages = Array.from({ length: totalPages }, (_, i) => i + 1)
+
+    return (
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-100 dark:bg-gray-700/50 rounded-b-xl">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Showing {start}–{end} of {total}
+        </p>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => onPage(page - 1)}
+            disabled={page <= 1}
+            className="flex items-center justify-center w-7 h-7 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-xs"
+          >
+            ‹
+          </button>
+          {pages.map(p => (
+            <button
+              key={p}
+              onClick={() => onPage(p)}
+              className={`flex items-center justify-center w-7 h-7 rounded-lg text-xs font-semibold cursor-pointer border ${
+                p === page
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+          <button
+            onClick={() => onPage(page + 1)}
+            disabled={page >= totalPages}
+            className="flex items-center justify-center w-7 h-7 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-xs"
+          >
+            ›
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+return (
     <div className="w-full px-4 py-6 space-y-5 animate-fade-in-up">
 
       {/* Header */}
@@ -368,7 +556,7 @@ export default function LeavesPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                     {filteredRequests.filter(r => r.user_id === user.id).map((r: any) => {
-                      const days = Math.ceil((new Date(r.end_date).getTime() - new Date(r.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1
+                      const days = r.days
                       return (
                         <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                           <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{r.leave_type_name}</td>
@@ -378,10 +566,20 @@ export default function LeavesPage() {
                           <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs">{fmtDate(r.created_at)}</td>
                           <td className="px-4 py-3">
                             {r.status === 'pending' && (
-                              <button onClick={() => handleCancel(r.id)}
+                              <button onClick={() => { setCancellingId(r.id); setShowCancelModal(true) }}
                                 className="text-xs text-red-500 hover:text-red-700 font-medium bg-transparent border-0 cursor-pointer">
                                 Cancel
                               </button>
+                            )}
+                            {r.status === 'cancelled' && (
+                              <span className="text-xs text-gray-400 font-medium border border-dashed border-gray-300 px-2 py-0.5 rounded">
+                                Cancelled
+                              </span>
+                            )}
+                            {(r.status === 'approved' || r.status === 'rejected') && (
+                              <span className="text-xs text-gray-400 font-medium border border-dashed border-gray-300 px-2 py-0.5 rounded">
+                                —
+                              </span>
                             )}
                           </td>
                         </tr>
@@ -391,6 +589,12 @@ export default function LeavesPage() {
                 </table>
               </div>
             )}
+              <PaginationBar
+                page={myReqPage}
+                total={myReqTotal}
+                limit={MY_LIMIT}
+                onPage={(p) => loadMyRequests(p)}
+              />
           </div>
         </>
       )}
@@ -398,17 +602,43 @@ export default function LeavesPage() {
       {/* ── TEAM REQUESTS TAB ─────────────────────────────────── */}
       {tab === 'team' && (
         <>
-          <div className="flex flex-wrap gap-2 items-center">
-            {['', 'pending', 'approved', 'rejected', 'cancelled'].map(s => (
-              <button key={s} onClick={() => setReqFilter(s as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border ${
-                  reqFilter === s
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-indigo-300'
-                }`}>
-                {s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All'}
+          {/* Search + Filters Card */}
+          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-gray-800 dark:to-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800/30 p-4 mb-4">
+            {/* Search Row */}
+            <div className="flex items-center gap-3 mb-3">
+              <div className="relative flex-1">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                  <Search size={16} />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search by name or email..."
+                  value={teamSearch}
+                  onChange={e => { setTeamSearch(e.target.value); setTeamReqPage(1) }}
+                  onKeyDown={e => e.key === 'Enter' && loadTeamRequests(1, teamFilter)}
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-300 shadow-sm"
+                />
+              </div>
+              <button
+                onClick={() => loadTeamRequests(1, teamFilter)}
+                className="px-5 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition cursor-pointer border-none shadow-sm whitespace-nowrap"
+              >
+                Search
               </button>
-            ))}
+            </div>
+            {/* Filter Tabs */}
+            <div className="flex flex-wrap gap-2">
+              {['', 'pending', 'approved', 'rejected', 'cancelled'].map(s => (
+                <button key={s} onClick={() => { setTeamFilter(s as any); loadTeamRequests(1, s as any) }}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border ${
+                    teamFilter === s
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
+                  }`}>
+                  {s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All'}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -427,7 +657,7 @@ export default function LeavesPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {filteredRequests.map((r: any) => {
-                    const days = Math.ceil((new Date(r.end_date).getTime() - new Date(r.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1
+                    const days = r.days
                     const isOwn = r.user_id === user.id
                     return (
                       <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
@@ -452,19 +682,29 @@ export default function LeavesPage() {
                                 <ThumbsDown size={11} /> Reject
                               </button>
                               {!isOwn && (
-                                <button onClick={() => handleCancel(r.id)}
+                                <button onClick={() => { setCancellingId(r.id); setShowCancelModal(true) }}
                                   className="text-xs text-gray-500 hover:text-red-600 font-medium bg-transparent border-0 cursor-pointer ml-1">
                                   Cancel
                                 </button>
                               )}
                             </div>
                           )}
-                          {r.status !== 'pending' && !isOwn && (
-                            <button onClick={() => handleCancel(r.id)}
-                              className="text-xs text-gray-500 hover:text-red-600 font-medium bg-transparent border-0 cursor-pointer">
+                          {r.status === 'cancelled' && (
+                            <span className="text-xs text-gray-400 font-medium border border-dashed border-gray-300 px-2 py-0.5 rounded">
+                              Cancelled
+                            </span>
+                          )}
+                          {r.status === 'approved' && !isOwn && (
+                            <button onClick={() => { setCancellingId(r.id); setShowCancelModal(true) }}
+                              className="text-xs text-red-500 hover:text-red-700 font-medium bg-transparent border-0 cursor-pointer">
                               Cancel
                             </button>
                           )}
+                          {(r.status === 'approved' && isOwn) || r.status === 'rejected' ? (
+                            <span className="text-xs text-gray-400 font-medium border border-dashed border-gray-300 px-2 py-0.5 rounded">
+                              —
+                            </span>
+                          ) : null}
                         </td>
                       </tr>
                     )
@@ -474,6 +714,12 @@ export default function LeavesPage() {
                   )}
                 </tbody>
               </table>
+              <PaginationBar
+                page={teamReqPage}
+                total={teamReqTotal}
+                limit={TEAM_LIMIT}
+                onPage={(p) => loadTeamRequests(p, teamFilter)}
+              />
             </div>
           </div>
         </>
@@ -541,6 +787,12 @@ export default function LeavesPage() {
                   )}
                 </tbody>
               </table>
+              <PaginationBar
+                page={typesPage}
+                total={typesTotal}
+                limit={TYPES_LIMIT}
+                onPage={(p) => loadLeaveTypes(p)}
+              />
             </div>
           </div>
         </>
@@ -613,6 +865,12 @@ export default function LeavesPage() {
                   )}
                 </tbody>
               </table>
+              <PaginationBar
+                page={allocPage}
+                total={allocTotal}
+                limit={ALLOC_LIMIT}
+                onPage={(p) => { setAllocPage(p); fetchAllAllocs(p) }}
+              />
             </div>
           </div>
         </>
@@ -670,6 +928,105 @@ export default function LeavesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+
+      {/* ── REJECT LEAVE MODAL ─────────────────────────────── */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
+            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-bold text-red-600 dark:text-red-400">Reject Leave Request</h2>
+              <button onClick={() => setShowRejectModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Reason <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  value={rejectReason}
+                  onChange={e => setRejectReason(e.target.value)}
+                  rows={3}
+                  placeholder="Why is this leave request being rejected?"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 px-6 pb-6">
+              <button onClick={() => setShowRejectModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
+                Cancel
+              </button>
+              <button onClick={handleRejectConfirm}
+                className="px-5 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition cursor-pointer border-0">
+                Confirm Rejection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── RESEED CONFIRMATION MODAL ───────────────────────── */}
+      {showReseedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
+            <div className="p-6 text-center">
+              <div className="w-14 h-14 mx-auto mb-4 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                <span className="text-2xl">🔄</span>
+              </div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Re-seed All Allocations?</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                This will reset <strong>all custom allocations</strong> for every employee based on their leave type default days. This action cannot be undone.
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  onClick={() => setShowReseedModal(false)}
+                  className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmReseed}
+                  className="px-5 py-2 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition cursor-pointer border-0 shadow-sm"
+                >
+                  Yes, Re-seed
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CANCEL CONFIRMATION MODAL ───────────────────────── */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full">
+            <div className="p-6 text-center">
+              <div className="w-14 h-14 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                <span className="text-2xl">⚠️</span>
+              </div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Cancel Leave Request?</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                Are you sure you want to cancel this leave request? This action cannot be undone.
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  onClick={() => { setShowCancelModal(false); setCancellingId(null) }}
+                  className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent"
+                >
+                  Keep It
+                </button>
+                <button
+                  onClick={confirmCancel}
+                  className="px-5 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl transition cursor-pointer border-0 shadow-sm"
+                >
+                  Yes, Cancel It
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -10,9 +10,10 @@ import {
   CheckCircle, XCircle as XCircleIcon, AlertTriangle, AtSign
 } from 'lucide-react'
 import api from '@/lib/api'
+import { useDateSettings } from '@/contexts/CompanySettingsContext'
 import { acceptInvitation, declineInvitation } from '@/lib/invitations-api'
 
-function formatDate(dateStr: string): string {
+function formatDateDefault(dateStr: string): string {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
@@ -40,6 +41,20 @@ type NotificationItem = {
 export default function NotificationsPage() {
   const { t } = useTranslation()
   const router = useRouter()
+
+  const { timezone, date_format } = useDateSettings();
+  const formatDate = (dateStr: string): string => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    const pattern = date_format || 'YYYY-MM-DD';
+    return pattern
+      .replace('YYYY', String(y)).replace('YY', String(y).slice(-2))
+      .replace('MM', String(m).padStart(2,'0')).replace('M', String(m))
+      .replace('DD', String(day).padStart(2,'0')).replace('D', String(day));
+  };
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [pendingInvitations, setPendingInvitations] = useState<NotificationItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -246,7 +261,7 @@ export default function NotificationsPage() {
                       {n.message}
                     </div>
                     <div className="text-xs text-gray-400 mt-1.5 font-semibold">
-                      {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
+                      {n.created_at ? formatDate(n.created_at) : ''}
                     </div>
                     {n.type === 'mention' && n.link && (
                       <div className="text-xs text-violet-600 dark:text-violet-400 mt-1 font-medium">

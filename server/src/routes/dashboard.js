@@ -2,12 +2,15 @@ const express = require('express');
 const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { translateNotifications } = require('../i18n');
+const { getCompanySetting, nowInTimezone, todayInTimezone } = require('../utils/timezone');
 
 const router = express.Router();
 
 // GET /api/dashboard
 router.get('/', auth, async (req, res, next) => {
   try {
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+
     const perms = req.user.permissions || [];
     const userId = req.user.id;
 
@@ -139,10 +142,12 @@ router.get('/', auth, async (req, res, next) => {
       };
     }
 
+    // Date string in company timezone (available regardless of permissions)
+    const today = todayInTimezone(tz);
+
     // Attendance stats (users with attendance.view_team or attendance.manage_all)
     let attendanceStats = null;
     if (perms.includes('attendance.view_team') || perms.includes('attendance.manage_all')) {
-      const today = new Date().toISOString().slice(0, 10);
       const [allToday] = await pool.query(
         `SELECT a.status, a.is_late FROM attendance a WHERE a.date = ?`,
         [today]
@@ -160,7 +165,7 @@ router.get('/', auth, async (req, res, next) => {
     // My today's attendance
     const [myTodayRows] = await pool.query(
       'SELECT * FROM attendance WHERE user_id = ? AND date = ? LIMIT 1',
-      [userId, new Date().toISOString().slice(0, 10)]
+      [userId, today]
     );
     const myToday = myTodayRows.length > 0 ? myTodayRows[0] : null;
 

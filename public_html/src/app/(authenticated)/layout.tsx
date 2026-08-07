@@ -7,12 +7,14 @@ import { useTranslation } from 'react-i18next'
 import ThemeSelector from '../../components/ThemeSelector'
 import LanguageSwitcher from '../../components/LanguageSwitcher'
 import Scroll from '../../components/Scroll'
+import ModalPortal, { ModalProvider } from '../../components/ModalPortal'
+import { CompanySettingsProvider } from '../../contexts/CompanySettingsContext'
 import api from '../../lib/api'
 import {
   LayoutDashboard, Users, Palmtree, Network, ShieldCheck,
   FolderKanban, ListChecks, MessageSquare, Megaphone, Bell,
-  Settings as SettingsIcon,
-  Clock, Calendar, BarChart3,
+  User as UserIcon,
+  Clock, Calendar, BarChart3, Settings,
   Menu, X as XIcon, LogOut, Sparkles,
   PanelLeftClose, PanelLeftOpen, Mail, AlertTriangle, RefreshCw,
 } from 'lucide-react'
@@ -42,6 +44,7 @@ const navConfig: Array<{
   { href: '/discussions',   labelKey: 'nav.discussions',  Icon: MessageSquare, requiredPermission: 'discussions.view' },
   { sectionKey: 'nav.company' },
   { href: '/announcements', labelKey: 'nav.announcements', Icon: Megaphone,   requiredPermission: 'announcements.view' },
+  { href: '/company-settings', labelKey: 'nav.companySettings', Icon: Settings, requiredPermission: 'admin.settings' },
 ]
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
@@ -423,9 +426,9 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
                       {user.roleName}
                     </span>
                   </div>
-                  <div className="py-1">
-                    <Link href="/settings" onClick={() => setProfileOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-gray-700 no-underline text-sm hover:bg-indigo-50 transition">
-                      <SettingsIcon size={14} strokeWidth={2.25} /> {t('header.settings')}
+                  <div className="py-1 bg-white dark:bg-gray-900">
+                    <Link href="/profile" onClick={() => setProfileOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-gray-700 no-underline text-sm hover:bg-indigo-50 transition">
+                      <UserIcon size={14} strokeWidth={2.25} /> {t('header.profile') || 'My Profile'}
                     </Link>
                     <button onClick={handleLogout} className="flex items-center gap-2.5 w-full px-4 py-2.5 bg-transparent cursor-pointer text-sm text-rose-600 hover:bg-red-50 transition font-medium">
                       <LogOut size={14} strokeWidth={2.25} /> {t('header.logout')}
@@ -439,9 +442,16 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
 
         <main className="flex-1 min-w-0 overflow-hidden h-[calc(100vh-4rem)]">
           <Scroll containerClassName="h-full" className="h-full" watch={pathname}>
-            <div key={pathname} className="p-4 sm:p-6 w-full animate-page-zoom-in">{children}</div>
+            <div key={pathname} className="p-4 sm:p-6 w-full animate-page-zoom-in">
+              <CompanySettingsProvider>
+                <ModalProvider>{children}</ModalProvider>
+              </CompanySettingsProvider>
+            </div>
           </Scroll>
         </main>
+
+        {/* Portal — renders modal to document.body, escapes all overflow/transform constraints */}
+        <ModalPortal />
       </div>
     </div>
   )

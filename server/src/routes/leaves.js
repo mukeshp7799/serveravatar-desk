@@ -2,6 +2,17 @@ const express = require('express');
 const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { t } = require('../i18n');
+const { isNotificationAllowed } = require('../utils/notificationPreferences');
+const {
+  getSetting,
+  getSettings,
+  isWorkday,
+  isHoliday,
+  parseDate,
+  overlapDays,
+  DAY_REVERSE,
+} = require('../services/attendanceCalc');
+const { getCompanySetting, toTimezone, todayInTimezone } = require('../utils/timezone');
 
 const router = express.Router();
 
@@ -11,7 +22,10 @@ const SITE_URL = process.env.SITE_URL || 'https://serveravatar-hub.95.217.8.52.n
 // HELPERS
 // ─────────────────────────────────────────────────────────────
 
-/** Calculate calendar days between two dates (inclusive) */
+/**
+ * Calculate CALENDAR days between two dates (inclusive).
+ * @deprecated Use calcWorkdays() for leave calculations that respect settings.
+ */
 function calcDays(startDate, endDate) {
   const s = new Date(startDate);
   const e = new Date(endDate);
@@ -19,13 +33,122 @@ function calcDays(startDate, endDate) {
 }
 
 /**
+ * Calculate WORKING days between two dates, respecting company settings.
+ * Uses working_days and company holidays from Company Settings.
+ * Supports half-day leave when startDate === endDate and half_day=true.
+ * Excludes weekends unless allow_leave_on_weekends is true.
+ * Excludes company holidays unless allow_leave_on_company_holidays is true.
+ * @param {string} startDate  'YYYY-MM-DD'
+ * @param {string} endDate    'YYYY-MM-DD'
+ * @param {string[]} workingDays  e.g. ['mon','tue','wed','thu','fri']
+ * @param {Set<string>} holidaySet  company holiday date strings
+ * @param {Object} leaveSettings  { allow_leave_on_weekends, allow_leave_on_company_holidays, allow_half_day, half_day_session }
+ * @param {boolean} [halfDay]  if true, counts 0.5 days when startDate===endDate on a valid workday
+ * @returns {number} count of leave-eligible working days (integer or 0.5)
+ */
+function calcWorkdays(startDate, endDate, workingDays, holidaySet, leaveSettings = {}, halfDay = false, timezone = 'UTC') {
+  const {
+    allow_leave_on_weekends = false,
+    allow_leave_on_company_holidays = false,
+    allow_half_day = false,
+    half_day_session = 'first_half',
+  } = leaveSettings;
+
+  // Half-day: only valid when startDate === endDate
+  if (halfDay && allow_half_day && startDate === endDate) {
+    const ds = startDate;
+    if (isWorkday(ds, workingDays) && !isHoliday(ds, holidaySet)) {
+      return 0.5;
+    }
+    return 0;
+  }
+
+  let count = 0;
+  const cur = parseDate(startDate);
+  const end = parseDate(endDate);
+  while (cur <= end) {
+    const ds = toTimezone(cur, timezone).toISOString().slice(0, 10);
+    const dow = cur.getDay();
+    const isWeekendDay = dow === 0 || dow === 6;
+    const isHolidayDay = isHoliday(ds, holidaySet);
+    const isWorkDay = isWorkday(ds, workingDays);
+
+    if (isWorkDay) {
+      if (isHolidayDay && !allow_leave_on_company_holidays) {
+        // skip
+      } else {
+        count++;
+      }
+    } else if (isWeekendDay && !allow_leave_on_weekends) {
+      // skip
+    } else if (isHolidayDay && !allow_leave_on_company_holidays) {
+      // skip
+    } else {
+      // Weekend but allowed, or holiday on non-workday
+      count++;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+/**
+ * Validate leave application against company settings.
+ * Returns null if valid, or an error string.
+ */
+async function validateLeaveApplication(userId, startDate, endDate, leaveTypeId, pool) {
+  const tz = await getCompanySetting('general', 'timezone', 'UTC');
+  const today = todayInTimezone(tz);
+
+  // Fetch all relevant settings in one query
+  const { working_schedule: ws, leave: lv } = await getSettings(pool, 'working_schedule', 'leave');
+  const workingDays = Array.isArray(ws?.working_days) ? ws.working_days : ['mon', 'tue', 'wed', 'thu', 'fri'];
+  const halfDaySession = lv?.half_day_session || 'first_half';
+  const minNotice = Number(lv?.minimum_leave_notice_days) || 1;
+  const allowBackdated = Boolean(lv?.allow_backdated_leave);
+  const allowHalfDay = Boolean(lv?.allow_half_day_leave);
+  const maxConsecutive = Number(lv?.max_consecutive_leave_days) || 365;
+  const allowOnWeekends = Boolean(lv?.allow_leave_on_weekends);
+  const allowOnHolidays = Boolean(lv?.allow_leave_on_company_holidays);
+
+  // Fetch holidays
+  const [holidayRows] = await pool.query(
+    'SELECT date FROM company_holidays WHERE date BETWEEN ? AND ?',
+    [startDate, endDate]
+  );
+  const holidaySet = new Set(holidayRows.map(h => String(h.date).slice(0, 10)));
+
+  const leaveSettings = { allow_leave_on_weekends: allowOnWeekends, allow_leave_on_company_holidays: allowOnHolidays };
+  const days = calcWorkdays(startDate, endDate, workingDays, holidaySet, leaveSettings, false, tz);
+
+  // Check minimum notice (days between today and start date)
+  if (!allowBackdated && startDate > today) {
+    const noticeDays = calcDays(today, startDate);
+    if (noticeDays < minNotice) {
+      return `Leave must be applied at least ${minNotice} day${minNotice > 1 ? 's' : ''} in advance.`;
+    }
+  }
+
+  // Check max consecutive days
+  if (days > maxConsecutive) {
+    return `Leave cannot exceed ${maxConsecutive} consecutive day${maxConsecutive > 1 ? 's' : ''}.`;
+  }
+
+  // Check half-day: if start == end and leave type allows half day
+  // (half-day logic is applied at the allocation/check stage, not here)
+
+  return null; // valid
+}
+
+/**
  * Get the used days (approved leave) for a specific user + leave_type.
+ * Uses the stored `days` column which was computed with calcWorkdays at submission time.
  * Returns a map: `${userId}_${leaveTypeId}` → days_used
  */
 async function getUsedDaysMap(userId, leaveTypeId) {
   let query = `
     SELECT user_id, leave_type_id,
-           SUM(GREATEST(0, DATEDIFF(end_date, start_date)) + 1) as days_used
+           SUM(days) as days_used
     FROM leave_requests
     WHERE status = 'approved'
   `;
@@ -44,12 +167,13 @@ async function getUsedDaysMap(userId, leaveTypeId) {
 
 /**
  * Get the pending days for a specific user + leave_type.
+ * Uses the stored `days` column which was computed with calcWorkdays at submission time.
  * Returns a map: `${userId}_${leaveTypeId}` → days_pending
  */
 async function getPendingDaysMap(userId, leaveTypeId) {
   let query = `
     SELECT user_id, leave_type_id,
-           SUM(GREATEST(0, DATEDIFF(end_date, start_date)) + 1) as days_pending
+           SUM(days) as days_pending
     FROM leave_requests
     WHERE status = 'pending'
   `;
@@ -86,6 +210,46 @@ async function getEnrichedAllocations(userId) {
     ORDER BY u.first_name, lt.name
   `, userId ? [userId] : []);
 
+  // Auto-create allocations for users with no allocations (new users)
+  if (userId && allocs.length === 0) {
+    const [types] = await pool.query(
+      'SELECT id, default_days FROM leave_types WHERE status = ? AND default_days > 0',
+      ['active']
+    );
+    if (types.length > 0) {
+      const values = types.map(lt => [userId, lt.id, lt.default_days, 'Auto-allocated from company policy']);
+      await pool.query(
+        'INSERT INTO leave_allocations (user_id, leave_type_id, allocated_days, description) VALUES ?',
+        [values]
+      );
+      // Re-fetch with newly created allocations
+      const [newAllocs] = await pool.query(`
+        SELECT la.id, la.user_id, la.leave_type_id, la.allocated_days,
+               la.description as remark, la.created_at, la.updated_at,
+               lt.name as leave_type_name, lt.code as leave_type_code,
+               lt.is_paid, lt.max_allowed,
+               u.first_name, u.last_name, u.email,
+               d.name as department_name
+        FROM leave_allocations la
+        JOIN leave_types lt ON la.leave_type_id = lt.id
+        JOIN users u ON la.user_id = u.id
+        LEFT JOIN departments d ON u.department_id = d.id
+        WHERE la.user_id = ?
+        ORDER BY u.first_name, lt.name
+      `, [userId]);
+
+      const usedMap = await getUsedDaysMap(userId, null);
+      const pendingMap = await getPendingDaysMap(userId, null);
+      return newAllocs.map(a => {
+        const key = `${a.user_id}_${a.leave_type_id}`;
+        const used = usedMap[key] || 0;
+        const pending = pendingMap[key] || 0;
+        const available = Math.max(0, parseFloat(a.allocated_days) - used);
+        return { ...a, used, pending, available };
+      });
+    }
+  }
+
   const usedMap = await getUsedDaysMap(userId, null);
   const pendingMap = await getPendingDaysMap(userId, null);
 
@@ -105,13 +269,22 @@ async function getEnrichedAllocations(userId) {
 // GET /api/leaves/types
 router.get('/types', auth, async (req, res, next) => {
   try {
-    const { status } = req.query;
-    let query = 'SELECT * FROM leave_types WHERE 1=1';
+    const { status, page = 1, limit = 10 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    let where = 'WHERE 1=1';
     const params = [];
-    if (status) { query += ' AND status = ?'; params.push(status); }
-    query += ' ORDER BY name ASC';
-    const [types] = await pool.query(query, params);
-    res.json({ leaveTypes: types });
+    if (status) { where += ' AND status = ?'; params.push(status); }
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) as total FROM leave_types ${where}`, params
+    );
+    const [types] = await pool.query(
+      `SELECT * FROM leave_types ${where} ORDER BY name ASC LIMIT ? OFFSET ?`,
+      [...params, parseInt(limit), offset]
+    );
+    res.json({
+      leaveTypes: types,
+      pagination: { total, page: parseInt(page), limit: parseInt(limit), totalPages: Math.ceil(total / parseInt(limit)) },
+    });
   } catch (err) { next(err); }
 });
 
@@ -344,30 +517,74 @@ router.post('/allocations/seed', auth, async (req, res, next) => {
 // GET /api/leaves — list leave requests (scoped by permission)
 router.get('/', auth, async (req, res, next) => {
   try {
-    const { status, userId, leaveTypeId, startDate, endDate, page = 1, limit = 20 } = req.query;
+    const { status, userId, leaveTypeId, startDate, endDate, search, page = 1, limit = 20 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
     let where = 'WHERE 1=1';
+    let countWhere = 'WHERE 1=1';
     const params = [];
+    const countParams = [];
 
-    if (status) { where += ' AND lr.status = ?'; params.push(status); }
-    if (userId) { where += ' AND lr.user_id = ?'; params.push(parseInt(userId)); }
-    if (leaveTypeId) { where += ' AND lr.leave_type_id = ?'; params.push(parseInt(leaveTypeId)); }
-    if (startDate) { where += ' AND lr.end_date >= ?'; params.push(startDate); }
-    if (endDate) { where += ' AND lr.start_date <= ?'; params.push(endDate); }
+    if (status) {
+      where += ' AND lr.status = ?';
+      countWhere += ' AND lr.status = ?';
+      params.push(status);
+      countParams.push(status);
+    }
+    if (userId) {
+      where += ' AND lr.user_id = ?';
+      countWhere += ' AND lr.user_id = ?';
+      params.push(parseInt(userId));
+      countParams.push(parseInt(userId));
+    }
+    if (leaveTypeId) {
+      where += ' AND lr.leave_type_id = ?';
+      countWhere += ' AND lr.leave_type_id = ?';
+      params.push(parseInt(leaveTypeId));
+      countParams.push(parseInt(leaveTypeId));
+    }
+    if (startDate) {
+      where += ' AND lr.end_date >= ?';
+      countWhere += ' AND lr.end_date >= ?';
+      params.push(startDate);
+      countParams.push(startDate);
+    }
+    if (endDate) {
+      where += ' AND lr.start_date <= ?';
+      countWhere += ' AND lr.start_date <= ?';
+      params.push(endDate);
+      countParams.push(endDate);
+    }
+    if (search) {
+      where += ' AND (u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?)';
+      countWhere += ' AND (u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?)';
+      const s = `%${search}%`;
+      params.push(s, s, s);
+      countParams.push(s, s, s);
+    }
 
     const perms = req.user.permissions || [];
     if (perms.includes('leave.manage_all') || perms.includes('users.edit_all')) {
       // sees everything
     } else if (perms.includes('leave.view_team')) {
       where += ' AND (lr.user_id = ? OR lr.user_id IN (SELECT id FROM users WHERE reporting_manager_id = ?))';
+      countWhere += ' AND (lr.user_id = ? OR lr.user_id IN (SELECT id FROM users WHERE reporting_manager_id = ?))';
       params.push(req.user.id, req.user.id);
+      countParams.push(req.user.id, req.user.id);
     } else {
-      where += ' AND lr.user_id = ?'; params.push(req.user.id);
+      where += ' AND lr.user_id = ?';
+      countWhere += ' AND lr.user_id = ?';
+      params.push(req.user.id);
+      countParams.push(req.user.id);
     }
 
+    // COUNT: needs users JOIN for search
     const [[{ total }]] = await pool.query(
-      `SELECT COUNT(*) as total FROM leave_requests lr ${where}`, params
+      `SELECT COUNT(*) as total
+       FROM leave_requests lr
+       JOIN users u ON lr.user_id = u.id
+       ${countWhere}`,
+      countParams
     );
 
     const [requests] = await pool.query(`
@@ -395,13 +612,45 @@ router.get('/', auth, async (req, res, next) => {
 // POST /api/leaves — apply for leave
 router.post('/', auth, async (req, res, next) => {
   try {
-    const { leave_type_id, start_date, end_date, reason } = req.body;
+    const { leave_type_id, start_date, end_date, reason, half_day, half_day_session } = req.body;
+    const isHalfDay = Boolean(half_day);
+
     if (!leave_type_id || !start_date || !end_date) {
       return res.status(400).json({ error: t(req.lang, 'errors.leaveFieldsRequired') });
     }
+    if (isHalfDay && start_date !== end_date) {
+      return res.status(400).json({ error: 'Half-day leave must have the same start and end date.' });
+    }
 
-    const days = calcDays(start_date, end_date);
-    if (days <= 0) return res.status(400).json({ error: 'End date must be after start date' });
+    // ── Settings-driven validation ────────────────────────────────────────────
+    const validationError = await validateLeaveApplication(
+      req.user.id, start_date, end_date, leave_type_id, pool
+    );
+    if (validationError) return res.status(400).json({ error: validationError });
+
+    // Get working_days + holidays for accurate day-counting
+    const { working_schedule: ws, leave: lv } = await getSettings(pool, 'working_schedule', 'leave');
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+    const workingDays = Array.isArray(ws?.working_days) ? ws.working_days : ['mon', 'tue', 'wed', 'thu', 'fri'];
+    const allowHalfDay = Boolean(lv?.allow_half_day_leave);
+    const halfDaySession = lv?.half_day_session || 'first_half';
+
+    if (isHalfDay && !allowHalfDay) {
+      return res.status(400).json({ error: 'Half-day leave is not allowed by company policy.' });
+    }
+
+    const [holidayRows] = await pool.query(
+      'SELECT date FROM company_holidays WHERE date BETWEEN ? AND ?', [start_date, end_date]
+    );
+    const holidaySet = new Set(holidayRows.map(h => String(h.date).slice(0, 10)));
+    const leaveSettings = {
+      allow_leave_on_weekends: Boolean(lv?.allow_leave_on_weekends),
+      allow_leave_on_company_holidays: Boolean(lv?.allow_leave_on_company_holidays),
+      allow_half_day: allowHalfDay,
+      half_day_session: halfDaySession,
+    };
+    const days = calcWorkdays(start_date, end_date, workingDays, holidaySet, leaveSettings, isHalfDay, tz);
+    if (days <= 0) return res.status(400).json({ error: 'No working days in selected date range (check weekends/holidays settings).' });
 
     // Check this leave type is active
     const [ltype] = await pool.query('SELECT * FROM leave_types WHERE id = ? AND status = \'active\'', [leave_type_id]);
@@ -439,25 +688,29 @@ router.post('/', auth, async (req, res, next) => {
       return res.status(409).json({ error: 'You already have an overlapping leave request for this leave type.' });
     }
 
+    const sessionForDb = isHalfDay ? (half_day_session || halfDaySession || 'first_half') : null;
+
     const [result] = await pool.query(
-      `INSERT INTO leave_requests (user_id, leave_type_id, start_date, end_date, reason, status)
-       VALUES (?, ?, ?, ?, ?, 'pending')`,
-      [req.user.id, leave_type_id, start_date, end_date, reason || null]
+      `INSERT INTO leave_requests (user_id, leave_type_id, start_date, end_date, reason, status, half_day, half_day_session, days)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+      [req.user.id, leave_type_id, start_date, end_date, reason || null, isHalfDay ? 1 : 0, sessionForDb, days]
     );
 
-    // Notify manager
+    // Notify manager (only if they have leave_updates enabled)
     const [user] = await pool.query('SELECT reporting_manager_id FROM users WHERE id = ?', [req.user.id]);
     if (user[0]?.reporting_manager_id) {
-      await pool.query(
-        'INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)',
-        [
-          user[0].reporting_manager_id,
-          'leave_request',
-          'New Leave Request',
-          `${req.user.first_name} ${req.user.last_name} applied for ${ltype[0].name} (${days} day${days !== 1 ? 's' : ''})`,
-          `/leaves?id=${result.insertId}`,
-        ]
-      );
+      if (await isNotificationAllowed(user[0].reporting_manager_id, 'leave_request')) {
+        await pool.query(
+          'INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)',
+          [
+            user[0].reporting_manager_id,
+            'leave_request',
+            'New Leave Request',
+            `${req.user.first_name} ${req.user.last_name} applied for ${ltype[0].name} (${days} day${days !== 1 ? 's' : ''})`,
+            `/leaves?id=${result.insertId}`,
+          ]
+        );
+      }
     }
 
     res.status(201).json({
@@ -484,15 +737,9 @@ router.put('/:id/approve', auth, async (req, res, next) => {
       return res.status(409).json({ error: `Cannot ${action} a ${lr.status} request.` });
     }
 
-    const days = calcDays(lr.start_date, lr.end_date);
-
-    if (action === 'approved') {
-      // Deduct from allocation
-      await pool.query(
-        'UPDATE leave_allocations SET allocated_days = GREATEST(0, allocated_days - ?) WHERE user_id = ? AND leave_type_id = ?',
-        [days, lr.user_id, lr.leave_type_id]
-      );
-    }
+    // Use the pre-computed days stored at submission time (respects half-day, holidays, working days)
+    // Allocated Leave is NEVER reduced when leave is approved.
+    // Used Leave is tracked dynamically via the leave_requests.days column.
 
     await pool.query(
       `UPDATE leave_requests SET status = ?, approver_id = ?, approved_date = NOW(),
@@ -500,18 +747,20 @@ router.put('/:id/approve', auth, async (req, res, next) => {
       [action, req.user.id, action === 'rejected' ? (rejection_reason || null) : null, req.params.id]
     );
 
-    // Notify employee
+    // Notify employee (only if they have leave_updates enabled)
     const statusLabel = action === 'approved' ? 'approved' : 'rejected';
-    await pool.query(
-      `INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)`,
-      [
-        lr.user_id,
-        `leave_${action}`,
-        `Leave Request ${action === 'approved' ? 'Approved' : 'Rejected'}`,
-        `Your leave request has been ${statusLabel}${rejection_reason && action === 'rejected' ? ': ' + rejection_reason : ''}`,
-        `/leaves`,
-      ]
-    );
+    if (await isNotificationAllowed(lr.user_id, `leave_${action}`)) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)`,
+        [
+          lr.user_id,
+          `leave_${action}`,
+          `Leave Request ${action === 'approved' ? 'Approved' : 'Rejected'}`,
+          `Your leave request has been ${statusLabel}${rejection_reason && action === 'rejected' ? ': ' + rejection_reason : ''}`,
+          `/leaves`,
+        ]
+      );
+    }
 
     res.json({ message: t(req.lang, `success.leaveRequest${action === 'approved' ? 'Approved' : 'Rejected'}`) });
   } catch (err) { next(err); }
@@ -533,13 +782,8 @@ router.put('/:id/cancel', auth, async (req, res, next) => {
       return res.json({ message: t(req.lang, 'success.leaveRequestCancelled') });
     }
 
-    if (lr.status === 'approved') {
-      const days = calcDays(lr.start_date, lr.end_date);
-      await pool.query(
-        'UPDATE leave_allocations SET allocated_days = allocated_days + ? WHERE user_id = ? AND leave_type_id = ?',
-        [days, lr.user_id, lr.leave_type_id]
-      );
-    }
+    // Allocated Leave was never reduced on approval, so no restoration is needed on cancel.
+    // The approved leave simply remains recorded in leave_requests for historical tracking.
 
     await pool.query(
       'UPDATE leave_requests SET status = \'cancelled\', approver_id = ?, approved_date = NOW() WHERE id = ?',
@@ -547,12 +791,14 @@ router.put('/:id/cancel', auth, async (req, res, next) => {
     );
 
     if (lr.user_id !== req.user.id) {
-      await pool.query(
-        `INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)`,
-        [lr.user_id, 'leave_cancelled', 'Leave Request Cancelled',
-         `Your leave request was cancelled by ${req.user.first_name} ${req.user.last_name}`,
-         `/leaves`]
-      );
+      if (await isNotificationAllowed(lr.user_id, 'leave_cancelled')) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)`,
+          [lr.user_id, 'leave_cancelled', 'Leave Request Cancelled',
+           `Your leave request was cancelled by ${req.user.first_name} ${req.user.last_name}`,
+           `/leaves`]
+        );
+      }
     }
 
     res.json({ message: t(req.lang, 'success.leaveRequestCancelled') });

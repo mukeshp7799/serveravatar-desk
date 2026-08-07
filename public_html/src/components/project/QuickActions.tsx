@@ -15,7 +15,7 @@ interface QuickActionsProps {
  */
 export default function QuickActions({ actions }: QuickActionsProps) {
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm p-3">
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm p-3 card-hover">
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
         {actions.map((a) => (
           <Link

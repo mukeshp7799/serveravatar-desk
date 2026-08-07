@@ -6,6 +6,8 @@ const express = require('express');
 const pool = require('../config/database');
 const { auth, requirePermission } = require('../middleware/auth');
 const { t } = require('../i18n');
+const { getCompanySetting, nowInTimezone, formatDateTime } = require('../utils/timezone');
+const { isNotificationAllowed } = require('../utils/notificationPreferences');
 
 const router = express.Router();
 
@@ -84,7 +86,18 @@ async function createAnnouncementNotifications(announcementId, audienceTarget, t
 
     if (userIds.length === 0) return;
 
-    const values = userIds.map(uid => [
+    // Filter to only users who have company_announcements enabled (or no preference record)
+    const [prefRows] = await pool.query(
+      `SELECT user_id FROM notification_preferences
+       WHERE user_id IN (?) AND company_announcements = FALSE`,
+      [userIds]
+    );
+    const optedOut = new Set(prefRows.map(r => r.user_id));
+    const eligibleUserIds = userIds.filter(id => !optedOut.has(id));
+
+    if (eligibleUserIds.length === 0) return;
+
+    const values = eligibleUserIds.map(uid => [
       uid, 'announcement_published', null, null,
       'New Announcement', title, '/announcements?id=' + announcementId, 0
     ]);
@@ -332,6 +345,7 @@ router.get('/:id', async (req, res, next) => {
 // ============================================================
 router.post('/', requirePermission('announcements.create'), async (req, res, next) => {
   try {
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
     var {
       title, content, priority, status,
       publish_date, expiry_date,
@@ -353,7 +367,7 @@ router.post('/', requirePermission('announcements.create'), async (req, res, nex
 
     var publishDateVal = null;
     if (publish_date) publishDateVal = publish_date;
-    else if (status === 'published') publishDateVal = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    else if (status === 'published') publishDateVal = nowInTimezone(tz).toISOString().slice(0, 19).replace('T', ' ');
 
     var [result] = await pool.query(
       'INSERT INTO announcements (title, content, priority, status, publish_date, expiry_date, audience_target, target_ids, posted_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -378,6 +392,7 @@ router.post('/', requirePermission('announcements.create'), async (req, res, nex
 // ============================================================
 router.put('/:id', requirePermission('announcements.create'), async (req, res, next) => {
   try {
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
     var [existing] = await pool.query('SELECT * FROM announcements WHERE id = ?', [req.params.id]);
     if (existing.length === 0) return res.status(404).json({ error: 'Announcement not found' });
 
@@ -413,7 +428,7 @@ router.put('/:id', requirePermission('announcements.create'), async (req, res, n
 
     var publishDateVal = ann.publish_date;
     if (publish_date !== undefined) publishDateVal = publish_date;
-    else if (status === 'published' && !ann.publish_date) publishDateVal = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    else if (status === 'published' && !ann.publish_date) publishDateVal = nowInTimezone(tz).toISOString().slice(0, 19).replace('T', ' ');
 
     var isPinnedVal = (is_pinned !== undefined) ? (is_pinned ? 1 : 0) : ann.is_pinned;
 
@@ -576,6 +591,7 @@ router.patch('/:id/pin', requirePermission('announcements.manage'), async (req, 
 // ============================================================
 router.post('/:id/restore', requirePermission('announcements.manage'), async (req, res, next) => {
   try {
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
     var [existing] = await pool.query('SELECT id, status, audience_target, target_ids, title, posted_by FROM announcements WHERE id = ?', [req.params.id]);
     if (existing.length === 0) return res.status(404).json({ error: 'Announcement not found' });
 
@@ -585,7 +601,7 @@ router.post('/:id/restore', requirePermission('announcements.manage'), async (re
     }
 
     var publishDateVal = ann.posted_by !== req.user.id
-      ? new Date().toISOString().slice(0, 19).replace('T', ' ')
+      ? nowInTimezone(tz).toISOString().slice(0, 19).replace('T', ' ')
       : null;
 
     await pool.query(

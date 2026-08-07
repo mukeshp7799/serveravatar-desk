@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import api from '@/lib/api'
+import { useDateSettings } from '@/contexts/CompanySettingsContext'
 import PageLoader from '@/components/PageLoader'
 import {
   BarChart3, Users, Clock, Palmtree, FolderKanban, ListChecks,
@@ -21,7 +22,7 @@ type ReportTab = 'overview'|'employees'|'attendance'|'leaves'|'projects'|'tasks'
 // ─── Helpers ──────────────────────────────────────────────────
 const fmt = (v: any, f = '—') => v == null ? f : String(v)
 
-function fmtDate(s: any): string {
+function fmtDateDefault(s: any): string {
   if (!s) return '—'
   const d = String(s).trim()
   if (/^\d{4}-\d{2}-\d{2}/.test(d)) {
@@ -581,7 +582,7 @@ function AttendanceTab({ ch }: { ch: any }) {
            recent.length===0?<div className="p-6 text-center text-xs text-gray-400">No records</div>:
            recent.map((r:any)=>(
             <RecentItem key={r.id} label={`${r.first_name} ${r.last_name}`}
-              sub={`${fmtDate(r.date)} · ${r.department_name||'No dept'}`}
+              sub={`${fmtDateDefault(r.date)} · ${r.department_name||'No dept'}`}
               badge={<span className={`inline-flex items-center gap-0.5 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold ${
                 r.status==='clocked_in'?'bg-emerald-50 text-emerald-700':
                 r.status==='working'?'bg-blue-50 text-blue-700':
@@ -683,7 +684,7 @@ function LeaveTab({ ch }: { ch: any }) {
            recent.length===0?<div className="p-6 text-center text-xs text-gray-400">No leave requests</div>:
            recent.map((r:any)=>(
             <RecentItem key={r.id} label={`${r.first_name} ${r.last_name}`}
-              sub={`${r.leave_type||'Leave'} · ${fmtDate(r.start_date)} – ${fmtDate(r.end_date)}`}
+              sub={`${r.leave_type||'Leave'} · ${fmtDateDefault(r.start_date)} – ${fmtDateDefault(r.end_date)}`}
               badge={<span className={`inline-flex px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold ${
                 r.status==='approved'?'bg-emerald-50 text-emerald-700':
                 r.status==='pending'?'bg-amber-50 text-amber-700':'bg-red-50 text-red-700'
@@ -868,6 +869,20 @@ export default function ReportsPage() {
   const perms: string[] = Array.isArray(user.permissions) ? user.permissions : []
   const canExport = perms.includes('reports.export')
 
+
+  const { date_format } = useDateSettings();
+  const fmtDate = (s: any): string => {
+    if (!s) return '';
+    const str = String(s);
+    const parts = str.split('T')[0].split('-');
+    const [y, m, day] = parts.map(Number);
+    if (parts.length < 3 || isNaN(y)) return str;
+    const pattern = date_format || 'YYYY-MM-DD';
+    return pattern
+      .replace('YYYY', String(y)).replace('YY', String(y).slice(-2))
+      .replace('MM', String(m).padStart(2,'0')).replace('M', String(m))
+      .replace('DD', String(day).padStart(2,'0')).replace('D', String(day));
+  };
   const [tab, setTab] = useState<ReportTab>('overview')
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState<any>(null)
@@ -938,3 +953,4 @@ export default function ReportsPage() {
     </div>
   )
 }
+

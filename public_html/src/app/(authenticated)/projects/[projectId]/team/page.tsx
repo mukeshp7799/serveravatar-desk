@@ -384,7 +384,7 @@ export default function TeamPage() {
         {/* Pending Invitations section */}
         {initialized && pendingInvitations.length > 0 && (
           <>
-            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-amber-200 dark:border-amber-800 shadow-sm overflow-hidden">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-amber-200 dark:border-amber-800 shadow-sm overflow-hidden card-hover">
               <div className="px-4 sm:px-5 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
                 <Clock size={14} strokeWidth={2.25} className="text-amber-600 dark:text-amber-400" />
                 <h3 className="text-sm font-bold text-gray-900 dark:text-white">Pending invitations</h3>
@@ -450,7 +450,7 @@ export default function TeamPage() {
 
         {/* Members list */}
         {initialized && members.length > 0 && (
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden card-hover">
             <ul className="divide-y divide-gray-100 dark:divide-gray-800">
               {members.map((m) => {
                 const ownerFlag = isOwner(m)

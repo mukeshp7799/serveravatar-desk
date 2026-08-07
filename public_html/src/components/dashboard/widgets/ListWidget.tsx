@@ -16,7 +16,7 @@ interface ListWidgetProps {
 
 export default function ListWidget({ title, icon: Icon, items, emptyText, renderItem, viewAllHref, viewAllLabel = 'View All →', delay = 0, headerAction }: ListWidgetProps) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-fade-in-up" style={{ animationDelay: `${delay}ms` }}>
+    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden card-hover animate-fade-in-up" style={{ animationDelay: `${delay}ms` }}>
       <div className="border-b border-gray-200 px-5 py-4 flex justify-between items-center">
         <div className="flex items-center gap-2 text-gray-900">
           <Icon size={20} strokeWidth={2.5} />

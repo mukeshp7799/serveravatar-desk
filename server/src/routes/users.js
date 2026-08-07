@@ -114,7 +114,7 @@ router.put('/:id', auth, async (req, res, next) => {
     }
     const updates = [];
     const params = [];
-    const { firstName, lastName, roleId, departmentId, designation, managerId, status, phone, address } = req.body;
+    const { firstName, lastName, roleId, departmentId, designation, managerId, status, phone, address, personalEmail, bio, socialLinks } = req.body;
 
     if (firstName !== undefined) { updates.push('first_name = ?'); params.push(firstName); }
     if (lastName !== undefined) { updates.push('last_name = ?'); params.push(lastName); }
@@ -125,6 +125,12 @@ router.put('/:id', auth, async (req, res, next) => {
     if (status !== undefined) { updates.push('status = ?'); params.push(status); }
     if (phone !== undefined) { updates.push('phone = ?'); params.push(phone); }
     if (address !== undefined) { updates.push('address = ?'); params.push(address); }
+    if (personalEmail !== undefined) { updates.push('personal_email = ?'); params.push(personalEmail); }
+    if (bio !== undefined) { updates.push('bio = ?'); params.push(bio); }
+    if (socialLinks !== undefined) {
+      updates.push('social_links = ?');
+      params.push(typeof socialLinks === 'object' ? JSON.stringify(socialLinks) : socialLinks);
+    }
 
     if (updates.length === 0) return res.status(400).json({ error: t(req.lang, 'errors.noFieldsToUpdate') });
 

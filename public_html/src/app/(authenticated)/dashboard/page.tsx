@@ -6,11 +6,16 @@ import {
   Users, Gem, CheckSquare, Clock, Palmtree, Bell, Megaphone,
   Calendar, PartyPopper, Star, ChevronRight, AlertCircle,
   CalendarDays, ArrowRight, Coffee, LogIn, LogOut,
-  Pause, Loader2, CheckSquare as Check, Target
+  Pause, Loader2, CheckSquare as Check, Target,
+  Sparkles, TrendingUp, Activity, Flame, Award, Zap
 } from 'lucide-react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import PendingInvitationsBanner from '@/components/dashboard/PendingInvitationsBanner';
+import StatCard from '@/components/dashboard/widgets/StatCard';
+import GradientCard from '@/components/dashboard/widgets/GradientCard';
+import { useDateSettings } from '@/contexts/CompanySettingsContext';
+import { formatDateOnly, formatTimeOnly } from '@/lib/dateFormat';
 
 // Locale map
 const localeMap: Record<string, string> = {
@@ -18,10 +23,14 @@ const localeMap: Record<string, string> = {
 };
 
 // Formatters
-function fmtTime(ts: string | null | undefined) {
+// Replaced with useDateSettings - keep as fallback
+function fmtTimeFallback(ts: string | null | undefined, timeFormat = '24h', tz = 'UTC') {
   if (!ts) return '--:--';
-  try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
-  catch { return '--:--'; }
+  try {
+    const date = new Date(ts);
+    const opts: Intl.DateTimeFormatOptions = { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: timeFormat === '12h' };
+    return new Intl.DateTimeFormat('en-GB', opts).format(date);
+  } catch { return '--:--'; }
 }
 
 function fmtDuration(minutes: number) {
@@ -31,9 +40,21 @@ function fmtDuration(minutes: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-function fmtDateStr(d: string) {
-  try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
-  catch { return d; }
+function fmtDateStrFallback(d: string, dateFormat = 'YYYY-MM-DD', tz = 'UTC') {
+  if (!d) return '';
+  try {
+    const date = new Date(d + 'T00:00:00');
+    // Apply company date format pattern
+    const y = date.getFullYear();
+    const m = date.getMonth() + 1;
+    const day = date.getDate();
+    const pattern = dateFormat; // e.g. 'DD/MM/YYYY'
+    const result = pattern
+      .replace('YYYY', String(y)).replace('YY', String(y).slice(-2))
+      .replace('MM', String(m).padStart(2,'0')).replace('M', String(m))
+      .replace('DD', String(day).padStart(2,'0')).replace('D', String(day));
+    return result;
+  } catch { return d; }
 }
 
 function fmtNotifTime(ts: string) {
@@ -46,7 +67,7 @@ function fmtNotifTime(ts: string) {
     if (diffH < 24) return `${diffH}h ago`;
     const diffD = Math.floor(diffH / 24);
     if (diffD < 7) return `${diffD}d ago`;
-    return fmtDateStr(ts);
+    return fmtDateStrFallback(ts);
   } catch { return ''; }
 }
 
@@ -99,6 +120,12 @@ function ActionBtn({ label, icon: Icon, onClick, loading, disabled, variant = 'p
 }
 
 export default function DashboardPage() {
+
+  const { timezone, date_format, time_format } = useDateSettings();
+  // Context-aware date/time formatters
+  const fmtTime = (ts: string | null | undefined) => fmtTimeFallback(ts, time_format, timezone);
+  const fmtDateStr = (d: string) => fmtDateStrFallback(d, date_format, timezone);
+
   const { t, i18n } = useTranslation();
   const [dashData, setDashData] = useState<any>(null);
   const [calData, setCalData] = useState<any>(null);
@@ -191,21 +218,42 @@ export default function DashboardPage() {
   const hasCalendar = has('calendar.view');
 
   return (
-    <div className="px-4 py-6 space-y-6">
+    <div className="px-4 sm:px-6 py-5 space-y-4">
 
-      {/* Greeting Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{greeting} 👋</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{now.date} · {now.time}</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {hasApply && <Link href="/leaves" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition no-underline flex items-center gap-1.5">
-            <Palmtree size={14} /> Apply Leave
-          </Link>}
-          {hasCalendar && <Link href="/calendar" className="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:border-indigo-300 text-gray-700 dark:text-gray-200 text-sm font-semibold rounded-xl transition no-underline flex items-center gap-1.5">
-            <Calendar size={14} /> Calendar
-          </Link>}
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* ══ HERO BANNER ═══════════════════════════════════════════════════════ */}
+      {/* ══════════════════════════════════════════════════════════════════════ */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500/90 via-purple-600/85 to-pink-600/80 dark:from-indigo-700/60 dark:via-purple-800/55 dark:to-pink-900/50 p-6 sm:p-8 text-white shadow-xl shadow-indigo-500/20 animate-page-zoom-in border border-white/10 dark:border-white/5">
+        {/* Decorative blobs */}
+        <div className="absolute -top-12 -right-12 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-16 -left-16 w-56 h-56 bg-pink-400/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-yellow-300/10 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            {/* Avatar circle */}
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl sm:text-3xl font-black text-white shadow-lg border border-white/30 shrink-0">
+              {(() => {
+                const firstName = storedUser.firstName || ''
+                const lastName = storedUser.lastName || ''
+                const initials = (firstName[0] || '') + (lastName[0] || (firstName[1] || ''))
+                return initials.toUpperCase() || 'U'
+              })()}
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight mb-1">
+                {storedUser.firstName || storedUser.first_name || 'User'} {storedUser.lastName || storedUser.last_name || ''}
+              </h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold border border-white/20">
+                  {storedUser.roleName || 'User'}
+                </span>
+                <span className="text-white/60 text-xs">{now.date}</span>
+                <span className="text-white/60 text-xs">·</span>
+                <span className="text-white/60 text-xs">{now.time}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -214,44 +262,20 @@ export default function DashboardPage() {
       {/* Stat Cards Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {hasHR && (
-          <div className="rounded-xl p-4 flex items-center gap-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:shadow-md transition cursor-pointer">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-              <Users size={22} className="text-blue-600" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white leading-none">{hrStats.totalEmployees ?? '-'}</div>
-              <div className="text-xs font-medium text-gray-500 mt-1">Total Employees</div>
-            </div>
-          </div>
+          <Link href="/employees" className="no-underline">
+            <StatCard label="Total Employees" value={hrStats.totalEmployees ?? '-'} icon={Users} color="text-blue-600" bgColor="bg-blue-50" delay={0} />
+          </Link>
         )}
-        <div className="rounded-xl p-4 flex items-center gap-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:shadow-md transition cursor-pointer">
-          <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
-            <Gem size={22} className="text-purple-600" />
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white leading-none">{myProjects.length}</div>
-            <div className="text-xs font-medium text-gray-500 mt-1">My Projects</div>
-          </div>
-        </div>
-        <div className="rounded-xl p-4 flex items-center gap-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:shadow-md transition">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
-            <CheckSquare size={22} className="text-emerald-600" />
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white leading-none">{myTasks.length}</div>
-            <div className="text-xs font-medium text-gray-500 mt-1">My Tasks</div>
-          </div>
-        </div>
+        <Link href="/projects" className="no-underline">
+          <StatCard label="My Projects" value={myProjects.length} icon={Gem} color="text-purple-600" bgColor="bg-purple-50" delay={50} />
+        </Link>
+        <Link href="/projects" className="no-underline">
+          <StatCard label="My Tasks" value={myTasks.length} icon={CheckSquare} color="text-emerald-600" bgColor="bg-emerald-50" delay={100} />
+        </Link>
         {hasApprove && (
-          <div className="rounded-xl p-4 flex items-center gap-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:shadow-md transition cursor-pointer">
-            <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
-              <Clock size={22} className="text-orange-600" />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white leading-none">{pendingApprovals.length}</div>
-              <div className="text-xs font-medium text-gray-500 mt-1">Pending Approvals</div>
-            </div>
-          </div>
+          <Link href="/leaves" className="no-underline">
+            <StatCard label="Pending Approvals" value={pendingApprovals.length} icon={Clock} color="text-orange-600" bgColor="bg-orange-50" delay={150} />
+          </Link>
         )}
       </div>
 
@@ -260,35 +284,23 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {calData?.todaysHoliday && (
             <Link href="/calendar" className="no-underline">
-              <div className="bg-gradient-to-br from-red-500 to-rose-600 rounded-xl p-4 text-white h-full">
-                <div className="flex items-center gap-2 mb-2">
-                  <Calendar size={14} className="opacity-80" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Today&apos;s Holiday</span>
-                </div>
-                <div className="font-bold text-sm leading-tight">{calData.todaysHoliday.name}</div>
-              </div>
+              <GradientCard gradient="from-red-500 to-rose-600" icon={Calendar} label="Today's Holiday" title={calData.todaysHoliday.name} delay={200} />
             </Link>
           )}
           {calData?.onLeaveToday?.length > 0 && (
-            <div className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl p-4 text-white">
-              <div className="flex items-center gap-2 mb-2">
-                <Bell size={14} className="opacity-80" />
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">On Leave Today</span>
-              </div>
-              <div className="font-bold text-sm">{calData.onLeaveToday.length} Employee{calData.onLeaveToday.length > 1 ? 's' : ''}</div>
-            </div>
+            <GradientCard
+              gradient="from-orange-500 to-amber-600"
+              icon={Bell}
+              label="On Leave Today"
+              title={`${calData.onLeaveToday.length} Employee${calData.onLeaveToday.length > 1 ? 's' : ''}`}
+              delay={250}
+            />
           )}
           {calData?.upcomingBirthdays?.length > 0 && (() => {
             const b = calData.upcomingBirthdays[0];
             return (
               <Link href="/calendar" className="no-underline">
-                <div className="bg-gradient-to-br from-pink-500 to-rose-500 rounded-xl p-4 text-white h-full">
-                  <div className="flex items-center gap-2 mb-2">
-                    <PartyPopper size={14} className="opacity-80" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Next Birthday</span>
-                  </div>
-                  <div className="font-bold text-sm">{b.first_name} {b.last_name}</div>
-                </div>
+                <GradientCard gradient="from-pink-500 to-rose-500" icon={PartyPopper} label="Next Birthday" title={`${b.first_name} ${b.last_name}`} delay={300} />
               </Link>
             );
           })()}
@@ -296,28 +308,22 @@ export default function DashboardPage() {
             const ev = calData.upcomingEvents[0];
             return (
               <Link href="/calendar" className="no-underline">
-                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-4 text-white h-full">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Star size={14} className="opacity-80" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Next Event</span>
-                  </div>
-                  <div className="font-bold text-sm truncate">{ev.title}</div>
-                </div>
+                <GradientCard gradient="from-blue-500 to-indigo-600" icon={Star} label="Next Event" title={ev.title} delay={350} />
               </Link>
             );
           })()}
         </div>
       )}
 
-      {/* 3-Column Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {/* 2-Column Main Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* LEFT COLUMN */}
-        <div className="space-y-5">
+        <div className="space-y-4">
 
           {/* Interactive Attendance Tracker */}
           {hasAttendance && (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 overflow-hidden shadow-sm hover:shadow-md card-hover-animate card-animate-in">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
@@ -399,7 +405,7 @@ export default function DashboardPage() {
 
           {/* Leave Balances */}
           {hasApply && (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 overflow-hidden shadow-sm hover:shadow-md card-hover-animate card-animate-in">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
@@ -436,7 +442,7 @@ export default function DashboardPage() {
 
           {/* Work Anniversaries */}
           {hasCalendar && calData?.upcomingAnniversaries?.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 overflow-hidden shadow-sm hover:shadow-md card-hover-animate card-animate-in">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
@@ -461,12 +467,12 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* MIDDLE COLUMN */}
-        <div className="space-y-5">
+        {/* RIGHT COLUMN */}
+        <div className="space-y-4">
 
           {/* Pending Approvals */}
           {hasApprove && (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 overflow-hidden shadow-sm hover:shadow-md card-hover-animate card-animate-in">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
@@ -503,7 +509,7 @@ export default function DashboardPage() {
           )}
 
           {/* My Tasks */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 overflow-hidden shadow-sm hover:shadow-md card-hover-animate card-animate-in">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
@@ -538,7 +544,7 @@ export default function DashboardPage() {
           </div>
 
           {/* My Projects */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 overflow-hidden shadow-sm hover:shadow-md card-hover-animate card-animate-in">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
@@ -576,12 +582,10 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-
-        {/* RIGHT COLUMN */}
-        <div className="space-y-5">
+        <div className="space-y-4">
 
           {/* Announcements */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 overflow-hidden shadow-sm hover:shadow-md card-hover-animate card-animate-in">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
@@ -620,7 +624,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Notifications */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 overflow-hidden shadow-sm hover:shadow-md card-hover-animate card-animate-in">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
@@ -666,7 +670,7 @@ export default function DashboardPage() {
 
           {/* Upcoming Events */}
           {hasCalendar && calData?.upcomingEvents?.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200/60 dark:border-gray-700/60 overflow-hidden shadow-sm hover:shadow-md card-hover-animate card-animate-in">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">

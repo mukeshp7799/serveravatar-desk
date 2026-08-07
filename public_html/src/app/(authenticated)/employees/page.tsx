@@ -191,7 +191,7 @@ export default function EmployeesPage() {
               const initials = `${emp.first_name?.[0] || ''}${emp.last_name?.[0] || ''}`.toUpperCase()
               return (
                 <Link key={emp.id} href={`/employees/${emp.id}`}
-                  className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-600 transition-all no-underline block group">
+                  className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 card-hover no-underline block group">
                   <div className="flex items-start gap-3 mb-3">
                     {emp.avatar_url
                       ? <img src={emp.avatar_url} alt={initials} className="w-12 h-12 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 shrink-0" />

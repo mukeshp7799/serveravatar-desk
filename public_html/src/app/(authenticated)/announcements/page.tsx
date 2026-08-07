@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { Megaphone, Pencil, Trash2, Bell, Users, ShieldCheck, UserCheck, Calendar, Clock, X, Pin, PinOff, RotateCcw } from 'lucide-react'
 import api from '@/lib/api'
+import { useDateSettings } from '@/contexts/CompanySettingsContext'
 import { announcementSchema, type AnnouncementInput } from '@/lib/schemas'
 import type { Reaction } from '@/types/project'
 
@@ -67,7 +68,8 @@ const audienceLabel: Record<string, string> = {
   everyone: 'Everyone', departments: 'Departments', roles: 'Roles', employees: 'Selected People',
 }
 
-function AnnouncementCard({ ann, onEdit, onDelete, onReact, onPin, onRestore, currentUserId, canManage }: {
+function AnnouncementCard({
+ ann, onEdit, onDelete, onReact, onPin, onRestore, currentUserId, canManage }: {
   ann: Announcement
   onEdit: (a: Announcement) => void
   onDelete: (id: number) => void
@@ -77,6 +79,20 @@ function AnnouncementCard({ ann, onEdit, onDelete, onReact, onPin, onRestore, cu
   currentUserId: number
   canManage: boolean
 }) {
+  const { date_format } = useDateSettings();
+  const fmtDate = (raw: string | Date | null | undefined): string => {
+    if (!raw) return '';
+    const d = typeof raw === 'string' ? new Date(raw) : raw;
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    const pattern = date_format || 'YYYY-MM-DD';
+    return pattern
+      .replace('YYYY', String(y)).replace('YY', String(y).slice(-2))
+      .replace('MM', String(m).padStart(2,'0')).replace('M', String(m))
+      .replace('DD', String(day).padStart(2,'0')).replace('D', String(day));
+  };
+
   const [showReactions, setShowReactions] = useState(false)
   const reactionRef = useRef<HTMLDivElement>(null)
   const AudienceIcon = audienceIcon[ann.audience_target] || Bell
@@ -139,7 +155,7 @@ function AnnouncementCard({ ann, onEdit, onDelete, onReact, onPin, onRestore, cu
                   <span className="font-semibold">{ann.poster_name}</span>
                 </div>
                 <span>•</span>
-                <span>{new Date(ann.created_at).toLocaleDateString()}</span>
+                <span>{fmtDate(ann.created_at)}</span>
               </div>
             </div>
           </div>
@@ -203,7 +219,7 @@ function AnnouncementCard({ ann, onEdit, onDelete, onReact, onPin, onRestore, cu
           <div className="flex items-center gap-2 text-xs text-gray-400">
             {ann.expiry_date && (
               <span className="flex items-center gap-1" title="Expires">
-                <Clock size={11} /> {new Date(ann.expiry_date) < new Date() ? 'Expired' : 'Expires ' + new Date(ann.expiry_date).toLocaleDateString()}
+                <Clock size={11} /> {new Date(ann.expiry_date) < new Date() ? 'Expired' : 'Expires ' + fmtDate(ann.expiry_date)}
               </span>
             )}
           </div>
@@ -403,6 +419,20 @@ function CreateEditModal({ ann, lookups, onClose, onSaved }: {
 
 export default function AnnouncementsPage() {
   const { t } = useTranslation()
+
+  const { timezone, date_format } = useDateSettings();
+  const fmtDate = (raw: string | Date | null | undefined): string => {
+    if (!raw) return '';
+    const d = typeof raw === 'string' ? new Date(raw) : raw;
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    const pattern = date_format || 'YYYY-MM-DD';
+    return pattern
+      .replace('YYYY', String(y)).replace('YY', String(y).slice(-2))
+      .replace('MM', String(m).padStart(2,'0')).replace('M', String(m))
+      .replace('DD', String(day).padStart(2,'0')).replace('D', String(day));
+  };
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<AnnTab>('all')

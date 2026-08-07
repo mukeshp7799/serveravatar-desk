@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import api from '@/lib/api';
+import api from '@/lib/api'
+import { useDateSettings } from '@/contexts/CompanySettingsContext';
 import toast from 'react-hot-toast';
 
 const TYPE_COLORS: Record<string, string> = {
@@ -34,7 +35,7 @@ function fmtDate(dateStr: string): string {
   return `${MONTHS[month]} ${day}`
 }
 
-function formatDate(d: Date) { const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return y + '-' + m + '-' + day; }
+// formatDate moved inside component for context-awareness
 function sameDay(a: Date, b: Date) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
 function fmtLong(d: string) {
   try { return new Date(d).toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }); }
@@ -381,6 +382,18 @@ function ItemModal({ item, onClose, onSave, canManage }: {
 
 // ─── Main Calendar Page ────────────────────────────────────────────
 export default function CalendarPage() {
+
+  const { timezone, date_format } = useDateSettings();
+  const formatDate = (d: Date): string => {
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    const pattern = date_format || 'YYYY-MM-DD';
+    return pattern
+      .replace('YYYY', String(y)).replace('YY', String(y).slice(-2))
+      .replace('MM', String(m).padStart(2,'0')).replace('M', String(m))
+      .replace('DD', String(day).padStart(2,'0')).replace('D', String(day));
+  };
   const [view, setView] = useState<'month'|'week'|'day'|'agenda'>('month');
   const [current, setCurrent] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);

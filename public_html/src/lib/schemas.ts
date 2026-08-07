@@ -105,6 +105,14 @@ export const profileSchema = z.object({
   lastName: z.string().min(1, 'Last name is required').max(50),
   phone: z.string().max(30).optional(),
   address: z.string().max(300).optional(),
+  personalEmail: z.string().email('Please enter a valid personal email').optional().or(z.literal('')),
+  emergencyContactName: z.string().max(100).optional(),
+  emergencyContactPhone: z.string().max(30).optional(),
+  bio: z.string().max(1000).optional(),
+  linkedin: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
+  twitter: z.string().max(100).optional(),
+  github: z.string().max(100).optional(),
+  website: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
 });
 export type ProfileInput = z.infer<typeof profileSchema>;
 
