@@ -11,7 +11,7 @@ import {
   Briefcase, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react'
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// --- Helpers -----------------------------------------------------------------
 
 function fmtDate(raw: string | null | undefined): string {
   if (!raw) return '—'
@@ -83,7 +83,7 @@ const TIMELINE_STATUS_META: Record<string, { label: string; color: string; bg: s
   weekend:  { label: 'Weekend',   color: 'text-amber-600',   bg: 'bg-amber-50',      textColor: 'border-amber-200' },
 }
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
+// --- Types ---------------------------------------------------------------------
 
 type TopTab = 'today' | 'history' | 'team' | 'reports'
 type ReportSubTab = 'summary' | 'timeline'
@@ -110,7 +110,7 @@ interface Break {
   id: number; attendance_id: number; start_time: string; end_time: string | null; duration_minutes: number
 }
 
-// ─── Status Badge ─────────────────────────────────────────────────────────────
+// --- Status Badge -------------------------------------------------------------
 
 function statusBadge(s: string) {
   const m = STATUS_META[s] || STATUS_META.absent
@@ -122,7 +122,7 @@ function statusBadge(s: string) {
   )
 }
 
-// ─── Edit Modal ───────────────────────────────────────────────────────────────
+// --- Edit Modal ---------------------------------------------------------------
 
 function EditModal({ day, onClose, onSave }: {
   day: TimelineDay; onClose: () => void; onSave: () => void
@@ -134,6 +134,16 @@ function EditModal({ day, onClose, onSave }: {
   const [remarks, setRemarks] = useState(day.remarks || '')
   const [breaks, setBreaks] = useState<Break[]>(day.breaks)
   const [newBreakStart, setNewBreakStart] = useState('')
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    const scrollY = window.scrollY
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+      window.scrollTo(0, scrollY)
+    }
+  }, [])
   const [newBreakEnd, setNewBreakEnd] = useState('')
 
   async function handleSave() {
@@ -204,9 +214,10 @@ function EditModal({ day, onClose, onSave }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 rounded-t-2xl">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-black/50 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full h-[80vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-gray-800 rounded-t-2xl">
           <div>
             <h2 className="text-base font-bold text-gray-900 dark:text-white">Edit Attendance</h2>
             <p className="text-xs text-gray-500 mt-0.5">{fmtDate(day.date)} — {DAY_LABELS[day.day_of_week]}</p>
@@ -214,7 +225,8 @@ function EditModal({ day, onClose, onSave }: {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
         </div>
 
-        <div className="p-5 space-y-4">
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {/* Status */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Attendance Status</label>
@@ -282,24 +294,25 @@ function EditModal({ day, onClose, onSave }: {
               </button>
             </div>
           </div>
+        </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
-              Cancel
-            </button>
-            <button onClick={handleSave} disabled={saving}
-              className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
+        {/* Footer */}
+        <div className="shrink-0 flex justify-end gap-3 p-5 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-b-2xl">
+          <button onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
+            Cancel
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
         </div>
       </div>
     </div>
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// --- Main Page ----------------------------------------------------------------
 
 export default function AttendancePage() {
   const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
@@ -308,25 +321,25 @@ export default function AttendancePage() {
   const canViewTeam = perms.includes('attendance.view_team') || isHRAdmin
   const canClock = perms.includes('attendance.clock_in_out')
 
-  // ── Top-level tabs ─────────────────────────────────────────────────────────
+  // -- Top-level tabs ---------------------------------------------------------
   const [tab, setTab] = useState<TopTab>('today')
   const [loading, setLoading] = useState(true)
 
-  // ── My Today ────────────────────────────────────────────────────────────────
+  // -- My Today ----------------------------------------------------------------
   const [myToday, setMyToday] = useState<any>(null)
   const [myBreaks, setMyBreaks] = useState<any[]>([])
   const [actioning, setActioning] = useState<string | null>(null)
 
-  // ── History ─────────────────────────────────────────────────────────────────
+  // -- History -----------------------------------------------------------------
   const [history, setHistory] = useState<any[]>([])
   const [histPage, setHistPage] = useState(1)
   const [histTotal, setHistTotal] = useState(0)
 
-  // ── Team ────────────────────────────────────────────────────────────────────
+  // -- Team --------------------------------------------------------------------
   const [teamRecords, setTeamRecords] = useState<any[]>([])
   const [stats, setStats] = useState<any>({})
 
-  // ── Reports (HR/Admin) ─────────────────────────────────────────────────────
+  // -- Reports (HR/Admin) -----------------------------------------------------
   const [reportSubTab, setReportSubTab] = useState<ReportSubTab>('summary')
 
   // Shared report filters
@@ -344,7 +357,10 @@ export default function AttendancePage() {
   const [summaries, setSummaries] = useState<Summary[]>([])
   const [sortKey, setSortKey] = useState<string>('')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
-  const [searchQ, setSearchQ] = useState('')
+  const [summPage, setSummPage] = useState(1)
+  const [summLimit, setSummLimit] = useState(10)
+  const [summTotal, setSummTotal] = useState(0)
+  const [summSearch, setSummSearch] = useState('')
 
   // Timeline data
   const [tlUserId, setTlUserId] = useState<string>('')
@@ -359,7 +375,7 @@ export default function AttendancePage() {
   // Edit modal
   const [editDay, setEditDay] = useState<TimelineDay | null>(null)
 
-  // ── Load data ───────────────────────────────────────────────────────────────
+  // -- Load data ---------------------------------------------------------------
 
   const loadToday = async () => {
     try {
@@ -402,22 +418,30 @@ export default function AttendancePage() {
     } catch {}
   }
 
-  const loadSummary = useCallback(async () => {
+  const loadSummary = useCallback(async (page = summPage) => {
     if (!dateFrom || !dateTo) return
     setLoading(true)
     try {
-      const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo })
+      const params = new URLSearchParams({
+        date_from: dateFrom,
+        date_to: dateTo,
+        page: String(page),
+        limit: String(summLimit),
+      })
       if (selDept) params.set('department_id', selDept)
       if (selEmp) params.set('user_id', selEmp)
       if (selStatus) params.set('status', selStatus)
+      if (summSearch) params.set('search', summSearch)
       const r = await api.get(`/attendance/analytics/summary?${params.toString()}`)
       setSummaries(r.summaries || [])
+      setSummPage(r.pagination?.page || page)
+      setSummTotal(r.pagination?.total || 0)
     } catch (err: any) {
       toast.error(err.message || 'Failed to load summary')
     } finally {
       setLoading(false)
     }
-  }, [dateFrom, dateTo, selDept, selEmp, selStatus])
+  }, [dateFrom, dateTo, selDept, selEmp, selStatus, summLimit, summSearch])
 
   const loadTimeline = useCallback(async (empId?: string) => {
     const targetId = empId || tlUserId
@@ -447,9 +471,29 @@ export default function AttendancePage() {
   useEffect(() => {
     if (tab === 'reports') {
       loadReportLookups()
-      loadSummary()
+      setSummPage(1)
+      loadSummary(1)
     }
   }, [tab])
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    if (tab === 'reports' && reportSubTab === 'summary') {
+      setSummPage(1)
+      loadSummary(1)
+    }
+  }, [dateFrom, dateTo, selDept, selEmp, selStatus])
+
+  // Debounced search
+  useEffect(() => {
+    if (tab === 'reports' && reportSubTab === 'summary') {
+      const timer = setTimeout(() => {
+        setSummPage(1)
+        loadSummary(1)
+      }, 400)
+      return () => clearTimeout(timer)
+    }
+  }, [summSearch])
 
   // When switching to timeline sub-tab
   useEffect(() => {
@@ -467,7 +511,7 @@ export default function AttendancePage() {
     }
   }, [tab, reportSubTab])
 
-  // ── Actions ─────────────────────────────────────────────────────────────────
+  // -- Actions -----------------------------------------------------------------
 
   const doAction = async (action: 'clock-in' | 'clock-out' | 'start-break' | 'end-break') => {
     setActioning(action)
@@ -482,7 +526,7 @@ export default function AttendancePage() {
     }
   }
 
-  // ── Report helpers ──────────────────────────────────────────────────────────
+  // -- Report helpers ----------------------------------------------------------
 
   function viewTimeline(emp: Summary) {
     // Set the employee filter to the selected employee
@@ -518,7 +562,7 @@ export default function AttendancePage() {
     setTimeline([])
     setSortKey('')
     setSortDir('asc')
-    setSearchQ('')
+    setSummSearch('')
   }
 
   function handleSort(key: string) {
@@ -536,7 +580,7 @@ export default function AttendancePage() {
     if (tlUserId) loadTimeline(tlUserId)
   }
 
-  // ── Tabs config ─────────────────────────────────────────────────────────────
+  // -- Tabs config -------------------------------------------------------------
 
   const topTabs: { key: TopTab; label: string }[] = [
     { key: 'today', label: 'My Today' },
@@ -552,7 +596,7 @@ export default function AttendancePage() {
   const canStartBreak = myToday && ['clocked_in', 'working'].includes(myToday.status) && myToday.status !== 'on_break' && canClock
   const canEndBreak = myToday && myToday.status === 'on_break' && canClock
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+  // --- Render -----------------------------------------------------------------
 
   return (
     <div className="w-full px-4 py-6 space-y-5 animate-fade-in-up">
@@ -594,9 +638,9 @@ export default function AttendancePage() {
         ))}
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════ */}
-      {/* ══ MY TODAY TAB ═══════════════════════════════════════════════════ */}
-      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* ====================================================================== */}
+      {/* == MY TODAY TAB =================================================== */}
+      {/* ====================================================================== */}
       {tab === 'today' && (
         <>
           {loading ? <PageLoader /> : (
@@ -737,9 +781,9 @@ export default function AttendancePage() {
         </>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════════ */}
-      {/* ══ HISTORY TAB ═══════════════════════════════════════════════════════ */}
-      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* ====================================================================== */}
+      {/* == HISTORY TAB ======================================================= */}
+      {/* ====================================================================== */}
       {tab === 'history' && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -793,9 +837,9 @@ export default function AttendancePage() {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════════ */}
-      {/* ══ TEAM TAB ════════════════════════════════════════════════════════ */}
-      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* ====================================================================== */}
+      {/* == TEAM TAB ======================================================== */}
+      {/* ====================================================================== */}
       {tab === 'team' && canViewTeam && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -842,9 +886,9 @@ export default function AttendancePage() {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════════ */}
-      {/* ══ REPORTS TAB (HR/Admin) ════════════════════════════════════════ */}
-      {/* ══════════════════════════════════════════════════════════════════════ */}
+      {/* ====================================================================== */}
+      {/* == REPORTS TAB (HR/Admin) ======================================== */}
+      {/* ====================================================================== */}
       {tab === 'reports' && isHRAdmin && (
         <>
           {/* Sub-tabs: Summary / Timeline */}
@@ -867,7 +911,7 @@ export default function AttendancePage() {
             </button>
           </div>
 
-          {/* ── Shared Filters ───────────────────────────────────────── */}
+          {/* -- Shared Filters ----------------------------------------- */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex flex-wrap gap-3 items-end">
             {/* Date From */}
             <div>
@@ -936,158 +980,202 @@ export default function AttendancePage() {
             </button>
           </div>
 
-          {/* ── SUMMARY SUB-TAB ──────────────────────────────────────── */}
-          {reportSubTab === 'summary' && (
-            <>
-              {(() => {
-                const q = searchQ.toLowerCase()
-                const filtered = summaries.filter(s =>
-                  !q ||
-                  `${s.first_name} ${s.last_name}`.toLowerCase().includes(q) ||
-                  (s.department_name || '').toLowerCase().includes(q) ||
-                  s.email.toLowerCase().includes(q)
-                )
-                const rows = sortKey
-                  ? [...filtered].sort((a, b) => {
-                      let av: any, bv: any
-                      switch (sortKey) {
-                        case 'employee':          av = `${a.first_name} ${a.last_name}`; bv = `${b.first_name} ${b.last_name}`; break
-                        case 'total_days':         av = a.total_days;           bv = b.total_days;           break
-                        case 'working_days':       av = a.working_days;         bv = b.working_days;         break
-                        case 'weekends':           av = a.weekends;             bv = b.weekends;             break
-                        case 'company_holidays':    av = a.company_holidays;     bv = b.company_holidays;     break
-                        case 'present_days':       av = a.present_days;         bv = b.present_days;         break
-                        case 'approved_leave_days':av = a.approved_leave_days;  bv = b.approved_leave_days;  break
-                        case 'absent_days':        av = a.absent_days;          bv = b.absent_days;          break
-                        case 'late_checkins':      av = a.late_checkins;        bv = b.late_checkins;        break
-                        case 'total_working_hours':av = a.total_working_hours;  bv = b.total_working_hours;  break
-                        case 'total_break_minutes':av = a.total_break_minutes;  bv = b.total_break_minutes;  break
-                        case 'average_working_hours':av = a.average_working_hours; bv = b.average_working_hours; break
-                        default: return 0
-                      }
-                      if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv as string) : (bv as string).localeCompare(av)
-                      return sortDir === 'asc' ? (av as number) - (bv as number) : (bv as number) - (av as number)
-                    })
-                  : filtered
-
+                    {/* -- SUMMARY SUB-TAB ---------------------------------------- */}
+          {reportSubTab === 'summary' && (() => {
+                const totalPages = Math.ceil(summTotal / summLimit)
                 const SortTh = ({ col, label, align = 'left' }: { col: string; label: string; align?: string }) => {
                   const active = sortKey === col
                   return (
                     <th
                       onClick={() => handleSort(col)}
-                      className={`px-4 py-3 text-${align} text-xs font-semibold uppercase cursor-pointer select-none whitespace-nowrap ${
-                        active
-                          ? 'text-indigo-600 dark:text-indigo-400'
-                          : 'text-gray-500 dark:text-gray-400'
-                      } hover:text-indigo-500 dark:hover:text-indigo-300 transition-colors`}
+                      className={`px-4 py-3 text-${align} text-xs font-semibold uppercase cursor-pointer select-none whitespace-nowrap ${active ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'} hover:text-indigo-500 dark:hover:text-indigo-300 transition-colors`}
                     >
-                      <span className="flex items-center gap-1.5 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}">
+                      <span className={`flex items-center gap-1.5 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}`}>
                         {label}
-                        {active
-                          ? sortDir === 'asc'
-                            ? <ArrowUp size={11} />
-                            : <ArrowDown size={11} />
-                          : <ArrowUpDown size={11} className="opacity-40" />
-                        }
+                        {active ? sortDir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} /> : <ArrowUpDown size={11} className="opacity-40" />}
                       </span>
                     </th>
                   )
                 }
+                return loading ? <PageLoader /> : (
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    {/* Toolbar */}
+                    <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center gap-3 justify-between">
+                      <div>
+                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">Employee Attendance Summary</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {summTotal === 0 ? 'No' : summTotal} employee{summTotal !== 1 ? 's' : ''} &middot; {fmtDate(dateFrom)} &ndash; {fmtDate(dateTo)}
+                        </p>
+                      </div>
+                      <div className="relative">
+                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={summSearch}
+                          onChange={e => setSummSearch(e.target.value)}
+                          placeholder="Search employee..."
+                          className="pl-8 pr-4 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs w-52 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-400"
+                        />
+                      </div>
+                    </div>
 
-                return loading
-                  ? <PageLoader />
-                  : <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                      {/* Toolbar: search + count */}
-                      <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center gap-3 justify-between">
-                        <div>
-                          <h3 className="text-sm font-bold text-gray-900 dark:text-white">Employee Attendance Summary</h3>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {rows.length} of {summaries.length} employee{summaries.length !== 1 ? 's' : ''} · {fmtDate(dateFrom)} – {fmtDate(dateTo)}
-                            {searchQ && <span className="ml-2 text-indigo-500">· filtered</span>}
-                          </p>
-                        </div>
-                        {/* Search */}
-                        <div className="relative">
-                          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                          <input
-                            type="text"
-                            value={searchQ}
-                            onChange={e => setSearchQ(e.target.value)}
-                            placeholder="Search employee..."
-                            className="pl-8 pr-4 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs w-52 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-400"
-                          />
-                        </div>
+                    {summaries.length === 0 ? (
+                      <div className="p-12 text-center text-gray-400 dark:text-gray-500 text-sm">No data for the selected filters.</div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50 dark:bg-gray-700/50">
+                            <tr>
+                              <SortTh col="employee" label="Employee" />
+                              <SortTh col="total_days" label="Total Days" align="center" />
+                              <SortTh col="working_days" label="Working Days" align="center" />
+                              <SortTh col="weekends" label="Weekends" align="center" />
+                              <SortTh col="company_holidays" label="Company Holidays" align="center" />
+                              <SortTh col="present_days" label="Present Days" align="center" />
+                              <SortTh col="approved_leave_days" label="Approved Leave" align="center" />
+                              <SortTh col="absent_days" label="Absent Days" align="center" />
+                              <SortTh col="late_checkins" label="Late Check-ins" align="center" />
+                              <SortTh col="total_working_hours" label="Total Working Hrs" align="center" />
+                              <SortTh col="total_break_minutes" label="Total Break" align="center" />
+                              <SortTh col="average_working_hours" label="Avg Working Hrs" align="center" />
+                              <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {summaries.map(s => (
+                              <tr key={s.user_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                                <td className="px-4 py-3">
+                                  <div className="font-medium text-gray-900 dark:text-white whitespace-nowrap">{s.first_name} {s.last_name}</div>
+                                  <div className="text-xs text-gray-400">{s.department_name || '—'}</div>
+                                </td>
+                                <td className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-white">{s.total_days}</td>
+                                <td className="px-4 py-3 text-center font-semibold text-blue-600 dark:text-blue-400">{s.working_days}</td>
+                                <td className="px-4 py-3 text-center text-purple-600 dark:text-purple-400">{s.weekends}</td>
+                                <td className="px-4 py-3 text-center text-indigo-600 dark:text-indigo-400">{s.company_holidays}</td>
+                                <td className="px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">{s.present_days}</span></td>
+                                <td className="px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">{s.approved_leave_days}</span></td>
+                                <td className="px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-500 dark:bg-red-900/30 dark:text-red-400">{s.absent_days}</span></td>
+                                <td className="px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">{s.late_checkins}</span></td>
+                                <td className="px-4 py-3 text-center text-teal-600 dark:text-teal-400 font-semibold whitespace-nowrap">{fmtHours(s.total_working_hours)}</td>
+                                <td className="px-4 py-3 text-center text-orange-600 dark:text-orange-400 whitespace-nowrap">{fmtBreak(s.total_break_minutes)}</td>
+                                <td className="px-4 py-3 text-center text-indigo-600 dark:text-indigo-400 font-semibold whitespace-nowrap">{fmtHours(s.average_working_hours)}</td>
+                                <td className="px-4 py-3 text-center whitespace-nowrap">
+                                  <button onClick={() => viewTimeline(s)} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 rounded-lg transition cursor-pointer border-0">
+                                    <Eye size={12} /> Timeline
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Pagination footer */}
+                    <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 flex flex-wrap items-center justify-between gap-3">
+                      {/* Left: results count + per-page */}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-xs text-gray-500">
+                          Showing <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min((summPage - 1) * summLimit + 1, summTotal)}</span>
+                          {' '}to{' '}
+                          <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min(summPage * summLimit, summTotal)}</span>
+                          {' '}of{' '}
+                          <span className="font-semibold text-gray-700 dark:text-gray-200">{summTotal}</span>
+                          {' '}results
+                        </span>
+                        <select
+                          value={summLimit}
+                          onChange={e => { setSummLimit(Number(e.target.value)); setSummPage(1); loadSummary(1) }}
+                          className="px-2 py-1 border border-gray-300 dark:border-gray-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                        >
+                          {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
                       </div>
 
-                      {rows.length === 0 ? (
-                        <div className="p-12 text-center text-gray-400 dark:text-gray-500 text-sm">
-                          {summaries.length === 0 ? 'No data for the selected filters.' : 'No employees match your search.'}
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-50 dark:bg-gray-700/50">
-                              <tr>
-                                <SortTh col="employee" label="Employee" />
-                                <SortTh col="total_days" label="Total Days" align="center" />
-                                <SortTh col="working_days" label="Working Days" align="center" />
-                                <SortTh col="weekends" label="Weekends" align="center" />
-                                <SortTh col="company_holidays" label="Company Holidays" align="center" />
-                                <SortTh col="present_days" label="Present Days" align="center" />
-                                <SortTh col="approved_leave_days" label="Approved Leave" align="center" />
-                                <SortTh col="absent_days" label="Absent Days" align="center" />
-                                <SortTh col="late_checkins" label="Late Check-ins" align="center" />
-                                <SortTh col="total_working_hours" label="Total Working Hrs" align="center" />
-                                <SortTh col="total_break_minutes" label="Total Break" align="center" />
-                                <SortTh col="average_working_hours" label="Avg Working Hrs" align="center" />
-                                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Action</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                              {rows.map(s => (
-                                <tr key={s.user_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                                  <td className="px-4 py-3">
-                                    <div className="font-medium text-gray-900 dark:text-white whitespace-nowrap">{s.first_name} {s.last_name}</div>
-                                    <div className="text-xs text-gray-400">{s.department_name || '—'}</div>
-                                  </td>
-                                  <td className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-white">{s.total_days}</td>
-                                  <td className="px-4 py-3 text-center font-semibold text-blue-600 dark:text-blue-400">{s.working_days}</td>
-                                  <td className="px-4 py-3 text-center text-purple-600 dark:text-purple-400">{s.weekends}</td>
-                                  <td className="px-4 py-3 text-center text-indigo-600 dark:text-indigo-400">{s.company_holidays}</td>
-                                  <td className="px-4 py-3 text-center">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">{s.present_days}</span>
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">{s.approved_leave_days}</span>
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-500 dark:bg-red-900/30 dark:text-red-400">{s.absent_days}</span>
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">{s.late_checkins}</span>
-                                  </td>
-                                  <td className="px-4 py-3 text-center text-teal-600 dark:text-teal-400 font-semibold whitespace-nowrap">{fmtHours(s.total_working_hours)}</td>
-                                  <td className="px-4 py-3 text-center text-orange-600 dark:text-orange-400 whitespace-nowrap">{fmtBreak(s.total_break_minutes)}</td>
-                                  <td className="px-4 py-3 text-center text-indigo-600 dark:text-indigo-400 font-semibold whitespace-nowrap">{fmtHours(s.average_working_hours)}</td>
-                                  <td className="px-4 py-3 text-center whitespace-nowrap">
-                                    <button
-                                      onClick={() => viewTimeline(s)}
-                                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 rounded-lg transition cursor-pointer border-0">
-                                      <Eye size={12} /> Timeline
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-              })()}
-            </>
-          )}
+                      {/* Right: page number buttons */}
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {/* Prev arrow */}
+                        <button
+                          onClick={() => { const p = Math.max(1, summPage - 1); setSummPage(p); loadSummary(p) }}
+                          disabled={summPage <= 1}
+                          className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
+                        >
+                          &lsaquo;
+                        </button>
 
-          {/* ── TIMELINE SUB-TAB ─────────────────────────────────────── */}
+                        {/* Page 1 button — always shown when totalPages >= 1 */}
+                        <button
+                          onClick={() => { setSummPage(1); loadSummary(1) }}
+                          className={`min-w-[32px] h-8 flex items-center justify-center rounded-md text-xs font-medium transition cursor-pointer border-0 ${
+                            summPage === 1
+                              ? 'bg-indigo-600 text-white shadow-sm'
+                              : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          1
+                        </button>
+
+                        {/* Ellipsis after first page */}
+                        {summPage > 3 && totalPages > 4 && (
+                          <span className="px-1 text-gray-400 text-xs select-none">...</span>
+                        )}
+
+                        {/* Middle pages */}
+                        {Array.from({ length: Math.min(totalPages - 2, 7) }, (_, i) => {
+                          const pageNum = Math.max(2, Math.min(totalPages - 1, summPage - 3 + i))
+                          if (pageNum < 2 || pageNum > totalPages - 1) return null
+                          if (pageNum === 1 || pageNum === totalPages) return null
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => { setSummPage(pageNum); loadSummary(pageNum) }}
+                              className={`min-w-[32px] h-8 flex items-center justify-center rounded-md text-xs font-medium transition cursor-pointer border-0 ${
+                                summPage === pageNum
+                                  ? 'bg-indigo-600 text-white shadow-sm'
+                                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          )
+                        })}
+
+                        {/* Ellipsis before last page */}
+                        {summPage < totalPages - 2 && totalPages > 4 && (
+                          <span className="px-1 text-gray-400 text-xs select-none">...</span>
+                        )}
+
+                        {/* Last page button — shown when totalPages > 1 */}
+                        {totalPages > 1 && (
+                          <button
+                            onClick={() => { setSummPage(totalPages); loadSummary(totalPages) }}
+                            className={`min-w-[32px] h-8 flex items-center justify-center rounded-md text-xs font-medium transition cursor-pointer border-0 ${
+                              summPage === totalPages
+                                ? 'bg-indigo-600 text-white shadow-sm'
+                                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            {totalPages}
+                          </button>
+                        )}
+
+                        {/* Next arrow */}
+                        <button
+                          onClick={() => { const p = Math.min(totalPages, summPage + 1); setSummPage(p); loadSummary(p) }}
+                          disabled={summPage >= totalPages}
+                          className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
+                        >
+                          &rsaquo;
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+
+
+
+          {/* -- TIMELINE SUB-TAB --------------------------------------- */}
           {reportSubTab === 'timeline' && (
             <>
               {/* Employee summary banner */}
@@ -1146,92 +1234,119 @@ export default function AttendancePage() {
                   ) : timeline.length === 0 ? (
                     <div className="text-center py-16 text-gray-400 dark:text-gray-500 text-sm">No timeline data found.</div>
                   ) : (
-                    <div className="space-y-4">
-                      {/* Week-by-week grid */}
-                      {(() => {
-                        const weeks: TimelineDay[][] = []
-                        let cur: TimelineDay[] = []
-                        for (const day of timeline) {
-                          if (cur.length > 0 && day.day_of_week === 0) {
-                            weeks.push(cur); cur = []
-                          }
-                          cur.push(day)
-                        }
-                        if (cur.length) weeks.push(cur)
-                        return weeks.map((week, wi) => (
-                          <div key={wi} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                            {week.map(day => {
-                              const meta = TIMELINE_STATUS_META[day.status] || TIMELINE_STATUS_META.absent
-                              const isEditable = day.attendance_id != null && isHRAdmin
-                              return (
-                                <div key={day.date} className={`rounded-xl border ${meta.textColor} dark:border-gray-600 ${meta.bg} dark:bg-gray-800 p-4 relative`}>
-                                  {/* Date header */}
-                                  <div className="flex items-start justify-between mb-3">
-                                    <div>
-                                      <div className="text-xs text-gray-400 dark:text-gray-500">{DAY_LABELS[day.day_of_week]}, {fmtDate(day.date)}</div>
-                                      {day.holiday_name && (
-                                        <div className="text-xs font-semibold text-purple-600 dark:text-purple-400 mt-0.5">🎉 {day.holiday_name}</div>
-                                      )}
-                                      {day.leave_reason && (
-                                        <div className="text-xs text-blue-500 dark:text-blue-400 mt-0.5">🏖️ {day.leave_reason}</div>
-                                      )}
-                                    </div>
-                                    <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${meta.bg} ${meta.color} border-0`}>
-                                      {meta.label}
-                                    </span>
-                                  </div>
-
-                                  {/* Times for Present days */}
-                                  {(day.status === 'present') && (
-                                    <div className="space-y-1.5 mb-3">
-                                      <div className="flex items-center gap-2 text-xs">
-                                        <LogIn size={11} className="text-emerald-500 shrink-0" />
-                                        <span className="text-gray-600 dark:text-gray-300 font-medium">{fmtTime(day.clock_in_time)}</span>
-                                        {day.is_late && <span className="text-[10px] text-red-500 font-semibold">+{day.late_minutes}m late</span>}
-                                      </div>
-                                      <div className="flex items-center gap-2 text-xs">
-                                        <LogOut size={11} className="text-indigo-500 shrink-0" />
-                                        <span className="text-gray-600 dark:text-gray-300 font-medium">{fmtTime(day.clock_out_time)}</span>
-                                      </div>
-                                      {day.breaks.length > 0 && (
-                                        <div className="flex items-start gap-2 text-xs pl-0.5">
-                                          <Coffee size={11} className="text-amber-500 shrink-0 mt-0.5" />
-                                          <div className="space-y-0.5">
-                                            {day.breaks.map(br => (
-                                              <div key={br.id} className="text-gray-500 dark:text-gray-400">
-                                                {fmtTime(br.start_time)}→{br.end_time ? fmtTime(br.end_time) : '...'}
-                                                <span className="ml-1 text-amber-600">({fmtBreak(br.duration_minutes)})</span>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 dark:bg-gray-700/60">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Date</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Day</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Status</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Clock In</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Clock Out</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Breaks</th>
+                            <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Wrk Hrs</th>
+                            <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Late</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Remarks</th>
+                            {isHRAdmin && (
+                              <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Action</th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                          {timeline.map((day, idx) => {
+                            const meta = TIMELINE_STATUS_META[day.status] || TIMELINE_STATUS_META.absent
+                            const isEditable = day.attendance_id != null && isHRAdmin
+                            const isOdd = idx % 2 === 1
+                            return (
+                              <tr key={day.date} className={`${isOdd ? 'bg-gray-50/60 dark:bg-gray-700/20' : ''} hover:bg-indigo-50/40 dark:hover:bg-indigo-900/20 transition-colors`}>
+                                {/* Date */}
+                                <td className="px-4 py-3">
+                                  <span className="font-semibold text-gray-900 dark:text-white text-xs whitespace-nowrap">{fmtDate(day.date)}</span>
+                                  {day.holiday_name && (
+                                    <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium mt-0.5">🎉 {day.holiday_name}</div>
                                   )}
-
-                                  {/* Working Hours */}
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                                      {day.working_hours != null ? fmtHours(day.working_hours) : '—'}
-                                    </span>
-                                    {isEditable && (
+                                  {day.leave_reason && (
+                                    <div className="text-[10px] text-blue-500 dark:text-blue-400 font-medium mt-0.5">🏖️ {day.leave_reason}</div>
+                                  )}
+                                </td>
+                                {/* Day of week */}
+                                <td className="px-4 py-3">
+                                  <span className={`text-xs font-medium ${day.day_of_week === 0 || day.day_of_week === 6 ? 'text-amber-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    {DAY_LABELS[day.day_of_week]}
+                                  </span>
+                                </td>
+                                {/* Status badge */}
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${meta.bg} ${meta.color} border-0 whitespace-nowrap`}>
+                                    {meta.label}
+                                  </span>
+                                </td>
+                                {/* Clock In */}
+                                <td className="px-4 py-3">
+                                  {day.status === 'present' && day.clock_in_time ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <LogIn size={11} className="text-emerald-500 shrink-0" />
+                                      <span className="text-xs font-medium text-gray-700 dark:text-gray-200">{fmtTime(day.clock_in_time)}</span>
+                                      {day.is_late && <span className="text-[10px] text-red-500 font-bold">+{day.late_minutes}m</span>}
+                                    </div>
+                                  ) : <span className="text-xs text-gray-300 dark:text-gray-600">—</span>}
+                                </td>
+                                {/* Clock Out */}
+                                <td className="px-4 py-3">
+                                  {day.status === 'present' && day.clock_out_time ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <LogOut size={11} className="text-indigo-500 shrink-0" />
+                                      <span className="text-xs font-medium text-gray-700 dark:text-gray-200">{fmtTime(day.clock_out_time)}</span>
+                                    </div>
+                                  ) : <span className="text-xs text-gray-300 dark:text-gray-600">—</span>}
+                                </td>
+                                {/* Breaks */}
+                                <td className="px-4 py-3">
+                                  {day.breaks.length > 0 ? (
+                                    <div className="space-y-0.5">
+                                      {day.breaks.map(br => (
+                                        <div key={br.id} className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400">
+                                          <Coffee size={10} className="shrink-0" />
+                                          <span>{fmtTime(br.start_time)} → {br.end_time ? fmtTime(br.end_time) : '...'} <span className="font-semibold">({fmtBreak(br.duration_minutes)})</span></span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : <span className="text-xs text-gray-300 dark:text-gray-600">—</span>}
+                                </td>
+                                {/* Working Hours */}
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`text-xs font-bold ${day.working_hours != null ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>
+                                    {day.working_hours != null ? fmtHours(day.working_hours) : '—'}
+                                  </span>
+                                </td>
+                                {/* Late */}
+                                <td className="px-4 py-3 text-center">
+                                  {day.is_late ? (
+                                    <span className="text-xs font-bold text-red-500">{day.late_minutes}m</span>
+                                  ) : <span className="text-xs text-gray-300 dark:text-gray-600">—</span>}
+                                </td>
+                                {/* Remarks */}
+                                <td className="px-4 py-3 max-w-[160px]">
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 italic truncate block" title={day.remarks || ''}>
+                                    {day.remarks || <span className="text-gray-300 dark:text-gray-600">—</span>}
+                                  </span>
+                                </td>
+                                {/* Action */}
+                                {isHRAdmin && (
+                                  <td className="px-4 py-3 text-center">
+                                    {isEditable ? (
                                       <button onClick={() => setEditDay(day)}
-                                        className="p-1 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition cursor-pointer bg-transparent border-0">
+                                        className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition cursor-pointer bg-transparent border-0">
                                         <Edit2 size={13} />
                                       </button>
-                                    )}
-                                  </div>
-                                  {day.remarks && (
-                                    <div className="mt-2 text-xs text-gray-400 dark:text-gray-500 italic border-t border-gray-200 dark:border-gray-700 pt-2">
-                                      {day.remarks}
-                                    </div>
-                                  )}
-                                </div>
-                              )
-                            })}
-                          </div>
-                        ))
-                      })()}
+                                    ) : <span className="text-xs text-gray-300 dark:text-gray-600">—</span>}
+                                  </td>
+                                )}
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
@@ -1241,7 +1356,7 @@ export default function AttendancePage() {
         </>
       )}
 
-      {/* ── Edit Modal ─────────────────────────────────────────────────────── */}
+      {/* -- Edit Modal ------------------------------------------------------- */}
       {editDay && (
         <EditModal
           day={editDay}
