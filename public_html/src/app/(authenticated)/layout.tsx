@@ -14,7 +14,7 @@ import {
   LayoutDashboard, Users, Palmtree, Network, ShieldCheck,
   FolderKanban, ListChecks, MessageSquare, Megaphone, Bell,
   User as UserIcon,
-  Clock, Calendar, BarChart3, Settings,
+  Clock, Calendar, BarChart3, Settings, Activity,
   Menu, X as XIcon, LogOut, Sparkles,
   PanelLeftClose, PanelLeftOpen, Mail, AlertTriangle, RefreshCw,
 } from 'lucide-react'
@@ -45,6 +45,8 @@ const navConfig: Array<{
   { sectionKey: 'nav.company' },
   { href: '/announcements', labelKey: 'nav.announcements', Icon: Megaphone,   requiredPermission: 'announcements.view' },
   { href: '/company-settings', labelKey: 'nav.companySettings', Icon: Settings, requiredPermission: 'admin.settings' },
+  { sectionKey: 'nav.audit' },
+  { href: '/activity-logs', labelKey: 'nav.activityLogs', Icon: Activity, requiredPermission: 'activity_logs.view_own' },
 ]
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {

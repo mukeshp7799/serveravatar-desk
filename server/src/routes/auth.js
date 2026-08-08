@@ -7,6 +7,7 @@ const { auth, JWT_SECRET, revokeToken } = require('../middleware/auth');
 const { t } = require('../i18n');
 const { sendEmail } = require('../utils/mailer');
 const { emailVerificationEmail, passwordResetEmail } = require('../utils/emailTemplates');
+const { logActivity } = require('../services/activityService');
 
 const SITE_URL = process.env.SITE_URL || 'https://seravavatar-hub.95.217.8.52.nip.io';
 const VERIFICATION_TTL_HOURS = 24;
@@ -143,6 +144,10 @@ router.post('/login', async (req, res, next) => {
 
     // Notify about any pending project invitations
     await createNotificationsForPendingInvitations(pool, user.id, user.email);
+
+    // ── Activity log: Login ───────────────────────────────────────────────
+    logActivity({ req: { user: { id: user.id } }, module: 'Auth', action: 'Login',
+      description: `User logged in` });
 
     res.json({
       token,
@@ -342,6 +347,10 @@ router.post('/logout', auth, async (req, res, next) => {
         await revokeToken(decoded);
       } catch (_) { /* token already invalid */ }
     }
+    // ── Activity log: Logout ─────────────────────────────────────────────
+    logActivity({ req, module: 'Auth', action: 'Logout',
+      description: `User logged out` });
+
     res.json({ message: 'Logged out successfully' });
   } catch (err) {
     next(err);

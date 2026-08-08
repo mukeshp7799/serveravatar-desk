@@ -16,6 +16,7 @@ const {
   getStatusLabel,
 } = require('../services/attendanceCalc');
 const { getCompanySetting, nowInTimezone, todayInTimezone, toTimezone, formatDate, formatTime } = require('../utils/timezone');
+const { logActivity } = require('../services/activityService');
 
 const router = express.Router();
 
@@ -75,6 +76,58 @@ router.post('/clock-in', async (req, res, next) => {
       return res.status(400).json({ error: 'Attendance record not found. Please contact admin.' });
     }
 
+    // ── Re-clock-in logic ──────────────────────────────────────────────
+    // If the employee already has a completed record today (clocked out),
+    // re-clock-in clears the clock_out so they can continue without
+    // creating a duplicate attendance row for the same day.
+    if (today.status === 'completed' && today.clock_out_time) {
+      const tz2 = await getCompanySetting('general', 'timezone', 'UTC');
+      const now2 = nowInTimezone(tz2);
+      // Close any open breaks from the previous session first.
+      const [openBreaks] = await pool.query(
+        'SELECT * FROM attendance_breaks WHERE attendance_id = ? AND end_time IS NULL',
+        [today.id]
+      );
+      for (const b of openBreaks) {
+        const mins = Math.floor((now2 - new Date(b.start_time)) / 60000);
+        await pool.query(
+          'UPDATE attendance_breaks SET end_time = ?, duration_minutes = ? WHERE id = ?',
+          [now2, mins, b.id]
+        );
+        await pool.query(
+          'UPDATE attendance SET total_break_minutes = total_break_minutes + ? WHERE id = ?',
+          [mins, today.id]
+        );
+      }
+      await pool.query(
+        `UPDATE attendance SET status = 'clocked_in', clock_out_time = NULL
+         WHERE id = ?`,
+        [today.id]
+      );
+      const [updated] = await pool.query('SELECT * FROM attendance WHERE id = ?', [today.id]);
+      const rec = updated[0];
+      const [breaks] = await pool.query(
+        'SELECT * FROM attendance_breaks WHERE attendance_id = ? ORDER BY start_time ASC',
+        [rec.id]
+      );
+      const activeBreak = breaks.find(b => !b.end_time);
+      const liveWH = computeLiveWorkingHours(rec.clock_in_time, rec.total_break_minutes, activeBreak?.start_time || null);
+      res.json({
+        message: 'Clocked in again — previous session ended',
+        attendance: {
+          ...formatAttendance(rec),
+          working_hours: computeWorkingHours(rec.clock_in_time, rec.clock_out_time, rec.total_break_minutes),
+          live_working_hours: liveWH,
+          active_break_start: activeBreak?.start_time || null,
+          total_break_minutes: rec.total_break_minutes,
+          breaks: breaks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, duration_minutes: b.duration_minutes })),
+        },
+      });
+      logActivity({ req, module: 'Attendance', action: 'Clocked In',
+        description: 'Clocked in again after clock-out' });
+      return;
+    }
+
     if (today.status !== 'absent' && today.status !== 'clocked_in') {
       return res.status(400).json({ error: 'Already clocked in today' });
     }
@@ -100,11 +153,28 @@ router.post('/clock-in', async (req, res, next) => {
     // Reload
     const [updated] = await pool.query('SELECT * FROM attendance WHERE id = ?', [today.id]);
     const rec = updated[0];
-
+    const [breaks] = await pool.query(
+      'SELECT * FROM attendance_breaks WHERE attendance_id = ? ORDER BY start_time ASC',
+      [rec.id]
+    );
+    const activeBreak = breaks.find(b => !b.end_time);
+    const liveWH = (!rec.clock_out_time && rec.clock_in_time)
+      ? computeLiveWorkingHours(rec.clock_in_time, rec.total_break_minutes, activeBreak?.start_time || null)
+      : null;
     res.json({
       message: isLate ? 'Clocked in (Late)' : 'Clocked in successfully',
-      attendance: formatAttendance(rec),
+      attendance: {
+        ...formatAttendance(rec),
+        working_hours: computeWorkingHours(rec.clock_in_time, rec.clock_out_time, rec.total_break_minutes),
+        live_working_hours: liveWH,
+        active_break_start: activeBreak?.start_time || null,
+        total_break_minutes: rec.total_break_minutes,
+        breaks: breaks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, duration_minutes: b.duration_minutes })),
+      },
     });
+    // ── Activity log: Clock In ─────────────────────────────────────────────
+    logActivity({ req, module: 'Attendance', action: 'Clocked In',
+      description: `Clocked in${isLate ? ' (Late)' : ''}` });
   } catch (err) { next(err); }
 });
 
@@ -145,7 +215,26 @@ router.post('/start-break', async (req, res, next) => {
     );
 
     const [updated] = await pool.query('SELECT * FROM attendance WHERE id = ?', [today.id]);
-    res.json({ message: 'Break started', attendance: formatAttendance(updated[0]) });
+    const rec = updated[0];
+    const [breaks] = await pool.query(
+      'SELECT * FROM attendance_breaks WHERE attendance_id = ? ORDER BY start_time ASC',
+      [rec.id]
+    );
+    const activeBreak = breaks.find(b => !b.end_time);
+    const liveWH = (!rec.clock_out_time && rec.clock_in_time)
+      ? computeLiveWorkingHours(rec.clock_in_time, rec.total_break_minutes, activeBreak?.start_time || null)
+      : null;
+    res.json({
+      message: 'Break started',
+      attendance: {
+        ...formatAttendance(rec),
+        working_hours: computeWorkingHours(rec.clock_in_time, rec.clock_out_time, rec.total_break_minutes),
+        live_working_hours: liveWH,
+        active_break_start: activeBreak?.start_time || null,
+        total_break_minutes: rec.total_break_minutes,
+        breaks: breaks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, duration_minutes: b.duration_minutes })),
+      },
+    });
   } catch (err) { next(err); }
 });
 
@@ -188,7 +277,26 @@ router.post('/end-break', async (req, res, next) => {
     );
 
     const [updated] = await pool.query('SELECT * FROM attendance WHERE id = ?', [today.id]);
-    res.json({ message: 'Break ended', attendance: formatAttendance(updated[0]) });
+    const rec = updated[0];
+    const [breaks] = await pool.query(
+      'SELECT * FROM attendance_breaks WHERE attendance_id = ? ORDER BY start_time ASC',
+      [rec.id]
+    );
+    const activeBreak = breaks.find(b => !b.end_time);
+    const liveWH = (!rec.clock_out_time && rec.clock_in_time)
+      ? computeLiveWorkingHours(rec.clock_in_time, rec.total_break_minutes, activeBreak?.start_time || null)
+      : null;
+    res.json({
+      message: 'Break ended',
+      attendance: {
+        ...formatAttendance(rec),
+        working_hours: computeWorkingHours(rec.clock_in_time, rec.clock_out_time, rec.total_break_minutes),
+        live_working_hours: liveWH,
+        active_break_start: activeBreak?.start_time || null,
+        total_break_minutes: rec.total_break_minutes,
+        breaks: breaks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, duration_minutes: b.duration_minutes })),
+      },
+    });
   } catch (err) { next(err); }
 });
 
@@ -240,7 +348,27 @@ router.post('/clock-out', async (req, res, next) => {
     );
 
     const [updated] = await pool.query('SELECT * FROM attendance WHERE id = ?', [today.id]);
-    res.json({ message: 'Clocked out successfully', attendance: formatAttendance(updated[0]) });
+
+    // ── Activity log: Clock Out ───────────────────────────────────────────
+    logActivity({ req, module: 'Attendance', action: 'Clocked Out',
+      description: `Clocked out` });
+
+    const rec = updated[0];
+    const [breaks] = await pool.query(
+      'SELECT * FROM attendance_breaks WHERE attendance_id = ? ORDER BY start_time ASC',
+      [rec.id]
+    );
+    res.json({
+      message: 'Clocked out successfully',
+      attendance: {
+        ...formatAttendance(rec),
+        working_hours: computeWorkingHours(rec.clock_in_time, rec.clock_out_time, rec.total_break_minutes),
+        live_working_hours: null,
+        active_break_start: null,
+        total_break_minutes: rec.total_break_minutes,
+        breaks: breaks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, duration_minutes: b.duration_minutes })),
+      },
+    });
   } catch (err) { next(err); }
 });
 
@@ -729,6 +857,10 @@ router.put('/:id', async (req, res, next) => {
     await pool.query(`UPDATE attendance SET ${updates.join(', ')} WHERE id = ?`, vals);
 
     const [[updated]] = await pool.query('SELECT * FROM attendance WHERE id = ?', [attId]);
+    // ── Activity log: Attendance Updated (admin) ───────────────────────────
+    logActivity({ req, module: 'Attendance', action: 'Updated',
+      description: `Attendance record updated for user ID ${existing.user_id}`,
+      previousValue: existing, newValue: updated });
     res.json({ message: 'Updated', attendance: formatAttendance(updated) });
   } catch (err) { next(err); }
 });
@@ -1322,6 +1454,10 @@ router.put('/:id', async (req, res, next) => {
     }
 
     const [[updated]] = await pool.query('SELECT * FROM attendance WHERE id = ?', [attId]);
+    // ── Activity log: Attendance Updated (admin) ───────────────────────────
+    logActivity({ req, module: 'Attendance', action: 'Updated',
+      description: `Attendance record updated`,
+      previousValue: existing, newValue: updated });
     res.json({ message: 'Updated', attendance: formatAttendance(updated) });
   } catch (err) { next(err); }
 });

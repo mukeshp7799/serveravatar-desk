@@ -137,7 +137,7 @@ export default function MessageBoardPage() {
 
         {/* Composer */}
         {showCompose && (
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-indigo-200 dark:border-indigo-800 shadow-sm p-4 space-y-3 animate-fade-in-up card-hover">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-indigo-200 dark:border-indigo-800 shadow-sm p-4 space-y-3 animate-fade-in-up">
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"

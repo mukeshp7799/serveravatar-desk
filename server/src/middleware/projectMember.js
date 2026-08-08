@@ -49,7 +49,8 @@ const isProjectMember = async (projectId, userId) => {
 const requireProjectMember = (paramName = "projectId") => {
   return async (req, res, next) => {
     const userId = req.user?.id;
-    const raw = req.params[paramName] ?? req.query[paramName];
+    // Check params → query → body (body is needed for POST/PUT routes)
+    const raw = req.params[paramName] ?? req.query[paramName] ?? req.body?.[paramName];
     const projectId = Number(raw);
 
     if (!projectId || !userId) {

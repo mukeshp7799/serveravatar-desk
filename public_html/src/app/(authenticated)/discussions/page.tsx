@@ -1,11 +1,13 @@
 'use client'
 import PageLoader from '@/components/PageLoader'
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { ListChecks, MessageCircle, MessageSquare, Smile, Trash2 } from 'lucide-react'
+import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
 import { discussionSchema, type DiscussionInput } from '@/lib/schemas'
 import Scroll from '@/components/Scroll'
@@ -29,11 +31,21 @@ interface DiscussionMessage {
 
 export default function DiscussionsPage() {
   const { t } = useTranslation()
+  const router = useRouter()
   const [discussions, setDiscussions] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [selectedDiscussion, setSelectedDiscussion] = useState<{ discussion: any; messages: DiscussionMessage[] } | null>(null)
   const [newMessage, setNewMessage] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 1024)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
   const {
     register,
     handleSubmit,
@@ -65,6 +77,9 @@ export default function DiscussionsPage() {
     }).catch(() => {}).finally(() => setLoading(false))
   }
 
+  // Track discussion pending deletion for the confirmation modal
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null)
+
   const openDiscussion = async (id: number) => {
     try {
       const res = await api.get(`/discussions/${id}`)
@@ -74,21 +89,31 @@ export default function DiscussionsPage() {
 
   const onSubmitCreate = async (data: DiscussionInput) => {
     try {
-      await api.post('/discussions', { projectId: data.projectId, title: data.title })
-      setShowCreate(false); reset({ projectId: '', title: '' })
-      toast.success(t('discussions.created')); loadData()
+      const res = await api.post('/discussions', {
+        projectId: data.projectId ? Number(data.projectId) : undefined,
+        title: data.title,
+      })
+      setShowCreate(false)
+      reset({ projectId: '', title: '' })
+      toast.success(t('discussions.created'))
+      loadData()
+      // Open the new discussion's chat inline
+      if (res.id) openDiscussion(res.id)
     } catch (err: any) { toast.error(err.message || t('common.failedToSave')) }
   }
 
-  const handleDelete = async (id: number, e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!confirm(t('discussions.deleteConfirm'))) return
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
     try {
-      await api.delete(`/discussions/${id}`)
+      await api.delete(`/discussions/${deleteTarget.id}`)
       toast.success(t('common.deletedSuccessfully'))
-      if (selectedDiscussion?.discussion?.id === id) setSelectedDiscussion(null)
+      if (selectedDiscussion?.discussion?.id === deleteTarget.id) setSelectedDiscussion(null)
+      setDeleteTarget(null)
       loadData()
-    } catch (err: any) { toast.error(err.message || t('common.failedToDelete')) }
+    } catch (err: any) {
+      setDeleteTarget(null)
+      toast.error(err.message || 'You do not have permission to delete this discussion.')
+    }
   }
 
   const onSubmitMessage = async (data: { content: string }) => {
@@ -208,8 +233,12 @@ export default function DiscussionsPage() {
         </button>
       </div>
 
+      {/* Desktop: 2-col grid with list + inline chat.
+           Mobile: list-only by default; chat replaces list when discussion is open. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 flex-1 min-h-0 max-h-[calc(100vh-10rem)] overflow-hidden" style={{ gridTemplateRows: "minmax(0, 1fr)" }}>
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col min-h-[500px] lg:min-h-0">
+
+        {/* ── Discussion List ────────────────────────────────────── */}
+        <div className={`bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col min-h-0 ${isMobile && selectedDiscussion ? 'hidden' : ''}`}>
           <div className="bg-indigo-600 hover:bg-indigo-700 px-5 py-4 shrink-0">
             <h3 className="font-bold text-white flex items-center gap-2">
               <ListChecks size={14} strokeWidth={2.25} /> {t('discussions.allDiscussions')}
@@ -254,8 +283,8 @@ export default function DiscussionsPage() {
                         <span>{d.message_count} {t('discussions.replies')}</span>
                       </div>
                     </div>
-                    {canManage && (
-                      <button onClick={(e) => handleDelete(d.id, e)} title={t('common.delete')} className="w-8 h-8 rounded-lg bg-transparent text-red-600 hover:bg-red-50 cursor-pointer border-none transition shrink-0 flex items-center justify-center"><Trash2 size={14} strokeWidth={2.25} /></button>
+                    {(user.id === d.created_by_user_id || (Array.isArray(user.permissions) && user.permissions.includes('discussions.delete'))) && (
+                      <button onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: d.id, title: d.title }) }} title={t('common.delete')} className="w-8 h-8 rounded-lg bg-transparent text-red-600 hover:bg-red-50 cursor-pointer border-none transition shrink-0 flex items-center justify-center"><Trash2 size={14} strokeWidth={2.25} /></button>
                     )}
                   </div>
                 </div>
@@ -264,14 +293,29 @@ export default function DiscussionsPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col min-h-[500px] lg:min-h-0">
+        {/* ── Inline Chat (desktop always, mobile when discussion open) ── */}
+        <div className={`bg-white rounded-2xl border border-gray-100 overflow-hidden flex-col min-h-0 ${isMobile ? (selectedDiscussion ? 'flex' : 'hidden') : 'flex'}`}>
           {selectedDiscussion ? (
             <>
-              <div className="bg-indigo-600 hover:bg-indigo-700 px-5 py-4 flex justify-between items-center shrink-0">
-                <h3 className="font-bold text-white flex items-center gap-2 truncate">
-                  <MessageSquare size={16} strokeWidth={2.25} /> {selectedDiscussion.discussion.title}
-                </h3>
-                <button onClick={() => setSelectedDiscussion(null)} className="bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-lg w-8 h-8 flex items-center justify-center cursor-pointer border-none text-lg leading-none shrink-0">×</button>
+              <div className="bg-indigo-600 hover:bg-indigo-700 px-4 py-3 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  {/* Back button — mobile only */}
+                  <button
+                    onClick={() => setSelectedDiscussion(null)}
+                    className={`shrink-0 w-8 h-8 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition cursor-pointer border-none ${isMobile ? 'flex' : 'hidden'}`}
+                    title="Back to discussions"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                  </button>
+                  <MessageSquare size={15} strokeWidth={2.25} className="text-white shrink-0" />
+                  <h3 className="font-bold text-white truncate">{selectedDiscussion.discussion.title}</h3>
+                </div>
+                {/* Close — desktop only (mobile uses back button) */}
+                <button
+                  onClick={() => setSelectedDiscussion(null)}
+                  className={`shrink-0 w-8 h-8 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition cursor-pointer border-none text-lg leading-none ${isMobile ? 'hidden' : 'flex'}`}
+                  title="Close"
+                >×</button>
               </div>
               <div ref={chatScrollRef} className="flex-1 min-h-0 overflow-hidden bg-gray-50">
                 <Scroll containerClassName="h-full" className="h-full" watch={selectedDiscussion.messages?.length}>
@@ -339,18 +383,49 @@ export default function DiscussionsPage() {
         </div>
       </div>
 
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <PortalModal>
+          <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setDeleteTarget(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl animate-scale-in" onClick={e => e.stopPropagation()}>
+              <div className="p-6 text-center">
+                <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+                  <Trash2 size={24} className="text-red-600" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Discussion?</h3>
+                <p className="text-sm text-gray-500">This will permanently delete "<span className="font-semibold">{deleteTarget.title}</span>" and all its messages. This action cannot be undone.</p>
+              </div>
+              <div className="flex gap-3 px-6 pb-6">
+                <button onClick={() => setDeleteTarget(null)} className="flex-1 px-4 py-2.5 text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-xl transition cursor-pointer border-none">Cancel</button>
+                <button onClick={handleDeleteConfirm} className="flex-1 px-4 py-2.5 text-sm font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl transition cursor-pointer border-none">Delete</button>
+              </div>
+            </div>
+          </div>
+        </PortalModal>
+      )}
+
       {showCreate && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreate(false)}>
+        <PortalModal>
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => { setShowCreate(false); reset({ projectId: '', title: '' }) }}>
           <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] shadow-2xl animate-scale-in flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="bg-indigo-600 hover:bg-indigo-700 px-6 py-4 rounded-t-3xl shrink-0">
+            <div className="bg-indigo-600 px-6 py-4 rounded-t-3xl shrink-0">
               <div className="flex justify-between items-center">
                 <h3 className="text-xl font-extrabold text-white flex items-center gap-2"><MessageSquare size={18} strokeWidth={2.25} /> {t('discussions.newDiscussion')}</h3>
-                <button onClick={() => setShowCreate(false)} className="bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-lg w-8 h-8 flex items-center justify-center cursor-pointer border-none text-lg leading-none">×</button>
+                <button onClick={() => { setShowCreate(false); reset({ projectId: '', title: '' }) }} className="bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-lg w-8 h-8 flex items-center justify-center cursor-pointer border-none text-lg leading-none">×</button>
               </div>
             </div>
             <form onSubmit={handleSubmit(onSubmitCreate)} className="flex flex-col flex-1 min-h-0">
               <Scroll containerClassName="flex-1 min-h-0" className="h-full">
                 <div className="p-6 bg-white">
+                  <div className="mb-4">
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">Topic</label>
+                    <input
+                      {...register('title')}
+                      className={`w-full border-2 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-4 transition ${errors.title ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-200 focus:border-cyan-500 focus:ring-cyan-100'}`}
+                      placeholder={t('discussions.topicPlaceholder')}
+                    />
+                    {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
+                  </div>
                   <div className="mb-4">
                     <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('discussions.projectLabel')}</label>
                     <select
@@ -361,24 +436,16 @@ export default function DiscussionsPage() {
                       {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
-                  <div className="mb-4">
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('discussions.topicTitle')}</label>
-                    <input
-                      {...register('title')}
-                      className={`w-full border-2 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-4 transition ${errors.title ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-200 focus:border-cyan-500 focus:ring-cyan-100'}`}
-                      placeholder={t('discussions.topicPlaceholder')}
-                    />
-                    {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>}
-                  </div>
                 </div>
               </Scroll>
               <div className="border-t border-gray-100 px-6 py-4 flex flex-wrap justify-end gap-2 bg-gray-50 rounded-b-3xl shrink-0">
-                <button type="button" onClick={() => setShowCreate(false)} className="px-5 py-2.5 text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-xl transition cursor-pointer border-none">{t('common.cancel')}</button>
+                <button type="button" onClick={() => { setShowCreate(false); reset({ projectId: '', title: '' }) }} className="px-5 py-2.5 text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-xl transition cursor-pointer border-none">{t('common.cancel')}</button>
                 <button type="submit" className="px-5 py-2.5 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow rounded-xl transition cursor-pointer border-none">{t('discussions.createDiscussion')}</button>
               </div>
             </form>
           </div>
         </div>
+        </PortalModal>
       )}
     </div>
   )

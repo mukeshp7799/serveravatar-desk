@@ -8,6 +8,7 @@ const { auth, requirePermission } = require('../middleware/auth');
 const { t } = require('../i18n');
 const { getCompanySetting, nowInTimezone, formatDateTime } = require('../utils/timezone');
 const { isNotificationAllowed } = require('../utils/notificationPreferences');
+const { logActivity } = require('../services/activityService');
 
 const router = express.Router();
 
@@ -382,6 +383,9 @@ router.post('/', requirePermission('announcements.create'), async (req, res, nex
     }
 
     res.status(201).json({ id: annId, message: t(req.lang, 'errors.announcementsPosted') });
+    // ── Activity log: Announcement Created ─────────────────────────────────
+    logActivity({ req, module: 'Announcement', action: 'Created',
+      description: `Announcement "${title}" created (status: ${status})` });
   } catch (err) {
     next(err);
   }
@@ -443,6 +447,9 @@ router.put('/:id', requirePermission('announcements.create'), async (req, res, n
     }
 
     res.json({ message: t(req.lang, 'errors.announcementUpdated') });
+    // ── Activity log: Announcement Updated ────────────────────────────────
+    logActivity({ req, module: 'Announcement', action: 'Updated',
+      description: `Announcement "${title}" (ID: ${req.params.id}) updated` });
   } catch (err) {
     next(err);
   }
@@ -457,7 +464,10 @@ router.delete('/:id', requirePermission('announcements.manage'), async (req, res
     if (existing.length === 0) return res.status(404).json({ error: 'Announcement not found' });
 
     await pool.query('UPDATE announcements SET status = \'archived\' WHERE id = ?', [req.params.id]);
-    res.json({ message: t(req.lang, 'errors.announcementRemoved') });
+    // ── Activity log: Announcement Archived ───────────────────────────────
+    logActivity({ req, module: 'Announcement', action: 'Archived',
+      description: `Announcement ID ${req.params.id} archived` });
+    res.json({ message: 'Announcement archived successfully' });
   } catch (err) {
     next(err);
   }
@@ -614,6 +624,9 @@ router.post('/:id/restore', requirePermission('announcements.manage'), async (re
     await createAnnouncementNotifications(ann.id, ann.audience_target, targetIds, ann.title, req.user.id);
 
     res.json({ message: t(req.lang, 'errors.announcementRestored') || 'Announcement restored to published' });
+    // ── Activity log: Announcement Restored ───────────────────────────────
+    logActivity({ req, module: 'Announcement', action: 'Restored',
+      description: `Announcement "${ann.title}" (ID: ${req.params.id}) restored` });
   } catch (err) {
     next(err);
   }

@@ -53,7 +53,7 @@ export type ProjectInput = z.infer<typeof projectSchema>;
 
 // ─── Discussion (create) ────────────────────────────────────────────────
 export const discussionSchema = z.object({
-  projectId: z.string().min(1, 'Please select a project'),
+  projectId: z.string().optional(),
   title: z.string().min(1, 'Title is required').max(200),
 });
 export type DiscussionInput = z.infer<typeof discussionSchema>;

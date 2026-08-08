@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
+import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
 import PageLoader from '@/components/PageLoader'
 import {
@@ -270,6 +271,7 @@ function EditModal({ day, onClose, onSave }: {
   }
 
   return (
+    <PortalModal>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 rounded-t-2xl">
@@ -364,6 +366,7 @@ function EditModal({ day, onClose, onSave }: {
         </div>
       </div>
     </div>
+    </PortalModal>
   )
 }
 

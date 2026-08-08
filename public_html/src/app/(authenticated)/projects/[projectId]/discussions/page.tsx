@@ -12,6 +12,7 @@ import ReactionBar from '@/components/project/ReactionBar'
 import MentionInput from '@/components/MentionInput'
 import { highlightMentions } from '@/components/MentionBadge'
 import type { ActiveMember } from '@/components/MentionInput'
+import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
 import { fmtRelative } from '@/components/project/format'
 import type { Reaction } from '@/types/project'
@@ -397,6 +398,7 @@ export default function DiscussionsPage() {
 
       {/* Create Discussion Modal */}
       {showCreate && (
+        <PortalModal>
         <div
           className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => setShowCreate(false)}
@@ -463,6 +465,7 @@ export default function DiscussionsPage() {
             </form>
           </div>
         </div>
+        </PortalModal>
       )}
     </FeaturePage>
   )

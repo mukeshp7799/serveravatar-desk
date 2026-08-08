@@ -1,4 +1,5 @@
 'use client'
+import PortalModal from '@/components/PortalModal';
 
 /**
  * /projects/[projectId]/task-board
@@ -450,65 +451,67 @@ function NewTaskModal({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 animate-fade-in-up">
-      <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} aria-hidden />
-      <div className="relative bg-white dark:bg-gray-900 rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-gray-200 dark:border-gray-800 w-full sm:max-w-xl flex flex-col max-h-screen sm:max-h-[85vh]" onClick={e => e.stopPropagation()}>
-        <header className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-800">
-          <h2 className="text-base font-bold text-gray-900 dark:text-white">New task — {columnName}</h2>
-          <button type="button" onClick={onClose} className="w-9 h-9 inline-flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg bg-transparent border-none cursor-pointer" title="Close">
-            <X size={16} strokeWidth={2.25} />
-          </button>
-        </header>
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-4 sm:py-5 space-y-3">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Task title"
-            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-base font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <textarea
-            value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            placeholder="Description (optional)…"
-            rows={8}
-            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none min-h-[180px]"
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Priority</label>
-              <PrioritySelect value={priority} onChange={setPriority} />
+    <PortalModal>
+            <div className="fixed inset-0 z-40 flex items-center justify-center p-4 animate-fade-in-up">
+              <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} aria-hidden />
+              <div className="relative bg-white dark:bg-gray-900 rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-gray-200 dark:border-gray-800 w-full sm:max-w-xl flex flex-col max-h-screen sm:max-h-[85vh]" onClick={e => e.stopPropagation()}>
+                <header className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-800">
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white">New task — {columnName}</h2>
+                  <button type="button" onClick={onClose} className="w-9 h-9 inline-flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg bg-transparent border-none cursor-pointer" title="Close">
+                    <X size={16} strokeWidth={2.25} />
+                  </button>
+                </header>
+                <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-4 sm:py-5 space-y-3">
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Task title"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-base font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <textarea
+                    value={desc}
+                    onChange={(e) => setDesc(e.target.value)}
+                    placeholder="Description (optional)…"
+                    rows={8}
+                    className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none min-h-[180px]"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Priority</label>
+                      <PrioritySelect value={priority} onChange={setPriority} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Due date</label>
+                      <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                  </div>
+                  {/* Assignees moved up here so the multi-select dropdown has room to
+                      open DOWNWARD without overlapping Title/Description. */}
+                  <div>
+                    <MultiSelectDropdown
+                      label="Assignees"
+                      placeholder="Select assignees…"
+                      options={members.map((m) => ({
+                        id: m.id,
+                        label: m.name,
+                        initials: m.initials,
+                        subtitle: m.email,
+                      }))}
+                      selected={assignees}
+                      onChange={setAssignees}
+                    />
+                  </div>
+                </div>
+                <footer className="flex items-center justify-end gap-2 px-4 sm:px-5 py-3 sm:py-4 border-t border-gray-200 dark:border-gray-800">
+                  <button type="button" onClick={onClose} disabled={busy} className="px-3 sm:px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold border-none cursor-pointer disabled:opacity-50">Cancel</button>
+                  <button type="button" onClick={submit} disabled={busy || !title.trim()} className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow border-none cursor-pointer disabled:opacity-50">
+                    {busy ? <span className="animate-spin">⏳</span> : <Plus size={14} strokeWidth={2.5} />}
+                    Create task
+                  </button>
+                </footer>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Due date</label>
-              <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            </div>
-          </div>
-          {/* Assignees moved up here so the multi-select dropdown has room to
-              open DOWNWARD without overlapping Title/Description. */}
-          <div>
-            <MultiSelectDropdown
-              label="Assignees"
-              placeholder="Select assignees…"
-              options={members.map((m) => ({
-                id: m.id,
-                label: m.name,
-                initials: m.initials,
-                subtitle: m.email,
-              }))}
-              selected={assignees}
-              onChange={setAssignees}
-            />
-          </div>
-        </div>
-        <footer className="flex items-center justify-end gap-2 px-4 sm:px-5 py-3 sm:py-4 border-t border-gray-200 dark:border-gray-800">
-          <button type="button" onClick={onClose} disabled={busy} className="px-3 sm:px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold border-none cursor-pointer disabled:opacity-50">Cancel</button>
-          <button type="button" onClick={submit} disabled={busy || !title.trim()} className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow border-none cursor-pointer disabled:opacity-50">
-            {busy ? <span className="animate-spin">⏳</span> : <Plus size={14} strokeWidth={2.5} />}
-            Create task
-          </button>
-        </footer>
-      </div>
-    </div>
+    </PortalModal>
   )
 }
 
@@ -526,28 +529,30 @@ function AddColumnModal({
     try { await onCreate(name.trim()); onClose() } finally { setBusy(false) }
   }
   return (
-    <div className="fixed inset-0 z-40 flex items-stretch sm:items-start sm:justify-center sm:pt-24 justify-center p-0 sm:p-4 animate-fade-in-up">
-      <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} />
-      <div className="relative bg-white dark:bg-gray-900 rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-gray-200 dark:border-gray-800 w-full sm:max-w-sm flex flex-col">
-        <header className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-          <h2 className="text-base font-bold text-gray-900 dark:text-white">New column</h2>
-        </header>
-        <div className="p-5">
-          <input
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
-            placeholder="Column name (e.g. Blocked)"
-            className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-        <footer className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200 dark:border-gray-800">
-          <button type="button" onClick={onClose} className="px-3 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold border-none cursor-pointer">Cancel</button>
-          <button type="button" onClick={submit} disabled={busy || !name.trim()} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow border-none cursor-pointer disabled:opacity-50">Create column</button>
-        </footer>
-      </div>
-    </div>
+    <PortalModal>
+            <div className="fixed inset-0 z-40 flex items-stretch sm:items-start sm:justify-center sm:pt-24 justify-center p-0 sm:p-4 animate-fade-in-up">
+              <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} />
+              <div className="relative bg-white dark:bg-gray-900 rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-gray-200 dark:border-gray-800 w-full sm:max-w-sm flex flex-col">
+                <header className="px-5 py-4 border-b border-gray-200 dark:border-gray-800">
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white">New column</h2>
+                </header>
+                <div className="p-5">
+                  <input
+                    autoFocus
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+                    placeholder="Column name (e.g. Blocked)"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <footer className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200 dark:border-gray-800">
+                  <button type="button" onClick={onClose} className="px-3 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold border-none cursor-pointer">Cancel</button>
+                  <button type="button" onClick={submit} disabled={busy || !name.trim()} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow border-none cursor-pointer disabled:opacity-50">Create column</button>
+                </footer>
+              </div>
+            </div>
+    </PortalModal>
   )
 }
 

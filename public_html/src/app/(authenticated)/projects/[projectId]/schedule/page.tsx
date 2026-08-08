@@ -1,4 +1,5 @@
 'use client'
+import PortalModal from '@/components/PortalModal';
 
 /**
  * Project Schedule — Basecamp-style calendar with Month, Week, Agenda views.
@@ -176,186 +177,188 @@ function EventDetailsModal({
   const gradient = gradClass[colorKey] || gradClass.sky
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-fade-in-up"
-      >
-        {/* ── Hero header with gradient ── */}
-        <div className={`relative bg-gradient-to-r ${gradient} px-6 pt-6 pb-8`}>
-          {/* Pattern overlay */}
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute top-3 right-6 w-32 h-32 rounded-full bg-white" />
-            <div className="absolute bottom-2 left-4 w-20 h-20 rounded-full bg-white" />
-          </div>
-
-          {/* Category + close */}
-          <div className="flex items-start justify-between mb-4">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white/20 text-white backdrop-blur-sm border border-white/30">
-              {event.category}
-            </span>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 text-white flex items-center justify-center border-none cursor-pointer backdrop-blur-sm transition"
-            >
-              <X size={15} />
-            </button>
-          </div>
-
-          {/* Title */}
-          <h2 className="text-xl font-extrabold text-white drop-shadow-sm mb-2 pr-8 leading-tight">
-            {event.title}
-          </h2>
-
-          {/* Date/time row */}
-          <div className="flex items-center gap-3 text-white/90 text-sm">
-            <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm rounded-lg px-2.5 py-1">
-              <CalendarClock size={13} strokeWidth={2.5} />
-              <span className="font-semibold">
-                {event.all_day
-                  ? `${new Date(event.start_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}${isMultiDay ? ` – ${new Date(event.end_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}`
-                  : `${fmtTime(event.start_at)} – ${fmtTime(event.end_at)}`
-                }
-              </span>
-            </div>
-            {event.all_day && (
-              <span className="bg-white/20 backdrop-blur-sm rounded-lg px-2.5 py-1 text-xs font-semibold">All-day</span>
-            )}
-          </div>
-        </div>
-
-        {/* ── Body: two-column layout ── */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-gray-100 dark:divide-gray-800">
-
-            {/* ── Left column: main info ── */}
-            <div className="sm:col-span-2 p-5 space-y-4">
-
-              {/* Description */}
-              {event.description && (
-                <div>
-                  <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">About</p>
-                  <div className="bg-gray-50 dark:bg-gray-800/60 rounded-xl p-3">
-                    <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{event.description}</p>
+    <PortalModal>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-fade-in-up"
+              >
+                {/* ── Hero header with gradient ── */}
+                <div className={`relative bg-gradient-to-r ${gradient} px-6 pt-6 pb-8`}>
+                  {/* Pattern overlay */}
+                  <div className="absolute inset-0 opacity-10">
+                    <div className="absolute top-3 right-6 w-32 h-32 rounded-full bg-white" />
+                    <div className="absolute bottom-2 left-4 w-20 h-20 rounded-full bg-white" />
                   </div>
-                </div>
-              )}
-
-              {/* Meta details */}
-              <div className="space-y-3">
-                {/* Date */}
-                <MetaRow icon={<CalendarDays size={14} strokeWidth={2.25} className="text-gray-500" />} label="Date">
-                  <span>
-                    {new Date(event.start_at).toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}
-                    {isMultiDay && (
-                      <span className="text-gray-500 dark:text-gray-400"> — {new Date(event.end_at).toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+        
+                  {/* Category + close */}
+                  <div className="flex items-start justify-between mb-4">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-white/20 text-white backdrop-blur-sm border border-white/30">
+                      {event.category}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      aria-label="Close"
+                      className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 text-white flex items-center justify-center border-none cursor-pointer backdrop-blur-sm transition"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+        
+                  {/* Title */}
+                  <h2 className="text-xl font-extrabold text-white drop-shadow-sm mb-2 pr-8 leading-tight">
+                    {event.title}
+                  </h2>
+        
+                  {/* Date/time row */}
+                  <div className="flex items-center gap-3 text-white/90 text-sm">
+                    <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm rounded-lg px-2.5 py-1">
+                      <CalendarClock size={13} strokeWidth={2.5} />
+                      <span className="font-semibold">
+                        {event.all_day
+                          ? `${new Date(event.start_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}${isMultiDay ? ` – ${new Date(event.end_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}`
+                          : `${fmtTime(event.start_at)} – ${fmtTime(event.end_at)}`
+                        }
+                      </span>
+                    </div>
+                    {event.all_day && (
+                      <span className="bg-white/20 backdrop-blur-sm rounded-lg px-2.5 py-1 text-xs font-semibold">All-day</span>
                     )}
-                  </span>
-                </MetaRow>
-
-                {/* Time */}
-                {!event.all_day && (
-                  <MetaRow icon={<Clock size={14} strokeWidth={2.25} className="text-gray-500" />} label="Time">
-                    {fmtTime(event.start_at)} — {fmtTime(event.end_at)}
-                  </MetaRow>
-                )}
-
-                {/* Location */}
-                {event.location && (
-                  <MetaRow icon={<MapPin size={14} strokeWidth={2.25} className="text-gray-500" />} label="Location">
-                    <span className="inline-flex items-center gap-1">
-                      <Globe size={12} className="text-gray-400" />
-                      {event.location}
-                    </span>
-                  </MetaRow>
-                )}
-
-                {/* Color */}
-                <MetaRow icon={<Palette size={14} strokeWidth={2.25} className="text-gray-500" />} label="Color">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-4 h-4 rounded-full shadow-sm ${COLOR_BG[colorKey]}`} />
-                    <span className="capitalize font-medium">{colorKey}</span>
                   </div>
-                </MetaRow>
-
-                {/* Created by */}
-                {event.created_by && (
-                  <MetaRow icon={<User size={14} strokeWidth={2.25} className="text-gray-500" />} label="Created by">
-                    <span className="inline-flex items-center gap-1.5">
-                      <div className="w-5 h-5 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 text-white text-[8px] font-bold flex items-center justify-center">
-                        {event.created_by.first_name[0]}{event.created_by.last_name[0]}
+                </div>
+        
+                {/* ── Body: two-column layout ── */}
+                <div className="flex-1 overflow-y-auto">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-gray-100 dark:divide-gray-800">
+        
+                    {/* ── Left column: main info ── */}
+                    <div className="sm:col-span-2 p-5 space-y-4">
+        
+                      {/* Description */}
+                      {event.description && (
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">About</p>
+                          <div className="bg-gray-50 dark:bg-gray-800/60 rounded-xl p-3">
+                            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">{event.description}</p>
+                          </div>
+                        </div>
+                      )}
+        
+                      {/* Meta details */}
+                      <div className="space-y-3">
+                        {/* Date */}
+                        <MetaRow icon={<CalendarDays size={14} strokeWidth={2.25} className="text-gray-500" />} label="Date">
+                          <span>
+                            {new Date(event.start_at).toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}
+                            {isMultiDay && (
+                              <span className="text-gray-500 dark:text-gray-400"> — {new Date(event.end_at).toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                            )}
+                          </span>
+                        </MetaRow>
+        
+                        {/* Time */}
+                        {!event.all_day && (
+                          <MetaRow icon={<Clock size={14} strokeWidth={2.25} className="text-gray-500" />} label="Time">
+                            {fmtTime(event.start_at)} — {fmtTime(event.end_at)}
+                          </MetaRow>
+                        )}
+        
+                        {/* Location */}
+                        {event.location && (
+                          <MetaRow icon={<MapPin size={14} strokeWidth={2.25} className="text-gray-500" />} label="Location">
+                            <span className="inline-flex items-center gap-1">
+                              <Globe size={12} className="text-gray-400" />
+                              {event.location}
+                            </span>
+                          </MetaRow>
+                        )}
+        
+                        {/* Color */}
+                        <MetaRow icon={<Palette size={14} strokeWidth={2.25} className="text-gray-500" />} label="Color">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-4 h-4 rounded-full shadow-sm ${COLOR_BG[colorKey]}`} />
+                            <span className="capitalize font-medium">{colorKey}</span>
+                          </div>
+                        </MetaRow>
+        
+                        {/* Created by */}
+                        {event.created_by && (
+                          <MetaRow icon={<User size={14} strokeWidth={2.25} className="text-gray-500" />} label="Created by">
+                            <span className="inline-flex items-center gap-1.5">
+                              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 text-white text-[8px] font-bold flex items-center justify-center">
+                                {event.created_by.first_name[0]}{event.created_by.last_name[0]}
+                              </div>
+                              {event.created_by.first_name} {event.created_by.last_name}
+                            </span>
+                          </MetaRow>
+                        )}
+        
+                        {/* Timestamps */}
+                        <MetaRow icon={<Globe size={14} strokeWidth={2.25} className="text-gray-500" />} label="Activity">
+                          <div className="text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+                            <p>Created {fmtDateTime(event.created_at)}</p>
+                            {event.updated_at && <p>Updated {fmtDateTime(event.updated_at)}</p>}
+                          </div>
+                        </MetaRow>
                       </div>
-                      {event.created_by.first_name} {event.created_by.last_name}
-                    </span>
-                  </MetaRow>
-                )}
-
-                {/* Timestamps */}
-                <MetaRow icon={<Globe size={14} strokeWidth={2.25} className="text-gray-500" />} label="Activity">
-                  <div className="text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
-                    <p>Created {fmtDateTime(event.created_at)}</p>
-                    {event.updated_at && <p>Updated {fmtDateTime(event.updated_at)}</p>}
+                    </div>
+        
+                    {/* ── Right column: attendees sidebar ── */}
+                    <div className="p-5 bg-gray-50 dark:bg-gray-800/30">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center">
+                          <Users size={13} className="text-indigo-600 dark:text-indigo-300" strokeWidth={2.25} />
+                        </div>
+                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Attendees
+                          <span className="ml-1.5 font-normal text-gray-400 dark:text-gray-500">({event.attendees.length})</span>
+                        </p>
+                      </div>
+        
+                      {event.attendees.length > 0 ? (
+                        <AttendeesList attendees={event.attendees} />
+                      ) : (
+                        <div className="text-center py-6">
+                          <Users size={28} className="mx-auto text-gray-300 dark:text-gray-600 mb-2" strokeWidth={1.5} />
+                          <p className="text-xs text-gray-400 dark:text-gray-500 italic">No attendees added</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </MetaRow>
+                </div>
+        
+                {/* ── Footer actions ── */}
+                <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onDelete(event)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/30 hover:bg-rose-100 dark:hover:bg-rose-900/50 rounded-xl border border-rose-200 dark:border-rose-800 cursor-pointer transition"
+                  >
+                    <Trash2 size={14} strokeWidth={2.25} />
+                    Delete
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer transition"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { onClose(); onEdit(event) }}
+                      className="inline-flex items-center gap-1.5 px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl cursor-pointer shadow-sm transition"
+                    >
+                      <Pencil size={13} strokeWidth={2.25} />
+                      Edit event
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-
-            {/* ── Right column: attendees sidebar ── */}
-            <div className="p-5 bg-gray-50 dark:bg-gray-800/30">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center">
-                  <Users size={13} className="text-indigo-600 dark:text-indigo-300" strokeWidth={2.25} />
-                </div>
-                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Attendees
-                  <span className="ml-1.5 font-normal text-gray-400 dark:text-gray-500">({event.attendees.length})</span>
-                </p>
-              </div>
-
-              {event.attendees.length > 0 ? (
-                <AttendeesList attendees={event.attendees} />
-              ) : (
-                <div className="text-center py-6">
-                  <Users size={28} className="mx-auto text-gray-300 dark:text-gray-600 mb-2" strokeWidth={1.5} />
-                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">No attendees added</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Footer actions ── */}
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
-          <button
-            type="button"
-            onClick={() => onDelete(event)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/30 hover:bg-rose-100 dark:hover:bg-rose-900/50 rounded-xl border border-rose-200 dark:border-rose-800 cursor-pointer transition"
-          >
-            <Trash2 size={14} strokeWidth={2.25} />
-            Delete
-          </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer transition"
-            >
-              Close
-            </button>
-            <button
-              type="button"
-              onClick={() => { onClose(); onEdit(event) }}
-              className="inline-flex items-center gap-1.5 px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl cursor-pointer shadow-sm transition"
-            >
-              <Pencil size={13} strokeWidth={2.25} />
-              Edit event
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </PortalModal>
   )
 }
 
@@ -472,209 +475,211 @@ function EventModal({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <form
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={submit}
-        className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-3 animate-fade-in-up"
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-gray-900 dark:text-white">
-            {initial?.id ? 'Edit event' : 'New event'}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg border-none cursor-pointer"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <input
-          autoFocus
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Event title"
-          className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900"
-        />
-
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Description (optional)"
-          rows={2}
-          className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 resize-none"
-        />
-
-        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={allDay}
-            onChange={(e) => setAllDay(e.target.checked)}
-            className="rounded text-indigo-600"
-          />
-          All-day event
-        </label>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-              Start {allDay ? 'date' : ''}
-            </label>
-            <input
-              type={allDay ? 'date' : 'datetime-local'}
-              value={allDay ? startDate : `${startDate}T${startTime}`}
-              onChange={(e) => {
-                const v = e.target.value
-                if (allDay) setStartDate(v)
-                else {
-                  const [d, t] = v.split('T')
-                  setStartDate(d || '')
-                  setStartTime(t || '')
-                }
-              }}
-              className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-              End {allDay ? 'date' : ''}
-            </label>
-            <input
-              type={allDay ? 'date' : 'datetime-local'}
-              value={allDay ? endDate : `${endDate}T${endTime}`}
-              onChange={(e) => {
-                const v = e.target.value
-                if (allDay) setEndDate(v)
-                else {
-                  const [d, t] = v.split('T')
-                  setEndDate(d || '')
-                  setEndTime(t || '')
-                }
-              }}
-              className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-            Location
-          </label>
-          <input
-            type="text"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="Where is this happening?"
-            className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-              Category
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as ScheduleCategory)}
-              className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500"
-            >
-              {SCHEDULE_CATEGORIES.map((c) => (
-                <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-              Color
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {SCHEDULE_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  aria-label={c}
-                  onClick={() => setColor(c)}
-                  className={`w-6 h-6 rounded-full ${COLOR_BG[c]} border-2 transition cursor-pointer ${
-                    color === c ? 'border-gray-900 dark:border-white scale-110' : 'border-transparent hover:scale-105'
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {members.length > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Attendees ({attendeeIds.length} of {members.length})
-              </label>
-              <button
-                type="button"
-                onClick={handleSelectAll}
-                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-lg transition border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 cursor-pointer bg-transparent border-none"
+    <PortalModal>
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+              <form
+                onClick={(e) => e.stopPropagation()}
+                onSubmit={submit}
+                className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-3 animate-fade-in-up"
               >
-                {allSelected ? (
-                  <><X size={10} /> Deselect all</>
-                ) : (
-                  <><Check size={10} /> Select all</>
-                )}
-              </button>
-            </div>
-            <div className="max-h-36 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 space-y-1">
-              {members.map((m) => {
-                const checked = attendeeIds.includes(m.id)
-                return (
-                  <label
-                    key={m.id}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm"
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                    {initial?.id ? 'Edit event' : 'New event'}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Close"
+                    className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg border-none cursor-pointer"
                   >
+                    <X size={16} />
+                  </button>
+                </div>
+        
+                <input
+                  autoFocus
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Event title"
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900"
+                />
+        
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Description (optional)"
+                  rows={2}
+                  className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 resize-none"
+                />
+        
+                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allDay}
+                    onChange={(e) => setAllDay(e.target.checked)}
+                    className="rounded text-indigo-600"
+                  />
+                  All-day event
+                </label>
+        
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                      Start {allDay ? 'date' : ''}
+                    </label>
                     <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) =>
-                        setAttendeeIds((ids) =>
-                          e.target.checked ? [...ids, m.id] : ids.filter((i) => i !== m.id)
-                        )
-                      }
-                      className="rounded text-indigo-600"
+                      type={allDay ? 'date' : 'datetime-local'}
+                      value={allDay ? startDate : `${startDate}T${startTime}`}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        if (allDay) setStartDate(v)
+                        else {
+                          const [d, t] = v.split('T')
+                          setStartDate(d || '')
+                          setStartTime(t || '')
+                        }
+                      }}
+                      className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500"
                     />
-                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-[8px] font-bold flex items-center justify-center shrink-0">
-                      {m.first_name[0]}{m.last_name[0]}
-                    </div>
-                    <span className="text-gray-700 dark:text-gray-300">
-                      {m.first_name} {m.last_name}
-                    </span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                      End {allDay ? 'date' : ''}
+                    </label>
+                    <input
+                      type={allDay ? 'date' : 'datetime-local'}
+                      value={allDay ? endDate : `${endDate}T${endTime}`}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        if (allDay) setEndDate(v)
+                        else {
+                          const [d, t] = v.split('T')
+                          setEndDate(d || '')
+                          setEndTime(t || '')
+                        }
+                      }}
+                      className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+        
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                    Location
                   </label>
-                )
-              })}
+                  <input
+                    type="text"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="Where is this happening?"
+                    className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900"
+                  />
+                </div>
+        
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                      Category
+                    </label>
+                    <select
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value as ScheduleCategory)}
+                      className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                    >
+                      {SCHEDULE_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                      Color
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SCHEDULE_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          aria-label={c}
+                          onClick={() => setColor(c)}
+                          className={`w-6 h-6 rounded-full ${COLOR_BG[c]} border-2 transition cursor-pointer ${
+                            color === c ? 'border-gray-900 dark:border-white scale-110' : 'border-transparent hover:scale-105'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+        
+                {members.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Attendees ({attendeeIds.length} of {members.length})
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleSelectAll}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-lg transition border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 cursor-pointer bg-transparent border-none"
+                      >
+                        {allSelected ? (
+                          <><X size={10} /> Deselect all</>
+                        ) : (
+                          <><Check size={10} /> Select all</>
+                        )}
+                      </button>
+                    </div>
+                    <div className="max-h-36 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 space-y-1">
+                      {members.map((m) => {
+                        const checked = attendeeIds.includes(m.id)
+                        return (
+                          <label
+                            key={m.id}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) =>
+                                setAttendeeIds((ids) =>
+                                  e.target.checked ? [...ids, m.id] : ids.filter((i) => i !== m.id)
+                                )
+                              }
+                              className="rounded text-indigo-600"
+                            />
+                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-[8px] font-bold flex items-center justify-center shrink-0">
+                              {m.first_name[0]}{m.last_name[0]}
+                            </div>
+                            <span className="text-gray-700 dark:text-gray-300">
+                              {m.first_name} {m.last_name}
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+        
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl border-none cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!title.trim() || !startDate || !endDate || submitting}
+                    className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl border-none cursor-pointer shadow"
+                  >
+                    {submitting ? 'Saving…' : initial?.id ? 'Save changes' : 'Create event'}
+                  </button>
+                </div>
+              </form>
             </div>
-          </div>
-        )}
-
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl border-none cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={!title.trim() || !startDate || !endDate || submitting}
-            className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl border-none cursor-pointer shadow"
-          >
-            {submitting ? 'Saving…' : initial?.id ? 'Save changes' : 'Create event'}
-          </button>
-        </div>
-      </form>
-    </div>
+    </PortalModal>
   )
 }
 

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useTranslation } from 'react-i18next'
 import Link from 'next/link'
+import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
 import { useDateSettings } from '@/contexts/CompanySettingsContext'
 import PageLoader from '@/components/PageLoader'
@@ -587,6 +588,7 @@ export default function EmployeeProfilePage() {
 
       {/* Edit Modal */}
       {editing && (
+        <PortalModal>
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
 
@@ -752,6 +754,7 @@ export default function EmployeeProfilePage() {
 
           </div>
         </div>
+        </PortalModal>
       )}
     </div>
   )

@@ -1,4 +1,5 @@
 'use client'
+import PortalModal from '@/components/PortalModal';
 
 /**
  * /projects/[projectId]/files
@@ -451,159 +452,161 @@ function DocumentViewer({
   const Icon = KIND_ICON[kind] || FileIcon
 
   return (
-    <div className="fixed inset-0 z-40 flex items-stretch sm:items-center justify-center p-0 sm:p-4 animate-fade-in-up" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" onClick={onClose} aria-hidden />
-      <div className="relative bg-white dark:bg-gray-900 rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-gray-200 dark:border-gray-800 w-full sm:max-w-3xl h-full sm:h-auto sm:max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <header className="flex items-start gap-3 p-5 border-b border-gray-200 dark:border-gray-800">
-          <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 flex items-center justify-center shrink-0">
-            <Icon size={20} strokeWidth={2.25} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-0.5">
-              <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${KIND_BADGE[kind]}`}>
-                {kind === 'file' ? 'File' : 'Document'}
-              </span>
-              <span className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold">
-                By {doc.author_name} · {fmtRelative(doc.created_at)}
-                {doc.updated_at && doc.updated_at !== doc.created_at ? ' · edited' : ''}
-              </span>
-            </div>
-            {editing ? (
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full mt-1 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-base font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Document title"
+    <PortalModal>
+            <div className="fixed inset-0 z-40 flex items-stretch sm:items-center justify-center p-0 sm:p-4 animate-fade-in-up" role="dialog" aria-modal="true">
+              <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" onClick={onClose} aria-hidden />
+              <div className="relative bg-white dark:bg-gray-900 rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-gray-200 dark:border-gray-800 w-full sm:max-w-3xl h-full sm:h-auto sm:max-h-[90vh] flex flex-col">
+                {/* Header */}
+                <header className="flex items-start gap-3 p-5 border-b border-gray-200 dark:border-gray-800">
+                  <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 flex items-center justify-center shrink-0">
+                    <Icon size={20} strokeWidth={2.25} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${KIND_BADGE[kind]}`}>
+                        {kind === 'file' ? 'File' : 'Document'}
+                      </span>
+                      <span className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 font-semibold">
+                        By {doc.author_name} · {fmtRelative(doc.created_at)}
+                        {doc.updated_at && doc.updated_at !== doc.created_at ? ' · edited' : ''}
+                      </span>
+                    </div>
+                    {editing ? (
+                      <input
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        className="w-full mt-1 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-base font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Document title"
+                      />
+                    ) : (
+                      <h2 className="text-base font-bold text-gray-900 dark:text-white truncate" title={doc.title}>{doc.title}</h2>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {!editing && canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => setEditing(true)}
+                        className="w-9 h-9 inline-flex items-center justify-center text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg bg-transparent border-none cursor-pointer"
+                        title="Edit document"
+                      >
+                        <Pencil size={15} strokeWidth={2.25} />
+                      </button>
+                    )}
+                    {(doc.author_name === currentUserName || isProjectOwner) && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(true)}
+                        className="w-9 h-9 inline-flex items-center justify-center text-gray-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg bg-transparent border-none cursor-pointer"
+                        title="Delete document"
+                      >
+                        <Trash2 size={15} strokeWidth={2.25} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="w-9 h-9 inline-flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg bg-transparent border-none cursor-pointer"
+                      title="Close"
+                    >
+                      <X size={16} strokeWidth={2.25} />
+                    </button>
+                  </div>
+                </header>
+        
+                {/* Body */}
+                <div ref={bodyScrollRef} className="flex-1 min-h-0 flex flex-col overflow-y-auto p-5 scroll-smooth ">
+                  {doc.kind === 'file' ? (
+                    <div className="text-center py-8">
+                      <Icon size={64} className="mx-auto text-gray-400 mb-3" strokeWidth={1.5} />
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{doc.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {doc.file_type || 'Unknown type'} · {formatBytes(doc.file_size)}
+                      </p>
+                      <a
+                        href={doc.file_url!}
+                        download={doc.title}
+                        className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow no-underline"
+                      >
+                        <Download size={14} strokeWidth={2.5} /> Download
+                      </a>
+                    </div>
+                  ) : editing ? (
+                    <RichTextEditor initialHtml={doc.content_html} onChange={setHtml} autoFocus />
+                  ) : (
+                    <DocumentReader html={doc.content_html} />
+                  )}
+        
+                  {/* Reactions + Comments list */}
+                  <DocumentReactions
+                    reactions={doc.reactions}
+                    onToggle={handleToggleReaction}
+                    currentUserName={currentUserName}
+                  />
+                  <CommentsList
+                    comments={commentsApi.comments}
+                    loading={commentsApi.loading}
+                    currentUserName={currentUserName}
+                    isProjectOwner={isProjectOwner}
+                    onEdit={handleEditComment}
+                    onRequestDelete={(id) => setConfirmDeleteCommentId(id)}
+                  />
+                </div>
+        
+                {/* Footer — sticky. Comment composer always visible while scrolling.
+                    In edit mode this becomes the Save/Cancel row instead. */}
+                {editing ? (
+                  <footer className="flex items-center justify-end gap-2 px-4 sm:px-5 py-3 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+                    <button
+                      type="button"
+                      onClick={() => { setEditing(false); setTitle(doc.title); setHtml(doc.content_html || '') }}
+                      disabled={saving}
+                      className="px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold border-none cursor-pointer disabled:opacity-50"
+                    >Cancel</button>
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      disabled={saving || !title.trim()}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {saving ? <Loader2 size={14} className="animate-spin" /> : null}
+                      Save changes
+                    </button>
+                  </footer>
+                ) : (
+                  <CommentsFooter onAdd={handleAddComment} />
+                )}
+              </div>
+        
+              <ConfirmDialog
+                open={confirmDelete}
+                title={doc.kind === 'file' ? 'Delete this file?' : 'Delete this document?'}
+                description={doc.kind === 'file' ? 'The uploaded file will be permanently removed.' : 'This document and all its comments will be permanently removed.'}
+                confirmLabel="Delete"
+                destructive
+                onConfirm={handleDelete}
+                onCancel={() => setConfirmDelete(false)}
               />
-            ) : (
-              <h2 className="text-base font-bold text-gray-900 dark:text-white truncate" title={doc.title}>{doc.title}</h2>
-            )}
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {!editing && canEdit && (
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="w-9 h-9 inline-flex items-center justify-center text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg bg-transparent border-none cursor-pointer"
-                title="Edit document"
-              >
-                <Pencil size={15} strokeWidth={2.25} />
-              </button>
-            )}
-            {(doc.author_name === currentUserName || isProjectOwner) && (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="w-9 h-9 inline-flex items-center justify-center text-gray-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg bg-transparent border-none cursor-pointer"
-                title="Delete document"
-              >
-                <Trash2 size={15} strokeWidth={2.25} />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-9 h-9 inline-flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg bg-transparent border-none cursor-pointer"
-              title="Close"
-            >
-              <X size={16} strokeWidth={2.25} />
-            </button>
-          </div>
-        </header>
-
-        {/* Body */}
-        <div ref={bodyScrollRef} className="flex-1 min-h-0 flex flex-col overflow-y-auto p-5 scroll-smooth ">
-          {doc.kind === 'file' ? (
-            <div className="text-center py-8">
-              <Icon size={64} className="mx-auto text-gray-400 mb-3" strokeWidth={1.5} />
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">{doc.title}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {doc.file_type || 'Unknown type'} · {formatBytes(doc.file_size)}
-              </p>
-              <a
-                href={doc.file_url!}
-                download={doc.title}
-                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow no-underline"
-              >
-                <Download size={14} strokeWidth={2.5} /> Download
-              </a>
+              <ConfirmDialog
+                open={confirmDeleteCommentId !== null}
+                title="Delete this comment?"
+                description="This comment will be permanently removed."
+                confirmLabel="Delete comment"
+                destructive
+                onConfirm={async () => {
+                  if (!confirmDeleteCommentId) return
+                  try {
+                    await commentsApi.remove(confirmDeleteCommentId)
+                    toast.success('Comment deleted')
+                    setConfirmDeleteCommentId(null)
+                  } catch (e: any) {
+                    toast.error(e?.message || 'Failed to delete comment')
+                  }
+                }}
+                onCancel={() => setConfirmDeleteCommentId(null)}
+              />
             </div>
-          ) : editing ? (
-            <RichTextEditor initialHtml={doc.content_html} onChange={setHtml} autoFocus />
-          ) : (
-            <DocumentReader html={doc.content_html} />
-          )}
-
-          {/* Reactions + Comments list */}
-          <DocumentReactions
-            reactions={doc.reactions}
-            onToggle={handleToggleReaction}
-            currentUserName={currentUserName}
-          />
-          <CommentsList
-            comments={commentsApi.comments}
-            loading={commentsApi.loading}
-            currentUserName={currentUserName}
-            isProjectOwner={isProjectOwner}
-            onEdit={handleEditComment}
-            onRequestDelete={(id) => setConfirmDeleteCommentId(id)}
-          />
-        </div>
-
-        {/* Footer — sticky. Comment composer always visible while scrolling.
-            In edit mode this becomes the Save/Cancel row instead. */}
-        {editing ? (
-          <footer className="flex items-center justify-end gap-2 px-4 sm:px-5 py-3 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-            <button
-              type="button"
-              onClick={() => { setEditing(false); setTitle(doc.title); setHtml(doc.content_html || '') }}
-              disabled={saving}
-              className="px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold border-none cursor-pointer disabled:opacity-50"
-            >Cancel</button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !title.trim()}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? <Loader2 size={14} className="animate-spin" /> : null}
-              Save changes
-            </button>
-          </footer>
-        ) : (
-          <CommentsFooter onAdd={handleAddComment} />
-        )}
-      </div>
-
-      <ConfirmDialog
-        open={confirmDelete}
-        title={doc.kind === 'file' ? 'Delete this file?' : 'Delete this document?'}
-        description={doc.kind === 'file' ? 'The uploaded file will be permanently removed.' : 'This document and all its comments will be permanently removed.'}
-        confirmLabel="Delete"
-        destructive
-        onConfirm={handleDelete}
-        onCancel={() => setConfirmDelete(false)}
-      />
-      <ConfirmDialog
-        open={confirmDeleteCommentId !== null}
-        title="Delete this comment?"
-        description="This comment will be permanently removed."
-        confirmLabel="Delete comment"
-        destructive
-        onConfirm={async () => {
-          if (!confirmDeleteCommentId) return
-          try {
-            await commentsApi.remove(confirmDeleteCommentId)
-            toast.success('Comment deleted')
-            setConfirmDeleteCommentId(null)
-          } catch (e: any) {
-            toast.error(e?.message || 'Failed to delete comment')
-          }
-        }}
-        onCancel={() => setConfirmDeleteCommentId(null)}
-      />
-    </div>
+    </PortalModal>
   )
 }
 
@@ -624,39 +627,41 @@ function NewDocumentModal({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-stretch sm:items-start sm:justify-center sm:pt-12 justify-center p-0 sm:p-4 animate-fade-in-up">
-      <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" onClick={onClose} aria-hidden />
-      <div className="relative bg-white dark:bg-gray-900 rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-gray-200 dark:border-gray-800 w-full sm:max-w-2xl flex flex-col max-h-screen sm:max-h-[85vh]">
-        <header className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-800">
-          <h2 className="text-base font-bold text-gray-900 dark:text-white">New document</h2>
-          <button type="button" onClick={onClose} className="w-9 h-9 inline-flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg bg-transparent border-none cursor-pointer" title="Close">
-            <X size={16} strokeWidth={2.25} />
-          </button>
-        </header>
-        <div className="flex-1 min-h-0 flex flex-col overflow-y-auto px-4 sm:px-5 py-4 sm:py-5 gap-3">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Document title"
-            autoFocus
-            className="shrink-0 w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-base font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <RichTextEditor onChange={setHtml} placeholder="Start writing…" />
-        </div>
-        <footer className="flex items-center justify-end gap-2 px-4 sm:px-5 py-3 sm:py-4 border-t border-gray-200 dark:border-gray-800">
-          <button type="button" onClick={onClose} disabled={busy} className="px-3 sm:px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold border-none cursor-pointer disabled:opacity-50">Cancel</button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={busy || !title.trim()}
-            className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} strokeWidth={2.5} />}
-            Create document
-          </button>
-        </footer>
-      </div>
-    </div>
+    <PortalModal>
+            <div className="fixed inset-0 z-40 flex items-stretch sm:items-start sm:justify-center sm:pt-12 justify-center p-0 sm:p-4 animate-fade-in-up">
+              <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" onClick={onClose} aria-hidden />
+              <div className="relative bg-white dark:bg-gray-900 rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-gray-200 dark:border-gray-800 w-full sm:max-w-2xl flex flex-col max-h-screen sm:max-h-[85vh]">
+                <header className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-800">
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white">New document</h2>
+                  <button type="button" onClick={onClose} className="w-9 h-9 inline-flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg bg-transparent border-none cursor-pointer" title="Close">
+                    <X size={16} strokeWidth={2.25} />
+                  </button>
+                </header>
+                <div className="flex-1 min-h-0 flex flex-col overflow-y-auto px-4 sm:px-5 py-4 sm:py-5 gap-3">
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Document title"
+                    autoFocus
+                    className="shrink-0 w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-base font-semibold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <RichTextEditor onChange={setHtml} placeholder="Start writing…" />
+                </div>
+                <footer className="flex items-center justify-end gap-2 px-4 sm:px-5 py-3 sm:py-4 border-t border-gray-200 dark:border-gray-800">
+                  <button type="button" onClick={onClose} disabled={busy} className="px-3 sm:px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-semibold border-none cursor-pointer disabled:opacity-50">Cancel</button>
+                  <button
+                    type="button"
+                    onClick={submit}
+                    disabled={busy || !title.trim()}
+                    className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} strokeWidth={2.5} />}
+                    Create document
+                  </button>
+                </footer>
+              </div>
+            </div>
+    </PortalModal>
   )
 }
 

@@ -1,4 +1,5 @@
 'use client'
+import PortalModal from '@/components/PortalModal';
 
 /**
  * /projects/[projectId]/files/[docId]
@@ -662,21 +663,23 @@ export default function DocPage() {
 
                 {/* Image preview lightbox */}
                 {imagePreview && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm animate-fade-in-up" role="dialog" aria-modal="true">
-                    <button
-                      type="button"
-                      onClick={() => setImagePreview(null)}
-                      className="absolute top-4 right-4 w-10 h-10 inline-flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 rounded-xl bg-transparent border-none cursor-pointer"
-                      title="Close preview"
-                    >
-                      <X size={18} strokeWidth={2.5} />
-                    </button>
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
-                    />
-                  </div>
+                  <PortalModal>
+                                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm animate-fade-in-up" role="dialog" aria-modal="true">
+                                          <button
+                                            type="button"
+                                            onClick={() => setImagePreview(null)}
+                                            className="absolute top-4 right-4 w-10 h-10 inline-flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 rounded-xl bg-transparent border-none cursor-pointer"
+                                            title="Close preview"
+                                          >
+                                            <X size={18} strokeWidth={2.5} />
+                                          </button>
+                                          <img
+                                            src={imagePreview}
+                                            alt="Preview"
+                                            className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
+                                          />
+                                        </div>
+                  </PortalModal>
                 )}
 
                 {/* Comments section — collapsible card */}

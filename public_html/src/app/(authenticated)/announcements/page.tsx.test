@@ -284,7 +284,6 @@ function CreateEditModal({ ann, lookups, onClose, onSaved }: {
   }
 
   return (
-    <PortalModal>
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl animate-scale-in flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
         <div className="bg-indigo-600 px-6 py-4 rounded-t-3xl shrink-0">
@@ -416,7 +415,6 @@ function CreateEditModal({ ann, lookups, onClose, onSaved }: {
         </form>
       </div>
     </div>
-    </PortalModal>
   )
 }
 

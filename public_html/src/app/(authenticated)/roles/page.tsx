@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { Check, KeyRound, Pencil, Plus, Shield, Tag, Trash2 } from 'lucide-react'
+import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
 import { roleSchema, type RoleInput } from '@/lib/schemas'
 
@@ -213,6 +214,7 @@ function RolesPageInner() {
       )}
 
       {showCreate && (
+        <PortalModal>
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreate(false)}>
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl animate-scale-in flex flex-col max-h-[calc(100vh-2rem)]" onClick={e => e.stopPropagation()}>
             <div className="bg-indigo-600 hover:bg-indigo-700 px-6 py-4 rounded-t-3xl shrink-0">
@@ -240,6 +242,7 @@ function RolesPageInner() {
             </form>
           </div>
         </div>
+        </PortalModal>
       )}
     </div>
   )

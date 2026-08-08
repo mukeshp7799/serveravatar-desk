@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { t } = require('../i18n');
+const { logActivity } = require('../services/activityService');
 
 const router = express.Router();
 
@@ -321,6 +322,11 @@ router.put('/:id', auth, async (req, res, next) => {
 
     params.push(targetId);
     await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    // ── Activity log: Employee Updated ───────────────────────────────────
+    logActivity({ req, module: 'Employee', action: 'Updated',
+      description: `Employee profile updated` });
+
     res.json({ message: t(req.lang, 'errors.userUpdated') });
   } catch (err) { next(err); }
 });

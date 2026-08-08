@@ -4,6 +4,7 @@ const router = express.Router();
 const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { t } = require('../i18n');
+const { logActivity } = require('../services/activityService');
 
 // Helper to check permission
 const canManageHolidays = (req, res, next) => {
@@ -45,6 +46,9 @@ router.post('/holidays', auth, canManageHolidays, async (req, res, next) => {
       [name, date, holiday_type || 'company', description || null]
     );
     const [rows] = await pool.query('SELECT * FROM company_holidays WHERE id = ?', [result.insertId]);
+    // ── Activity log: Holiday Created ─────────────────────────────────────
+    logActivity({ req, module: 'Calendar', action: 'Holiday Created',
+      description: `Holiday "${name}" created for ${date}` });
     res.status(201).json({ holiday: rows[0], message: 'Holiday created successfully' });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'A holiday already exists on this date' });
@@ -68,6 +72,9 @@ router.put('/holidays/:id', auth, canManageHolidays, async (req, res, next) => {
     params.push(id);
     await pool.query(`UPDATE company_holidays SET ${updates.join(', ')} WHERE id = ?`, params);
     const [rows] = await pool.query('SELECT * FROM company_holidays WHERE id = ?', [id]);
+    // ── Activity log: Holiday Updated ──────────────────────────────────────
+    logActivity({ req, module: 'Calendar', action: 'Holiday Updated',
+      description: `Holiday "${rows[0]?.name}" (${rows[0]?.date}) updated` });
     res.json({ holiday: rows[0], message: 'Holiday updated successfully' });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'A holiday already exists on this date' });
@@ -82,6 +89,9 @@ router.delete('/holidays/:id', auth, canManageHolidays, async (req, res, next) =
     const [existing] = await pool.query('SELECT id FROM company_holidays WHERE id = ?', [id]);
     if (!existing.length) return res.status(404).json({ error: 'Holiday not found' });
     await pool.query('DELETE FROM company_holidays WHERE id = ?', [id]);
+    // ── Activity log: Holiday Deleted ─────────────────────────────────────
+    logActivity({ req, module: 'Calendar', action: 'Holiday Deleted',
+      description: `Holiday ID ${id} deleted` });
     res.json({ message: 'Holiday deleted successfully' });
   } catch (err) { next(err); }
 });
@@ -115,6 +125,9 @@ router.post('/events', auth, canManageEvents, async (req, res, next) => {
        start_time || null, end_time || null, category || 'other', color || '#6366f1', location || null, req.user?.id || null]
     );
     const [rows] = await pool.query('SELECT * FROM company_events WHERE id = ?', [result.insertId]);
+    // ── Activity log: Calendar Event Created ─────────────────────────────
+    logActivity({ req, module: 'Calendar', action: 'Event Created',
+      description: `Calendar event "${title}" created` });
     res.status(201).json({ event: rows[0], message: 'Event created successfully' });
   } catch (err) { next(err); }
 });
@@ -133,6 +146,9 @@ router.put('/events/:id', auth, canManageEvents, async (req, res, next) => {
     await pool.query(`UPDATE company_events SET ${updates.join(', ')} WHERE id = ?`, params);
     const [rows] = await pool.query('SELECT * FROM company_events WHERE id = ?', [id]);
     if (!rows.length) return res.status(404).json({ error: 'Event not found' });
+    // ── Activity log: Calendar Event Updated ──────────────────────────────
+    logActivity({ req, module: 'Calendar', action: 'Event Updated',
+      description: `Calendar event "${rows[0]?.title}" (ID: ${id}) updated` });
     res.json({ event: rows[0], message: 'Event updated successfully' });
   } catch (err) { next(err); }
 });

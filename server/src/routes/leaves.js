@@ -3,6 +3,7 @@ const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { t } = require('../i18n');
 const { isNotificationAllowed } = require('../utils/notificationPreferences');
+const { logActivity } = require('../services/activityService');
 const {
   getSetting,
   getSettings,
@@ -718,6 +719,9 @@ router.post('/', auth, async (req, res, next) => {
       message: t(req.lang, 'errors.leaveRequestSubmitted'),
       days,
     });
+    // ── Activity log: Leave Applied ───────────────────────────────────────
+    logActivity({ req, module: 'Leave', action: 'Applied',
+      description: `Applied for ${ltype[0]?.name || 'leave'} (${days} day${days !== 1 ? 's' : ''})` });
   } catch (err) { next(err); }
 });
 
@@ -763,6 +767,10 @@ router.put('/:id/approve', auth, async (req, res, next) => {
     }
 
     res.json({ message: t(req.lang, `success.leaveRequest${action === 'approved' ? 'Approved' : 'Rejected'}`) });
+    // ── Activity log: Leave Approved/Rejected ─────────────────────────────
+    logActivity({ req, module: 'Leave', action: action === 'approved' ? 'Approved' : 'Rejected',
+      description: `${action === 'approved' ? 'Approved' : 'Rejected'} leave request for user ID ${lr.user_id}${rejection_reason ? ` — Reason: ${rejection_reason}` : ''}`,
+      previousValue: lr });
   } catch (err) { next(err); }
 });
 

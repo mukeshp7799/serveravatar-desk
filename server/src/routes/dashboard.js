@@ -3,6 +3,7 @@ const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { translateNotifications } = require('../i18n');
 const { getCompanySetting, nowInTimezone, todayInTimezone } = require('../utils/timezone');
+const { computeWorkingHours, computeLiveWorkingHours } = require('../services/attendanceCalc');
 
 const router = express.Router();
 
@@ -169,14 +170,44 @@ router.get('/', auth, async (req, res, next) => {
     );
     const myToday = myTodayRows.length > 0 ? myTodayRows[0] : null;
 
-    // Break count for today
+    // Break count and active break for today
     let breakCount = 0;
+    let activeBreakStart = null;
     if (myToday) {
       const [breakRows] = await pool.query(
-        'SELECT COUNT(*) as cnt FROM attendance_breaks WHERE attendance_id = ?',
+        'SELECT start_time FROM attendance_breaks WHERE attendance_id = ?',
         [myToday.id]
       );
-      breakCount = breakRows[0]?.cnt || 0;
+      breakCount = breakRows.length;
+      const open = breakRows.find(b => !b.end_time);
+      activeBreakStart = open ? open.start_time : null;
+    }
+
+    // ── Recent Activity Logs ───────────────────────────────────────────────
+    const hasActivityViewAll = perms.includes('activity_logs.view_all');
+    const hasActivityViewOwn = perms.includes('activity_logs.view_own');
+    let recentActivities = [];
+    if (hasActivityViewAll || hasActivityViewOwn) {
+      const limit = 5;
+      let actQuery, actParams;
+      if (hasActivityViewAll) {
+        actQuery = `SELECT al.id, al.user_id, al.module, al.action, al.description, al.created_at,
+                           u.first_name, u.last_name
+                    FROM activity_logs al
+                    JOIN users u ON al.user_id = u.id
+                    ORDER BY al.created_at DESC LIMIT ?`;
+        actParams = [limit];
+      } else {
+        actQuery = `SELECT al.id, al.user_id, al.module, al.action, al.description, al.created_at,
+                           u.first_name, u.last_name
+                    FROM activity_logs al
+                    JOIN users u ON al.user_id = u.id
+                    WHERE al.user_id = ?
+                    ORDER BY al.created_at DESC LIMIT ?`;
+        actParams = [userId, limit];
+      }
+      const [actRows] = await pool.query(actQuery, actParams);
+      recentActivities = actRows;
     }
 
     res.json({
@@ -198,12 +229,18 @@ router.get('/', auth, async (req, res, next) => {
         is_late: Boolean(myToday.is_late),
         late_minutes: myToday.late_minutes || 0,
         break_count: breakCount,
+        active_break_start: activeBreakStart,
         working_hours: (() => {
           if (!myToday.clock_in_time || !myToday.clock_out_time) return null;
           const ms = new Date(myToday.clock_out_time) - new Date(myToday.clock_in_time);
           return Math.max(0, (ms / 60000 - (myToday.total_break_minutes || 0)) / 60);
         })(),
+        live_working_hours: (!myToday.clock_out_time && myToday.clock_in_time)
+          ? computeLiveWorkingHours(myToday.clock_in_time, myToday.total_break_minutes || 0, activeBreakStart)
+          : null,
       } : null,
+      recentActivities,
+      hasActivityViewAll,
     });
   } catch (err) {
     next(err);

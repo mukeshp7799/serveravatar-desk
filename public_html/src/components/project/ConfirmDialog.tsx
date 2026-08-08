@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { AlertTriangle } from 'lucide-react'
 
 interface ConfirmDialogProps {
@@ -15,8 +16,10 @@ interface ConfirmDialogProps {
 }
 
 /**
- * Minimal modal dialog for destructive actions (delete, archive, etc.).
- * Closes on Escape; traps focus on the cancel button.
+ * Modal dialog for destructive actions (delete, archive, etc.).
+ * Rendered via portal to document.body so it's always viewport-centered,
+ * regardless of scroll position or parent overflow containers.
+ * Closes on Escape.
  */
 export default function ConfirmDialog({
   open,
@@ -39,9 +42,19 @@ export default function ConfirmDialog({
 
   if (!open) return null
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in-up" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" onClick={onCancel} aria-hidden />
+  const modal = (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm"
+        onClick={onCancel}
+        aria-hidden
+      />
+      {/* Dialog box — centered in viewport */}
       <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 max-w-sm w-full p-5 sm:p-6 animate-scale-in">
         <div className="flex items-start gap-3 mb-3">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
@@ -77,4 +90,6 @@ export default function ConfirmDialog({
       </div>
     </div>
   )
+
+  return createPortal(modal, document.body)
 }

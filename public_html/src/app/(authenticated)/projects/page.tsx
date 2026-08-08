@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Briefcase, Calendar, Check, Folder, Gem, Pencil, Rocket, Sparkles, Target, Trash2, User, X as XIcon, Zap } from 'lucide-react'
+import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
 import { useDateSettings } from '@/contexts/CompanySettingsContext'
 import { projectSchema, type ProjectInput } from '@/lib/schemas'
@@ -203,6 +204,7 @@ export default function ProjectsPage() {
       )}
 
       {showCreate && (
+        <PortalModal>
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreate(false)}>
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl animate-scale-in flex flex-col max-h-[calc(100vh-2rem)]" onClick={e => e.stopPropagation()}>
             <div className={`border-b border-gray-200 px-6 py-4 bg-white shrink-0`}>
@@ -238,6 +240,7 @@ export default function ProjectsPage() {
             </form>
           </div>
         </div>
+        </PortalModal>
       )}
 
       <ConfirmDialog

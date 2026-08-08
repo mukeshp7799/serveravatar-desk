@@ -457,11 +457,13 @@
     "postNew": "发布公告",
     "published": "公告已发布!",
     "updated": "公告已更新!",
+    "deleteTitle": "归档公告",
     "deleteConfirm": "确定要删除此公告吗?",
     "emptyHint": "发布一条让所有人了解最新动态!",
     "restoreConfirm": "将此公告恢复到已发布状态？将再次通知受众。",
     "unpinned": "公告已取消置顶",
-    "restored": "公告已恢复到已发布"
+    "restored": "公告已恢复到已发布",
+    "archive": "归档"
   },
   "notifications": {
     "title": "通知",

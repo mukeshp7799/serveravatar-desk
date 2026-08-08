@@ -1,4 +1,5 @@
 'use client'
+import PortalModal from '@/components/PortalModal';
 
 /**
  * /projects/[projectId]/test-cases
@@ -468,37 +469,39 @@ function NewSuiteModal({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <form
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={submit}
-        className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl p-5 w-full max-w-md space-y-4"
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-gray-900 dark:text-white">New test suite</h3>
-          <button type="button" onClick={onClose} aria-label="Close" className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg border-none cursor-pointer">
-            <X size={16} />
-          </button>
-        </div>
-        <input
-          autoFocus type="text" value={name} onChange={(e) => setName(e.target.value)}
-          placeholder="Suite name (e.g. Smoke tests)"
-          className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900"
-        />
-        <textarea
-          value={description} onChange={(e) => setDescription(e.target.value)}
-          placeholder="Optional description"
-          rows={2}
-          className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900 resize-none"
-        />
-        <div className="flex items-center justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl border-none cursor-pointer">Cancel</button>
-          <button type="submit" disabled={!name.trim() || busy} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 rounded-xl border-none cursor-pointer shadow">
-            {busy ? 'Creating…' : 'Create suite'}
-          </button>
-        </div>
-      </form>
-    </div>
+    <PortalModal>
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+              <form
+                onClick={(e) => e.stopPropagation()}
+                onSubmit={submit}
+                className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl p-5 w-full max-w-md space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">New test suite</h3>
+                  <button type="button" onClick={onClose} aria-label="Close" className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg border-none cursor-pointer">
+                    <X size={16} />
+                  </button>
+                </div>
+                <input
+                  autoFocus type="text" value={name} onChange={(e) => setName(e.target.value)}
+                  placeholder="Suite name (e.g. Smoke tests)"
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900"
+                />
+                <textarea
+                  value={description} onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Optional description"
+                  rows={2}
+                  className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900 resize-none"
+                />
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl border-none cursor-pointer">Cancel</button>
+                  <button type="submit" disabled={!name.trim() || busy} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 rounded-xl border-none cursor-pointer shadow">
+                    {busy ? 'Creating…' : 'Create suite'}
+                  </button>
+                </div>
+              </form>
+            </div>
+    </PortalModal>
   )
 }
 
@@ -597,165 +600,167 @@ function NewTestCaseModal({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <form
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={submit}
-        className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
-      >
-        <div className="sticky top-0 bg-white dark:bg-gray-900 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
-              <ClipboardCheck size={14} strokeWidth={2.5} className="text-white" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-gray-900 dark:text-white">New test case</h3>
-              <p className="text-[11px] text-gray-400">Define the scenario, preconditions, and steps.</p>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg border-none cursor-pointer">
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-4">
-          {/* Title */}
-          <div>
-            <LabelWithTooltip label="Title" tooltip="A clear, descriptive name for this test case (e.g. Verify login with valid credentials)" />
-            <input
-              autoFocus type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Verify login with valid credentials"
-              className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900"
-            />
-          </div>
-
-          {/* Suite + Priority + Status */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <LabelWithTooltip label="Suite" tooltip="Groups related test cases together (e.g. Smoke tests, Regression suite)" />
-              <select value={suiteId} onChange={(e) => setSuiteId(e.target.value)}
-                className="w-full appearance-none px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900">
-                <option value="">Select a test suite</option>
-                {suites.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <LabelWithTooltip label="Priority" tooltip="Determines which test cases to run first when time is limited" />
-              <select value={priority} onChange={(e) => setPriority(e.target.value as TestPriority)}
-                className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900">
-                {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
-              </select>
-            </div>
-            <div>
-              <LabelWithTooltip label="Status" tooltip="Current state: Draft (preparing), Ready (waiting to start), In Progress (testing underway), Passed/Failed (all done), Skipped." />
-              <select value={status} onChange={(e) => setStatus(e.target.value as TestStatus)}
-                className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900">
-                {FILTER_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Related task + Assignees */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <LabelWithTooltip label="Related task (optional)" tooltip="Links this test case to a task in the project board for traceability" />
-              <select value={taskId} onChange={(e) => setTaskId(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900">
-                <option value="">Select a related task (optional)</option>
-                {projectTasks.map((t) => (
-                  <option key={t.id} value={t.id}>{t.title}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <LabelWithTooltip label={`Assignees (${selectedAssignees.size} selected)`} tooltip="Project members responsible for executing this test case. Each assignee sets their own execution status: Pending, Passed, or Failed." />
-              <div className="border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 overflow-hidden">
-                <div className="max-h-28 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
-                  {members.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-gray-400 italic">No project members found.</p>
-                  ) : members.map((m) => {
-                    const checked = selectedAssignees.has(m.id)
-                    return (
-                      <label key={m.id} className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-teal-50/50 dark:hover:bg-teal-950/20">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleAssignee(m.id)}
-                          className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-teal-600 focus:ring-teal-500"
-                        />
-                        <Avatar user={m} size={5} />
-                        <span className="text-sm text-gray-800 dark:text-gray-200">{m.name}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Preconditions + Expected */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <LabelWithTooltip label="Preconditions" tooltip="Prerequisites that must be met before running this test (e.g. user account active, data set up)" />
-              <textarea rows={3} value={preconditions} onChange={(e) => setPreconditions(e.target.value)}
-                placeholder="e.g. User account exists and is active"
-                className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900 resize-none"
-              />
-            </div>
-            <div>
-              <LabelWithTooltip label="Expected result" tooltip="The expected outcome after all test steps are executed correctly" />
-              <textarea rows={3} value={expected} onChange={(e) => setExpected(e.target.value)}
-                placeholder="e.g. User is redirected to the dashboard after successful login"
-                className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900 resize-none"
-              />
-            </div>
-          </div>
-
-          {/* Steps */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <LabelWithTooltip label="Test steps" tooltip="Sequential actions to perform in the test. Each step should be atomic and have an expected result." />
-              <button type="button" onClick={addStep}
-                className="inline-flex items-center gap-1 text-xs font-bold text-teal-600 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/40 px-2 py-1 rounded-lg border border-teal-200 dark:border-teal-800 cursor-pointer">
-                <Plus size={11} strokeWidth={2.5} /> Add step
-              </button>
-            </div>
-            <div className="space-y-2">
-              {steps.map((s, i) => (
-                <div key={i} className="flex items-start gap-2 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
-                  <span className="w-7 h-7 rounded-lg bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <textarea rows={2} value={s.description} onChange={(e) => updateStep(i, { description: e.target.value })}
-                      placeholder={`e.g. Enter a valid email and password, then click "Login"`}
-                      className="px-2.5 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 resize-none" />
-                    <textarea rows={2} value={s.expected_result} onChange={(e) => updateStep(i, { expected_result: e.target.value })}
-                      placeholder="e.g. Login form is submitted successfully"
-                      className="px-2.5 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 resize-none" />
+    <PortalModal>
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+              <form
+                onClick={(e) => e.stopPropagation()}
+                onSubmit={submit}
+                className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+              >
+                <div className="sticky top-0 bg-white dark:bg-gray-900 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
+                      <ClipboardCheck size={14} strokeWidth={2.5} className="text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-gray-900 dark:text-white">New test case</h3>
+                      <p className="text-[11px] text-gray-400">Define the scenario, preconditions, and steps.</p>
+                    </div>
                   </div>
-                  <button type="button" onClick={() => removeStep(i)}
-                    className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg border-none cursor-pointer shrink-0 mt-0.5"
-                    aria-label="Remove step">
-                    <X size={12} strokeWidth={2.5} />
+                  <button type="button" onClick={onClose} aria-label="Close" className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg border-none cursor-pointer">
+                    <X size={16} />
                   </button>
                 </div>
-              ))}
-              {steps.length === 0 && (
-                <p className="text-xs italic text-gray-400 dark:text-gray-500 text-center py-3">No steps yet. Click "Add step" above.</p>
-              )}
+        
+                <div className="p-6 space-y-4">
+                  {/* Title */}
+                  <div>
+                    <LabelWithTooltip label="Title" tooltip="A clear, descriptive name for this test case (e.g. Verify login with valid credentials)" />
+                    <input
+                      autoFocus type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+                      placeholder="e.g. Verify login with valid credentials"
+                      className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900"
+                    />
+                  </div>
+        
+                  {/* Suite + Priority + Status */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <LabelWithTooltip label="Suite" tooltip="Groups related test cases together (e.g. Smoke tests, Regression suite)" />
+                      <select value={suiteId} onChange={(e) => setSuiteId(e.target.value)}
+                        className="w-full appearance-none px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900">
+                        <option value="">Select a test suite</option>
+                        {suites.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <LabelWithTooltip label="Priority" tooltip="Determines which test cases to run first when time is limited" />
+                      <select value={priority} onChange={(e) => setPriority(e.target.value as TestPriority)}
+                        className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900">
+                        {PRIORITIES.map((p) => <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <LabelWithTooltip label="Status" tooltip="Current state: Draft (preparing), Ready (waiting to start), In Progress (testing underway), Passed/Failed (all done), Skipped." />
+                      <select value={status} onChange={(e) => setStatus(e.target.value as TestStatus)}
+                        className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900">
+                        {FILTER_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                      </select>
+                    </div>
+                  </div>
+        
+                  {/* Related task + Assignees */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <LabelWithTooltip label="Related task (optional)" tooltip="Links this test case to a task in the project board for traceability" />
+                      <select value={taskId} onChange={(e) => setTaskId(e.target.value)}
+                        className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900">
+                        <option value="">Select a related task (optional)</option>
+                        {projectTasks.map((t) => (
+                          <option key={t.id} value={t.id}>{t.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <LabelWithTooltip label={`Assignees (${selectedAssignees.size} selected)`} tooltip="Project members responsible for executing this test case. Each assignee sets their own execution status: Pending, Passed, or Failed." />
+                      <div className="border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 overflow-hidden">
+                        <div className="max-h-28 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
+                          {members.length === 0 ? (
+                            <p className="px-3 py-2 text-xs text-gray-400 italic">No project members found.</p>
+                          ) : members.map((m) => {
+                            const checked = selectedAssignees.has(m.id)
+                            return (
+                              <label key={m.id} className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-teal-50/50 dark:hover:bg-teal-950/20">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleAssignee(m.id)}
+                                  className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-teal-600 focus:ring-teal-500"
+                                />
+                                <Avatar user={m} size={5} />
+                                <span className="text-sm text-gray-800 dark:text-gray-200">{m.name}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+        
+                  {/* Preconditions + Expected */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <LabelWithTooltip label="Preconditions" tooltip="Prerequisites that must be met before running this test (e.g. user account active, data set up)" />
+                      <textarea rows={3} value={preconditions} onChange={(e) => setPreconditions(e.target.value)}
+                        placeholder="e.g. User account exists and is active"
+                        className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900 resize-none"
+                      />
+                    </div>
+                    <div>
+                      <LabelWithTooltip label="Expected result" tooltip="The expected outcome after all test steps are executed correctly" />
+                      <textarea rows={3} value={expected} onChange={(e) => setExpected(e.target.value)}
+                        placeholder="e.g. User is redirected to the dashboard after successful login"
+                        className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900 resize-none"
+                      />
+                    </div>
+                  </div>
+        
+                  {/* Steps */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <LabelWithTooltip label="Test steps" tooltip="Sequential actions to perform in the test. Each step should be atomic and have an expected result." />
+                      <button type="button" onClick={addStep}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-teal-600 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/40 px-2 py-1 rounded-lg border border-teal-200 dark:border-teal-800 cursor-pointer">
+                        <Plus size={11} strokeWidth={2.5} /> Add step
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {steps.map((s, i) => (
+                        <div key={i} className="flex items-start gap-2 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
+                          <span className="w-7 h-7 rounded-lg bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <textarea rows={2} value={s.description} onChange={(e) => updateStep(i, { description: e.target.value })}
+                              placeholder={`e.g. Enter a valid email and password, then click "Login"`}
+                              className="px-2.5 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 resize-none" />
+                            <textarea rows={2} value={s.expected_result} onChange={(e) => updateStep(i, { expected_result: e.target.value })}
+                              placeholder="e.g. Login form is submitted successfully"
+                              className="px-2.5 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 resize-none" />
+                          </div>
+                          <button type="button" onClick={() => removeStep(i)}
+                            className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg border-none cursor-pointer shrink-0 mt-0.5"
+                            aria-label="Remove step">
+                            <X size={12} strokeWidth={2.5} />
+                          </button>
+                        </div>
+                      ))}
+                      {steps.length === 0 && (
+                        <p className="text-xs italic text-gray-400 dark:text-gray-500 text-center py-3">No steps yet. Click "Add step" above.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+        
+                <div className="sticky bottom-0 bg-white dark:bg-gray-900 px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">
+                  <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl border-none cursor-pointer">Cancel</button>
+                  <button type="submit" disabled={!title.trim() || !suiteId || busy} className="px-5 py-2 text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 rounded-xl border-none cursor-pointer shadow">
+                    {busy ? 'Creating…' : 'Create test case'}
+                  </button>
+                </div>
+              </form>
             </div>
-          </div>
-        </div>
-
-        <div className="sticky bottom-0 bg-white dark:bg-gray-900 px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl border-none cursor-pointer">Cancel</button>
-          <button type="submit" disabled={!title.trim() || !suiteId || busy} className="px-5 py-2 text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 rounded-xl border-none cursor-pointer shadow">
-            {busy ? 'Creating…' : 'Create test case'}
-          </button>
-        </div>
-      </form>
-    </div>
+    </PortalModal>
   )
 }
 
@@ -770,22 +775,24 @@ function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClos
   }, [onClose])
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4" onClick={onClose}>
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute top-4 right-4 w-10 h-10 inline-flex items-center justify-center text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full border-none cursor-pointer transition-colors"
-        aria-label="Close"
-      >
-        <X size={18} />
-      </button>
-      <img
-        src={src}
-        alt={alt}
-        onClick={(e) => e.stopPropagation()}
-        className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
-      />
-    </div>
+    <PortalModal>
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4" onClick={onClose}>
+              <button
+                type="button"
+                onClick={onClose}
+                className="absolute top-4 right-4 w-10 h-10 inline-flex items-center justify-center text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full border-none cursor-pointer transition-colors"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+              <img
+                src={src}
+                alt={alt}
+                onClick={(e) => e.stopPropagation()}
+                className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
+              />
+            </div>
+    </PortalModal>
   )
 }
 

@@ -34,6 +34,7 @@ const calendarRoutes = require("./routes/calendar");
 const reportsRoutes = require("./routes/reports");
 const notificationPrefRoutes = require("./routes/notification-preferences");
 const companySettingsRoutes = require("./routes/company-settings");
+const activityLogRoutes = require("./routes/activityLogs");
 const { langMiddleware } = require("./i18n");
 const { startAttendanceReminderCron } = require("./jobs/attendanceReminder");
 
@@ -78,6 +79,7 @@ app.use("/api/calendar", calendarRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/notification-preferences", notificationPrefRoutes);
 app.use("/api/company-settings", companySettingsRoutes);
+app.use("/api/activity-logs", activityLogRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

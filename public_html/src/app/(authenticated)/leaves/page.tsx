@@ -1,4 +1,5 @@
 'use client'
+import PortalModal from '@/components/PortalModal';
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
@@ -878,272 +879,284 @@ return (
 
       {/* ── APPLY FOR LEAVE MODAL ──────────────────────────────── */}
       {showApply && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
-            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Apply for Leave</h2>
-              <button onClick={() => setShowApply(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
-            </div>
-            <form onSubmit={handleApply} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Leave Type <span className="text-red-500">*</span></label>
-                <select value={applyForm.leave_type_id} onChange={e => setApplyForm({ ...applyForm, leave_type_id: e.target.value })}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
-                  <option value="">— Select leave type —</option>
-                  {allocations.map((a: any) => (
-                    <option key={a.leave_type_id} value={a.leave_type_id}
-                      disabled={a.available <= 0}>
-                      {a.leave_type_name} ({a.available} days available)
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date <span className="text-red-500">*</span></label>
-                  <input type="date" value={applyForm.start_date} onChange={e => setApplyForm({ ...applyForm, start_date: e.target.value })} required
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date <span className="text-red-500">*</span></label>
-                  <input type="date" value={applyForm.end_date} onChange={e => setApplyForm({ ...applyForm, end_date: e.target.value })} required
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
-                <textarea value={applyForm.reason} onChange={e => setApplyForm({ ...applyForm, reason: e.target.value })} rows={3}
-                  placeholder="Brief reason for leave..."
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowApply(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
-                  Cancel
-                </button>
-                <button type="submit" disabled={applying}
-                  className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
-                  {applying ? 'Submitting...' : 'Submit Request'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <PortalModal>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+                      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
+                        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+                          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Apply for Leave</h2>
+                          <button onClick={() => setShowApply(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
+                        </div>
+                        <form onSubmit={handleApply} className="p-6 space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Leave Type <span className="text-red-500">*</span></label>
+                            <select value={applyForm.leave_type_id} onChange={e => setApplyForm({ ...applyForm, leave_type_id: e.target.value })}
+                              required
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                              <option value="">— Select leave type —</option>
+                              {allocations.map((a: any) => (
+                                <option key={a.leave_type_id} value={a.leave_type_id}
+                                  disabled={a.available <= 0}>
+                                  {a.leave_type_name} ({a.available} days available)
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date <span className="text-red-500">*</span></label>
+                              <input type="date" value={applyForm.start_date} onChange={e => setApplyForm({ ...applyForm, start_date: e.target.value })} required
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date <span className="text-red-500">*</span></label>
+                              <input type="date" value={applyForm.end_date} onChange={e => setApplyForm({ ...applyForm, end_date: e.target.value })} required
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
+                            <textarea value={applyForm.reason} onChange={e => setApplyForm({ ...applyForm, reason: e.target.value })} rows={3}
+                              placeholder="Brief reason for leave..."
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                          </div>
+                          <div className="flex justify-end gap-3 pt-2">
+                            <button type="button" onClick={() => setShowApply(false)}
+                              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
+                              Cancel
+                            </button>
+                            <button type="submit" disabled={applying}
+                              className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
+                              {applying ? 'Submitting...' : 'Submit Request'}
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+        </PortalModal>
       )}
 
 
       {/* ── REJECT LEAVE MODAL ─────────────────────────────── */}
       {showRejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
-            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-bold text-red-600 dark:text-red-400">Reject Leave Request</h2>
-              <button onClick={() => setShowRejectModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Reason <span className="text-gray-400 font-normal">(optional)</span>
-                </label>
-                <textarea
-                  value={rejectReason}
-                  onChange={e => setRejectReason(e.target.value)}
-                  rows={3}
-                  placeholder="Why is this leave request being rejected?"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 px-6 pb-6">
-              <button onClick={() => setShowRejectModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
-                Cancel
-              </button>
-              <button onClick={handleRejectConfirm}
-                className="px-5 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition cursor-pointer border-0">
-                Confirm Rejection
-              </button>
-            </div>
-          </div>
-        </div>
+        <PortalModal>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+                      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
+                        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+                          <h2 className="text-lg font-bold text-red-600 dark:text-red-400">Reject Leave Request</h2>
+                          <button onClick={() => setShowRejectModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Reason <span className="text-gray-400 font-normal">(optional)</span>
+                            </label>
+                            <textarea
+                              value={rejectReason}
+                              onChange={e => setRejectReason(e.target.value)}
+                              rows={3}
+                              placeholder="Why is this leave request being rejected?"
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-3 px-6 pb-6">
+                          <button onClick={() => setShowRejectModal(false)}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
+                            Cancel
+                          </button>
+                          <button onClick={handleRejectConfirm}
+                            className="px-5 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition cursor-pointer border-0">
+                            Confirm Rejection
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+        </PortalModal>
       )}
 
       {/* ── RESEED CONFIRMATION MODAL ───────────────────────── */}
       {showReseedModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
-            <div className="p-6 text-center">
-              <div className="w-14 h-14 mx-auto mb-4 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
-                <span className="text-2xl">🔄</span>
-              </div>
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Re-seed All Allocations?</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                This will reset <strong>all custom allocations</strong> for every employee based on their leave type default days. This action cannot be undone.
-              </p>
-              <div className="flex items-center justify-center gap-3">
-                <button
-                  onClick={() => setShowReseedModal(false)}
-                  className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmReseed}
-                  className="px-5 py-2 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition cursor-pointer border-0 shadow-sm"
-                >
-                  Yes, Re-seed
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PortalModal>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+                      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
+                        <div className="p-6 text-center">
+                          <div className="w-14 h-14 mx-auto mb-4 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                            <span className="text-2xl">🔄</span>
+                          </div>
+                          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Re-seed All Allocations?</h2>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                            This will reset <strong>all custom allocations</strong> for every employee based on their leave type default days. This action cannot be undone.
+                          </p>
+                          <div className="flex items-center justify-center gap-3">
+                            <button
+                              onClick={() => setShowReseedModal(false)}
+                              className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={confirmReseed}
+                              className="px-5 py-2 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition cursor-pointer border-0 shadow-sm"
+                            >
+                              Yes, Re-seed
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+        </PortalModal>
       )}
 
       {/* ── CANCEL CONFIRMATION MODAL ───────────────────────── */}
       {showCancelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full">
-            <div className="p-6 text-center">
-              <div className="w-14 h-14 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
-                <span className="text-2xl">⚠️</span>
-              </div>
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Cancel Leave Request?</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                Are you sure you want to cancel this leave request? This action cannot be undone.
-              </p>
-              <div className="flex items-center justify-center gap-3">
-                <button
-                  onClick={() => { setShowCancelModal(false); setCancellingId(null) }}
-                  className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent"
-                >
-                  Keep It
-                </button>
-                <button
-                  onClick={confirmCancel}
-                  className="px-5 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl transition cursor-pointer border-0 shadow-sm"
-                >
-                  Yes, Cancel It
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PortalModal>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+                      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full">
+                        <div className="p-6 text-center">
+                          <div className="w-14 h-14 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                            <span className="text-2xl">⚠️</span>
+                          </div>
+                          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Cancel Leave Request?</h2>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                            Are you sure you want to cancel this leave request? This action cannot be undone.
+                          </p>
+                          <div className="flex items-center justify-center gap-3">
+                            <button
+                              onClick={() => { setShowCancelModal(false); setCancellingId(null) }}
+                              className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent"
+                            >
+                              Keep It
+                            </button>
+                            <button
+                              onClick={confirmCancel}
+                              className="px-5 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl transition cursor-pointer border-0 shadow-sm"
+                            >
+                              Yes, Cancel It
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+        </PortalModal>
       )}
 
       {/* ── LEAVE TYPE MODAL ───────────────────────────────────── */}
       {showTypeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                {editType ? 'Edit Leave Type' : 'Add Leave Type'}
-              </h2>
-              <button onClick={() => setShowTypeModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
-            </div>
-            <form onSubmit={handleTypeSave} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name <span className="text-red-500">*</span></label>
-                  <input value={typeForm.name} onChange={e => setTypeForm({ ...typeForm, name: e.target.value })} required
-                    placeholder="e.g. Annual Leave"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Code</label>
-                  <input value={typeForm.code} onChange={e => setTypeForm({ ...typeForm, code: e.target.value })}
-                    placeholder="e.g. AL"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-                  <select value={typeForm.status} onChange={e => setTypeForm({ ...typeForm, status: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Days</label>
-                  <input type="number" min="0" value={typeForm.default_days} onChange={e => setTypeForm({ ...typeForm, default_days: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Max Allowed</label>
-                  <input type="number" min="0" value={typeForm.max_allowed} onChange={e => setTypeForm({ ...typeForm, max_allowed: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-                <div className="col-span-2">
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-                    <input type="checkbox" checked={typeForm.is_paid} onChange={e => setTypeForm({ ...typeForm, is_paid: e.target.checked })}
-                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                    Paid Leave
-                  </label>
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-                  <textarea value={typeForm.description} onChange={e => setTypeForm({ ...typeForm, description: e.target.value })} rows={2}
-                    placeholder="Optional description..."
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowTypeModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
-                  Cancel
-                </button>
-                <button type="submit" disabled={savingType}
-                  className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
-                  {savingType ? 'Saving...' : 'Save'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <PortalModal>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+                      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+                          <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                            {editType ? 'Edit Leave Type' : 'Add Leave Type'}
+                          </h2>
+                          <button onClick={() => setShowTypeModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
+                        </div>
+                        <form onSubmit={handleTypeSave} className="p-6 space-y-4">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="col-span-2">
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name <span className="text-red-500">*</span></label>
+                              <input value={typeForm.name} onChange={e => setTypeForm({ ...typeForm, name: e.target.value })} required
+                                placeholder="e.g. Annual Leave"
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Code</label>
+                              <input value={typeForm.code} onChange={e => setTypeForm({ ...typeForm, code: e.target.value })}
+                                placeholder="e.g. AL"
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+                              <select value={typeForm.status} onChange={e => setTypeForm({ ...typeForm, status: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Days</label>
+                              <input type="number" min="0" value={typeForm.default_days} onChange={e => setTypeForm({ ...typeForm, default_days: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Max Allowed</label>
+                              <input type="number" min="0" value={typeForm.max_allowed} onChange={e => setTypeForm({ ...typeForm, max_allowed: e.target.value })}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+                                <input type="checkbox" checked={typeForm.is_paid} onChange={e => setTypeForm({ ...typeForm, is_paid: e.target.checked })}
+                                  className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                                Paid Leave
+                              </label>
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                              <textarea value={typeForm.description} onChange={e => setTypeForm({ ...typeForm, description: e.target.value })} rows={2}
+                                placeholder="Optional description..."
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-3 pt-2">
+                            <button type="button" onClick={() => setShowTypeModal(false)}
+                              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
+                              Cancel
+                            </button>
+                            <button type="submit" disabled={savingType}
+                              className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
+                              {savingType ? 'Saving...' : 'Save'}
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+        </PortalModal>
       )}
 
       {/* ── ALLOCATION EDIT MODAL ──────────────────────────────── */}
       {showAllocModal && editAlloc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full">
-            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Edit Allocation</h2>
-              <button onClick={() => setShowAllocModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
-            </div>
-            <form onSubmit={handleAllocSave} className="p-6 space-y-4">
-              <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3 mb-2">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">{editAlloc.first_name} {editAlloc.last_name}</p>
-                <p className="text-xs text-gray-500">{editAlloc.leave_type_name}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Allocated Days <span className="text-red-500">*</span>
-                </label>
-                <input type="number" min="0" step="0.5" value={allocForm.allocated_days}
-                  onChange={e => setAllocForm({ ...allocForm, allocated_days: e.target.value })} required
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Remarks <span className="text-gray-400 font-normal">(optional)</span>
-                </label>
-                <textarea value={allocForm.remark} onChange={e => setAllocForm({ ...allocForm, remark: e.target.value })} rows={2}
-                  placeholder="e.g. Prorated from mid-year hire"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowAllocModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
-                  Cancel
-                </button>
-                <button type="submit" disabled={savingAlloc}
-                  className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
-                  {savingAlloc ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <PortalModal>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+                      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full">
+                        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+                          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Edit Allocation</h2>
+                          <button onClick={() => setShowAllocModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
+                        </div>
+                        <form onSubmit={handleAllocSave} className="p-6 space-y-4">
+                          <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3 mb-2">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white">{editAlloc.first_name} {editAlloc.last_name}</p>
+                            <p className="text-xs text-gray-500">{editAlloc.leave_type_name}</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Allocated Days <span className="text-red-500">*</span>
+                            </label>
+                            <input type="number" min="0" step="0.5" value={allocForm.allocated_days}
+                              onChange={e => setAllocForm({ ...allocForm, allocated_days: e.target.value })} required
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Remarks <span className="text-gray-400 font-normal">(optional)</span>
+                            </label>
+                            <textarea value={allocForm.remark} onChange={e => setAllocForm({ ...allocForm, remark: e.target.value })} rows={2}
+                              placeholder="e.g. Prorated from mid-year hire"
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                          </div>
+                          <div className="flex justify-end gap-3 pt-2">
+                            <button type="button" onClick={() => setShowAllocModal(false)}
+                              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
+                              Cancel
+                            </button>
+                            <button type="submit" disabled={savingAlloc}
+                              className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
+                              {savingAlloc ? 'Saving...' : 'Save Changes'}
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+        </PortalModal>
       )}
     </div>
   )

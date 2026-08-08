@@ -457,11 +457,13 @@
     "postNew": "Publicar anuncio",
     "published": "¡Anuncio publicado!",
     "updated": "¡Anuncio actualizado!",
+    "deleteTitle": "Archivar anuncio",
     "deleteConfirm": "¿Seguro que quieres eliminar este anuncio?",
     "emptyHint": "¡Publica uno para mantener a todos informados!",
     "restoreConfirm": "¿Restaurar este anuncio a publicado? Se notificará a la audiencia.",
     "unpinned": "Anuncio desanclado",
-    "restored": "Anuncio restaurado a publicado"
+    "restored": "Anuncio restaurado a publicado",
+    "archive": "Archivar"
   },
   "notifications": {
     "title": "Notificaciones",

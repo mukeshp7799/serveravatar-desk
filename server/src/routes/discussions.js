@@ -70,31 +70,25 @@ const hydrateMessages = async (messageRows, currentUserId) => {
   }));
 };
 
-// GET /api/discussions?projectId=...   (projectId is optional — when omitted all accessible discussions are returned)
+// GET /api/discussions?projectId=...   (projectId is optional)
+// Any authenticated user with 'discussions.view' can see all discussions.
+// No project membership restriction.
 router.get('/', auth, async (req, res, next) => {
   try {
+    if (!req.user.permissions.includes('discussions.view')) {
+      return res.status(403).json({ error: 'You do not have permission to view discussions.' });
+    }
     const { projectId } = req.query;
     let query = `SELECT d.*, u.first_name, u.last_name, u.avatar_url,
                         (SELECT COUNT(*) FROM messages WHERE discussion_id = d.id AND is_direct = 0) as message_count
                  FROM discussions d
                  JOIN users u ON d.created_by_user_id = u.id
-                 JOIN projects p ON d.project_id = p.id
                  WHERE 1=1`;
     const params = [];
 
     if (projectId) {
-      // Scoped to a specific project — verify membership
       query += ' AND d.project_id = ?';
       params.push(projectId);
-      const ok = await isProjectMember(Number(projectId), req.user.id)
-      if (!ok) return res.status(403).json({ error: t(req.lang, 'errors.projectAccessDenied') || 'You are not authorized to access this project.' })
-    } else {
-      // No projectId — return discussions from all projects the user is a member of (or owns)
-      query += ` AND (
-        p.manager_id = ? OR
-        EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = d.project_id AND pm.user_id = ?)
-      )`;
-      params.push(req.user.id, req.user.id);
     }
 
     query += ' ORDER BY d.created_at DESC';
@@ -106,19 +100,16 @@ router.get('/', auth, async (req, res, next) => {
 // GET /api/discussions/:id
 router.get('/:id', auth, async (req, res, next) => {
   try {
+    if (!req.user.permissions.includes('discussions.view')) {
+      return res.status(403).json({ error: 'You do not have permission to view discussions.' });
+    }
     const [discussions] = await pool.query(
       `SELECT d.*, u.first_name, u.last_name, u.avatar_url, p.name as project_name
        FROM discussions d JOIN users u ON d.created_by_user_id = u.id
-       JOIN projects p ON d.project_id = p.id WHERE d.id = ?`,
+       LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ?`,
       [req.params.id]
     );
     if (discussions.length === 0) return res.status(404).json({ error: t(req.lang, 'errors.discussionNotFound') });
-
-    // Membership check: user must be member/owner of the discussion's project
-    const discussion = discussions[0];
-    if (!(await isProjectMember(discussion.project_id, req.user.id))) {
-      return res.status(403).json({ error: t(req.lang, 'errors.projectAccessDenied') || 'You are not authorized to access this project.' });
-    }
 
     // Only non-direct messages (discussion threads, not DMs)
     const [messageRows] = await pool.query(
@@ -136,24 +127,23 @@ router.get('/:id', auth, async (req, res, next) => {
 });
 
 // POST /api/discussions
-router.post('/', auth, requireProjectMember('projectId'), async (req, res, next) => {
+// projectId is optional (can be null). Requires 'discussions.create' permission.
+router.post('/', auth, async (req, res, next) => {
   try {
-    const { projectId, title, initialMessage } = req.body;
-    if (!projectId || !title) return res.status(400).json({ error: t(req.lang, 'errors.projectTitleRequired') });
+    if (!req.user.permissions.includes('discussions.create')) {
+      return res.status(403).json({ error: 'You do not have permission to create discussions.' });
+    }
+    const { projectId, title } = req.body;
+    if (!title || String(title).trim() === '') {
+      return res.status(400).json({ error: 'Title is required.' });
+    }
 
     const [result] = await pool.query(
       'INSERT INTO discussions (project_id, title, created_by_user_id) VALUES (?, ?, ?)',
-      [projectId, title, req.user.id]
+      [projectId && Number(projectId) > 0 ? Number(projectId) : null, String(title).trim(), req.user.id]
     );
 
-    if (initialMessage) {
-      await pool.query(
-        'INSERT INTO messages (discussion_id, sender_id, content) VALUES (?, ?, ?)',
-        [result.insertId, req.user.id, initialMessage]
-      );
-    }
-
-    res.status(201).json({ id: result.insertId, title });
+    res.status(201).json({ id: result.insertId, title: String(title).trim() });
   } catch (err) { next(err); }
 });
 
@@ -163,12 +153,14 @@ router.post('/:id/messages', auth, async (req, res, next) => {
     const { content } = req.body;
     if (!content) return res.status(400).json({ error: t(req.lang, 'errors.messageContentRequired') });
 
-    const [discussion] = await pool.query('SELECT project_id FROM discussions WHERE id = ?', [req.params.id]);
+    const [discussion] = await pool.query('SELECT project_id, title FROM discussions WHERE id = ?', [req.params.id]);
     if (!discussion.length) return res.status(404).json({ error: t(req.lang, 'errors.discussionNotFound') });
 
-    // Membership check
-    if (!(await isProjectMember(discussion[0].project_id, req.user.id))) {
-      return res.status(403).json({ error: t(req.lang, 'errors.projectAccessDenied') || 'You are not authorized to access this project.' });
+    const discussionTitle = discussion[0].title || 'Untitled';
+
+    // Permission check — any user with 'discussions.post' can post to any discussion
+    if (!req.user.permissions.includes('discussions.post')) {
+      return res.status(403).json({ error: 'You do not have permission to post in this discussion.' });
     }
 
     const [result] = await pool.query(
@@ -203,9 +195,9 @@ router.post('/:id/messages', auth, async (req, res, next) => {
           [
             m.user_id,
             'new_message',
-            'notifications.newDiscussionMessage',
+            null,
             JSON.stringify({ senderName, contentSnippet }),
-            `New message in a discussion`,
+            `New message in "${discussionTitle}"`,
             `${senderName}: ${contentSnippet}`,
             `/discussions?id=${req.params.id}`,
           ]
@@ -235,8 +227,8 @@ router.post('/:id/messages/:messageId/reactions', auth, async (req, res, next) =
     const [discussion] = await pool.query('SELECT project_id FROM discussions WHERE id = ?', [req.params.id]);
     if (!discussion.length) return res.status(404).json({ error: t(req.lang, 'errors.discussionNotFound') });
 
-    if (!(await isProjectMember(discussion[0].project_id, req.user.id))) {
-      return res.status(403).json({ error: t(req.lang, 'errors.projectAccessDenied') || 'You are not authorized to access this project.' });
+    if (!req.user.permissions.includes('discussions.post')) {
+      return res.status(403).json({ error: 'You do not have permission to react to messages in this discussion.' });
     }
 
     const [messageRows] = await pool.query(
@@ -288,14 +280,17 @@ router.post('/:id/messages/:messageId/reactions', auth, async (req, res, next) =
 });
 
 // DELETE /api/discussions/:id
+// Only the discussion creator OR a user with 'discussions.delete' permission can delete.
 router.delete('/:id', auth, async (req, res, next) => {
   try {
-    const [discussion] = await pool.query('SELECT project_id FROM discussions WHERE id = ?', [req.params.id]);
+    const [discussion] = await pool.query('SELECT id, created_by_user_id FROM discussions WHERE id = ?', [req.params.id]);
     if (!discussion.length) return res.status(404).json({ error: t(req.lang, 'errors.discussionNotFound') });
 
-    // Membership check
-    if (!(await isProjectMember(discussion[0].project_id, req.user.id))) {
-      return res.status(403).json({ error: t(req.lang, 'errors.projectAccessDenied') || 'You are not authorized to access this project.' });
+    const isCreator = discussion[0].created_by_user_id === req.user.id;
+    const canDelete = req.user.permissions.includes('discussions.delete');
+
+    if (!isCreator && !canDelete) {
+      return res.status(403).json({ error: 'You do not have permission to delete this discussion.' });
     }
 
     await pool.query('DELETE FROM discussions WHERE id = ?', [req.params.id]);

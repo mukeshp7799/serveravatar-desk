@@ -101,41 +101,23 @@ export default function ProjectHeader({ project, actions, members = [], memberCo
   }, [menuOpen])
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-visible card-hover">
-      {/* Cover band — gradient + soft blurred blobs */}
-      <div className="relative h-16 sm:h-20 bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-500 overflow-hidden">
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute -top-6 -left-6 w-40 h-40 rounded-full bg-white/30 blur-2xl" />
-          <div className="absolute -bottom-8 right-8 w-44 h-44 rounded-full bg-white/25 blur-2xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
-        </div>
-        {/* Subtle pattern */}
-        <div
-          className="absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
-            backgroundSize: '24px 24px',
-          }}
-        />
-      </div>
-
-      {/* Body */}
-      <div className="px-4 sm:px-5 pb-4 pt-3 sm:pt-4 flex flex-wrap items-start gap-3 -mt-8 sm:-mt-10 relative">
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-visible">
+      {/* Body — clean header, no gradient band */}
+      <div className="px-4 sm:px-5 py-3 sm:py-4 flex flex-wrap items-start gap-3 relative">
         {/* Avatar */}
         <div className="relative shrink-0">
-          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 border-2 border-white dark:border-gray-900 shadow-lg flex items-center justify-center text-base sm:text-lg font-bold text-white">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-center text-base sm:text-lg font-bold text-gray-700 dark:text-gray-200">
             {project.name.slice(0, 2).toUpperCase()}
           </div>
           {/* Status dot on avatar */}
           <span
-            className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full ${status.dot} border-2 border-white dark:border-gray-900 shadow-sm`}
+            className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full ${status.dot} border-2 border-white dark:border-gray-100 shadow-sm`}
             title={status.label}
           />
         </div>
 
         {/* Name + meta */}
-        <div className="flex-1 min-w-0 pt-2 sm:pt-7">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate tracking-tight">
               {project.name}
@@ -206,7 +188,7 @@ export default function ProjectHeader({ project, actions, members = [], memberCo
               onClick={() => setMenuOpen((v) => !v)}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-indigo-500/25 hover:shadow-lg hover:shadow-indigo-500/30 transition cursor-pointer border-none"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-sm transition cursor-pointer border-none"
             >
               {resolveIcon('Plus', 15, 2.5)}
               <span>New</span>
@@ -236,7 +218,7 @@ export default function ProjectHeader({ project, actions, members = [], memberCo
                       role="menuitem"
                       className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-700 dark:hover:text-indigo-300 transition no-underline"
                     >
-                      <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-100 to-violet-100 dark:from-indigo-900/40 dark:to-violet-900/40 text-indigo-600 dark:text-indigo-300 flex items-center justify-center">
+                      <span className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 flex items-center justify-center">
                         {resolveIcon(a.iconName, 13, 2.25)}
                       </span>
                       <span className="font-medium">{a.label}</span>

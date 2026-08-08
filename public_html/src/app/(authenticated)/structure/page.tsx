@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { Building2, Landmark, Hospital, Warehouse } from 'lucide-react'
+import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
 import { structureSchema, type StructureInput } from '@/lib/schemas'
 
@@ -156,6 +157,7 @@ function StructurePageInner() {
 
       {/* Modal */}
       {showModal && (
+        <PortalModal>
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
           <div className="bg-white rounded-xl w-full max-w-md shadow-xl flex flex-col max-h-[calc(100vh-2rem)]" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
@@ -181,6 +183,7 @@ function StructurePageInner() {
             </form>
           </div>
         </div>
+        </PortalModal>
       )}
     </div>
   )

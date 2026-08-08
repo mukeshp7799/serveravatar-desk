@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import toast from 'react-hot-toast'
+import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
 import PageLoader from '@/components/PageLoader'
 import {
@@ -214,6 +215,7 @@ function EditModal({ day, onClose, onSave }: {
   }
 
   return (
+    <PortalModal>
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-black/50 backdrop-blur-sm overflow-y-auto">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full h-[80vh] flex flex-col overflow-hidden">
         {/* Header */}
@@ -309,6 +311,7 @@ function EditModal({ day, onClose, onSave }: {
         </div>
       </div>
     </div>
+    </PortalModal>
   )
 }
 
@@ -591,7 +594,8 @@ export default function AttendancePage() {
 
   const histPages = Math.ceil(histTotal / 20)
 
-  const canClockIn = myToday && (myToday.status === 'absent') && canClock
+  // canClockIn: allow for 'absent' (first clock-in of the day) OR 'completed' (re-clock-in after clock-out)
+  const canClockIn = myToday && (myToday.status === 'absent' || myToday.status === 'completed') && canClock
   const canClockOut = myToday && ['clocked_in', 'working'].includes(myToday.status) && myToday.status !== 'on_break' && canClock
   const canStartBreak = myToday && ['clocked_in', 'working'].includes(myToday.status) && myToday.status !== 'on_break' && canClock
   const canEndBreak = myToday && myToday.status === 'on_break' && canClock

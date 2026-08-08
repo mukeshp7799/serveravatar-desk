@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/database');
 const { auth, requirePermission } = require('../middleware/auth');
 const { t } = require('../i18n');
+const { logActivity } = require('../services/activityService');
 
 const router = express.Router();
 
@@ -85,6 +86,10 @@ router.put('/', requirePermission('admin.settings'), async (req, res, next) => {
     }
 
     const updated = await getAllSettings();
+    // ── Activity log: Company Settings Updated ────────────────────────────
+    const changedGroups = groups.join(', ');
+    logActivity({ req, module: 'CompanySettings', action: 'Updated',
+      description: `Company settings updated: ${changedGroups}` });
     res.json({ message: t(req.lang, 'settings.companySettingsUpdated'), settings: updated });
   } catch (err) { next(err); }
 });

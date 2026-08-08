@@ -1,5 +1,6 @@
 'use client'
 
+import PortalModal from '@/components/PortalModal';
 /**
  * /projects/[projectId]/chat
  *
@@ -414,6 +415,7 @@ function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
   }, [onClose])
 
   return (
+    <PortalModal>
     <div onClick={onClose}
       className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
       role="dialog" aria-modal="true" aria-label="Image viewer">
@@ -426,6 +428,7 @@ function ImageLightbox({ src, onClose }: { src: string; onClose: () => void }) {
       <img src={src} onClick={(e) => e.stopPropagation()} alt="Full screen"
         className="max-w-[94vw] max-h-[88vh] object-contain rounded-2xl shadow-2xl" />
     </div>
+    </PortalModal>
   )
 }
 
