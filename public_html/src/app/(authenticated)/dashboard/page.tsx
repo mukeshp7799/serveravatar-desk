@@ -230,11 +230,24 @@ export default function DashboardPage() {
   const [calData, setCalData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState({ date: '', time: '' });
+  const [tick, setTick] = useState(0); // drives live hours re-compute every interval
   const [clocking, setClocking] = useState<string | null>(null);
 
   const fetchDashboard = () => {
     return api.get('/dashboard').then(d => { setDashData(d); return d; }).catch(() => {});
   };
+
+  // Refresh dashboard every 60 seconds so attendance live hours stay current
+  useEffect(() => {
+    const t = setInterval(fetchDashboard, 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Fast tick — re-render every 10s so attendance card live hours stay current
+  useEffect(() => {
+    const t = setInterval(() => setTick(n => n + 1), 10_000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -352,7 +365,7 @@ export default function DashboardPage() {
       {/* ══════════════════════════════════════════════════════════════════════ */}
       {/* ══ STAT CARDS — 4 columns ═══════════════════════════════════════════ */}
       {/* ══════════════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
         {hasHR && (
           <Link href="/employees" className="no-underline">
             <StatCard label="Employees" value={hrStats.totalEmployees ?? '-'} icon={Users} color="text-blue-600" bgColor="bg-blue-50" delay={0} />
@@ -367,6 +380,16 @@ export default function DashboardPage() {
         {hasApprove && (
           <Link href="/leaves" className="no-underline">
             <StatCard label="Pending" value={pendingApprovals.length} icon={Clock} color="text-orange-600" bgColor="bg-orange-50" delay={150} />
+          </Link>
+        )}
+        {hasAttendanceTeam && attendanceStats && (
+          <Link href="/attendance" className="no-underline">
+            <StatCard label="Present Today" value={attendanceStats.present_today ?? '-'} icon={Clock} color="text-green-600" bgColor="bg-green-50" delay={200} />
+          </Link>
+        )}
+        {hasAttendanceTeam && attendanceStats && Number(attendanceStats.late_checkins) > 0 && (
+          <Link href="/attendance" className="no-underline">
+            <StatCard label="Late Check-ins" value={attendanceStats.late_checkins} icon={AlertCircle} color="text-amber-600" bgColor="bg-amber-50" delay={250} />
           </Link>
         )}
       </div>
@@ -443,7 +466,7 @@ export default function DashboardPage() {
                   <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2 text-center">
                     <div className="text-[10px] text-gray-400 font-medium mb-0.5">Worked</div>
                     <div className="text-xs font-bold text-gray-900 dark:text-white">
-                    {fmtHrs(myToday?.live_working_hours ?? myToday?.working_hours)}
+                    {fmtHrs(getLiveHours())}
                     </div>
                   </div>
                   <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-2 text-center">

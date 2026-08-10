@@ -136,7 +136,20 @@ function nowInTimezone(_timezone) {
  * @returns {string}
  */
 function todayInTimezone(timezone) {
-  const d = nowInTimezone(timezone);
+  if (timezone && timezone !== 'UTC') {
+    try {
+      const fmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+      });
+      // Format: 2026-08-10
+      const [y, m, day] = fmt.format(nowInTimezone()).split('-');
+      return `${y}-${m}-${day}`;
+    } catch (_) {
+      // Fall back to UTC
+    }
+  }
+  const d = nowInTimezone();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');

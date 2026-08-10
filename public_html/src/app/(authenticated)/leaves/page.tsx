@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import api from '@/lib/api'
-import { useDateSettings } from '@/contexts/CompanySettingsContext'
+import { useDateSettings, useCompanySettings } from '@/contexts/CompanySettingsContext'
 import Tabs from '@/components/Tabs'
 import PageLoader from '@/components/PageLoader'
-import { Calendar, Check, Clock, Plus, Search, Settings, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
+import { Calendar, Check, CheckSquare, Clock, Info, Plus, Search, Settings, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
 
 function fmtDateDefault(raw: string | null | undefined): string {
   if (!raw) return '—'
@@ -34,12 +34,70 @@ const BALANCE_ICONS: Record<string, any> = {
 
 type Tab = 'my' | 'team' | 'types' | 'allocations'
 
+// ── Leave Warnings Component ──────────────────────────────────────────────────
+const DAY_MAP: Record<number, string> = {
+  0: 'sun', 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat',
+}
+
+function LeaveWarnings({
+  startDate,
+  endDate,
+  workingDays,
+  maxConsecutive,
+}: {
+  startDate: string
+  endDate: string
+  workingDays: string[]
+  maxConsecutive?: number
+}) {
+  const warnings: string[] = []
+  if (!startDate || !endDate) return null
+
+  const start = new Date(startDate + 'T00:00:00')
+  const end = new Date(endDate + 'T00:00:00')
+  const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+
+  if (maxConsecutive && totalDays > maxConsecutive) {
+    warnings.push(`This range spans ${totalDays} days but the maximum allowed is ${maxConsecutive} consecutive days.`)
+  }
+
+  const cur = new Date(start)
+  const weekends: string[] = []
+  while (cur <= end) {
+    const dow = DAY_MAP[cur.getDay()]!
+    if (!workingDays.includes(dow)) {
+      weekends.push(cur.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+    }
+    cur.setDate(cur.getDate() + 1)
+  }
+  if (weekends.length > 0) {
+    warnings.push(`Selected range includes weekends: ${[...new Set(weekends)].join(', ')}.`)
+  }
+
+  if (warnings.length === 0) return null
+
+  return (
+    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 space-y-1.5">
+      <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+        <Info size={14} className="shrink-0" />
+        <span className="text-xs font-semibold">Review before submitting</span>
+      </div>
+      {warnings.map((w, i) => (
+        <p key={i} className="text-xs text-amber-600 dark:text-amber-400 pl-5">• {w}</p>
+      ))}
+    </div>
+  )
+}
+
 export default function LeavesPage() {
   const { t } = useTranslation()
   const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
   const isHRAdmin = Array.isArray(user.permissions) && (user.permissions.includes('leave.manage_all') || user.permissions.includes('users.edit_all'))
   const isManager = Array.isArray(user.permissions) && (user.permissions.includes('leave.view_team') || isHRAdmin)
 
+  const { settings: companySettings } = useCompanySettings()
+  const lv = companySettings?.leave
+  const ws = companySettings?.working_schedule
 
   const { timezone, date_format } = useDateSettings();
   const fmtDateCtx = (raw: string | null | undefined): string => {
@@ -66,7 +124,14 @@ export default function LeavesPage() {
 
   // Apply modal
   const [showApply, setShowApply] = useState(false)
-  const [applyForm, setApplyForm] = useState({ leave_type_id: '', start_date: '', end_date: '', reason: '' })
+  const [applyForm, setApplyForm] = useState({
+    leave_type_id: '',
+    start_date: '',
+    end_date: '',
+    reason: '',
+    half_day: false,
+    half_day_session: 'first_half',
+  })
   const [applying, setApplying] = useState(false)
 
   // Reject modal
@@ -220,10 +285,29 @@ export default function LeavesPage() {
   }
 
   // ── Apply for leave ─────────────────────────────────────────
+  // ── Minimum selectable date based on company settings ──────
+  const getMinDate = (): string => {
+    const tz = timezone || 'UTC'
+    const now = new Date()
+    const offsetMs = tz === 'UTC' ? 0 : now.getTimezoneOffset() * 60 * 1000
+    const localNow = new Date(now.getTime() - offsetMs * 60000)
+    if (lv?.allow_backdated_leave) {
+      localNow.setDate(localNow.getDate() - 365)
+      return localNow.toISOString().split('T')[0]
+    }
+    const minDays = Number(lv?.minimum_leave_notice_days) || 0
+    localNow.setDate(localNow.getDate() + minDays)
+    return localNow.toISOString().split('T')[0]
+  }
+
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!applyForm.leave_type_id || !applyForm.start_date || !applyForm.end_date) {
       toast.error('Please fill in all required fields')
+      return
+    }
+    if (applyForm.half_day && applyForm.start_date !== applyForm.end_date) {
+      toast.error('Half-day leave must have the same start and end date.')
       return
     }
     setApplying(true)
@@ -233,10 +317,12 @@ export default function LeavesPage() {
         start_date: applyForm.start_date,
         end_date: applyForm.end_date,
         reason: applyForm.reason,
+        half_day: applyForm.half_day || false,
+        half_day_session: applyForm.half_day ? applyForm.half_day_session : undefined,
       })
       toast.success(res.message || 'Leave request submitted')
       setShowApply(false)
-      setApplyForm({ leave_type_id: '', start_date: '', end_date: '', reason: '' })
+      setApplyForm({ leave_type_id: '', start_date: '', end_date: '', reason: '', half_day: false, half_day_session: 'first_half' })
       loadAll()
       loadMyRequests(1)
     } catch (err: any) {
@@ -904,15 +990,92 @@ return (
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date <span className="text-red-500">*</span></label>
-                              <input type="date" value={applyForm.start_date} onChange={e => setApplyForm({ ...applyForm, start_date: e.target.value })} required
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                              <input
+                                type="date"
+                                value={applyForm.start_date}
+                                onChange={e => setApplyForm(prev => ({ ...prev, start_date: e.target.value, half_day: false }))}
+                                min={getMinDate()}
+                                required
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date <span className="text-red-500">*</span></label>
-                              <input type="date" value={applyForm.end_date} onChange={e => setApplyForm({ ...applyForm, end_date: e.target.value })} required
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                              <input
+                                type="date"
+                                value={applyForm.end_date}
+                                onChange={e => setApplyForm(prev => ({ ...prev, end_date: e.target.value, half_day: false }))}
+                                min={applyForm.start_date || getMinDate()}
+                                required
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
                             </div>
                           </div>
+
+                          {/* Half-day leave — only shown when company setting allows it */}
+                          {lv?.allow_half_day_leave && (
+                            <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4 space-y-3 border border-indigo-100 dark:border-indigo-800/30">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Half-Day Leave</p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                    {lv?.half_day_session === 'first_half'
+                                      ? 'Leave for the first half (morning)'
+                                      : 'Leave for the second half (afternoon)'}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = !applyForm.half_day
+                                    setApplyForm(prev => ({
+                                      ...prev,
+                                      half_day: next,
+                                      end_date: next ? prev.start_date : prev.end_date,
+                                    }))
+                                  }}
+                                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors cursor-pointer border-2 ${
+                                    applyForm.half_day
+                                      ? 'bg-indigo-600 border-indigo-600'
+                                      : 'bg-gray-300 dark:bg-gray-600 border-gray-200 dark:border-gray-600'
+                                  }`}
+                                >
+                                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                                    applyForm.half_day ? 'translate-x-6' : 'translate-x-1'
+                                  }`} />
+                                </button>
+                              </div>
+                              {applyForm.half_day && (
+                                <div className="flex gap-2">
+                                  {(['first_half', 'second_half'] as const).map(session => (
+                                    <button
+                                      key={session}
+                                      type="button"
+                                      onClick={() => setApplyForm(prev => ({ ...prev, half_day_session: session }))}
+                                      className={`flex-1 py-2 rounded-lg text-xs font-semibold border-2 transition cursor-pointer ${
+                                        applyForm.half_day_session === session
+                                          ? 'bg-indigo-600 border-indigo-600 text-white'
+                                          : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-indigo-300'
+                                      }`}
+                                    >
+                                      {session === 'first_half' ? '🌅 First Half (AM)' : '🌆 Second Half (PM)'}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Contextual warnings for weekends / max consecutive */}
+                          {applyForm.start_date && applyForm.end_date && (
+                            <LeaveWarnings
+                              startDate={applyForm.start_date}
+                              endDate={applyForm.end_date}
+                              workingDays={ws?.working_days || ['mon', 'tue', 'wed', 'thu', 'fri']}
+                              maxConsecutive={lv?.max_consecutive_leave_days}
+                            />
+                          )}
+
                           <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
                             <textarea value={applyForm.reason} onChange={e => setApplyForm({ ...applyForm, reason: e.target.value })} rows={3}

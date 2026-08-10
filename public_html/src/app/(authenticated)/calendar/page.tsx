@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import api from '@/lib/api'
 import { useDateSettings } from '@/contexts/CompanySettingsContext';
@@ -17,7 +18,22 @@ const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 function calcYears(dateStr: string): number {
   if (!dateStr || dateStr === '0000-00-00') return 0
-  const d = new Date(dateStr + 'T00:00:00')
+  const datePart = dateStr.includes('T') ? dateStr.slice(0, 10) : dateStr
+  const parts = datePart.split('-')
+  let d: Date
+
+  if (parts.length === 3) {
+    // Detect format: first part > 12 means it's DD/MM/YYYY, not YYYY-MM-DD
+    if (Number(parts[0]) > 12 && Number(parts[1]) <= 12) {
+      d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
+    } else {
+      d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+    }
+  } else {
+    d = new Date(dateStr)
+  }
+
+  if (isNaN(d.getTime())) return 0
   return Math.floor((Date.now() - d.getTime()) / 365.25 / 86400000)
 }
 
@@ -37,21 +53,47 @@ function fmtDate(dateStr: string): string {
 
 // formatDate moved inside component for context-awareness
 function sameDay(a: Date, b: Date) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
-function fmtLong(d: string) {
-  try { return new Date(d).toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }); }
-  catch { return d; }
+function fmtLong(d: string, tz: string = 'UTC') {
+  if (!d) return '—';
+  try {
+    const datePart = d.includes('T') ? d.slice(0, 10) : d;
+    const parts = datePart.split('-');
+    let localDate: Date;
+
+    if (parts.length === 3) {
+      const [y, m, day] = parts.map(Number);
+      if (![y, m, day].some(isNaN)) {
+        // DD/MM/YYYY — company stores dates in this display format.
+        // Detect by checking: first part (day) <= 31 AND second part (month) <= 12 AND first part > 12 (to avoid ambiguity with YYYY-MM-DD where year can be <= 12).
+        if (Number(parts[0]) > 12 && Number(parts[0]) <= 31 && Number(parts[1]) >= 1 && Number(parts[1]) <= 12) {
+          localDate = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+        // YYYY-MM-DD: year > 31 (clearly a year, not a day)
+        } else {
+          // YYYY-MM-DD — parse in local timezone to avoid UTC-shift issues
+          localDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        }
+      } else {
+        return d;
+      }
+    } else {
+      return d;
+    }
+
+    return localDate.toLocaleDateString('en-US', { timeZone: tz || 'UTC', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  } catch { return d; }
 }
 
 interface CalItem { type: string; title: string; subtitle?: string; color: string; item: any; date?: string; }
 
 // ─── Unified Item Modal (Detail + Edit) ─────────────────────────────
-function ItemModal({ item, onClose, onSave, canManage }: {
+function ItemModal({ item, onClose, onSave, canManage, defaultMode }: {
   item: CalItem;
   onClose: () => void;
   onSave: () => void;
   canManage: boolean;
+  defaultMode?: 'view' | 'edit';
 }) {
-  const [mode, setMode] = useState<'view' | 'edit'>('view');
+  const [mode, setMode] = useState<'view' | 'edit'>(defaultMode || 'view');
   const [saving, setSaving] = useState(false);
   const isHoliday = item.type === 'holiday';
   const isEvent = item.type === 'event';
@@ -119,8 +161,8 @@ function ItemModal({ item, onClose, onSave, canManage }: {
 
   // ── View Mode ──────────────────────────────────────────────────────
   if (mode === 'view') {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+    return createPortal((
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
           {/* Color header */}
           <div className="h-2 rounded-t-2xl" style={{ backgroundColor: item.color }} />
@@ -133,7 +175,7 @@ function ItemModal({ item, onClose, onSave, canManage }: {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              {canEdit && (
+              {canEdit && item.item?.id && mode === 'view' && (
                 <button onClick={() => setMode('edit')} className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition cursor-pointer border-0">
                   Edit
                 </button>
@@ -256,19 +298,19 @@ function ItemModal({ item, onClose, onSave, canManage }: {
           </div>
 
           <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex gap-2 justify-end">
-            {canEdit && (
+            {canEdit && item.item?.id && (
               <button onClick={handleDelete} className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition cursor-pointer border border-red-300 dark:border-red-700 bg-transparent mr-auto">Delete</button>
             )}
             <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">Close</button>
           </div>
         </div>
       </div>
-    );
+    ), typeof document !== 'undefined' ? document.body : null);
   }
 
   // ── Edit Mode ──────────────────────────────────────────────────────
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+  return createPortal((
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800">
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">
@@ -369,7 +411,7 @@ function ItemModal({ item, onClose, onSave, canManage }: {
         )}
 
         <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex gap-2 justify-end">
-          <button onClick={() => setMode('view')} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">Cancel</button>
+          <button onClick={() => item.item?.id ? setMode('view') : onClose()} className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">Cancel</button>
           <button onClick={handleSave} disabled={saving}
             className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
             {saving ? 'Saving...' : 'Save'}
@@ -377,7 +419,7 @@ function ItemModal({ item, onClose, onSave, canManage }: {
         </div>
       </div>
     </div>
-  );
+  ), typeof document !== 'undefined' ? document.body : null);
 }
 
 // ─── Main Calendar Page ────────────────────────────────────────────
@@ -667,6 +709,7 @@ export default function CalendarPage() {
           onClose={() => setDetailItem(null)}
           onSave={() => { setDetailItem(null); fetchCalendar(); }}
           canManage={canManage}
+          defaultMode={detailItem.item?.id ? 'view' : 'edit'}
         />
       )}
     </div>

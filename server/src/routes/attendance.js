@@ -116,10 +116,8 @@ router.post('/clock-in', async (req, res, next) => {
         message: 'Clocked in again — previous session ended',
         attendance: {
           ...formatAttendance(rec),
-          working_hours: computeWorkingHours(rec.clock_in_time, rec.clock_out_time, rec.total_break_minutes),
           live_working_hours: liveWH,
           active_break_start: activeBreak?.start_time || null,
-          total_break_minutes: rec.total_break_minutes,
           breaks: breaks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, duration_minutes: b.duration_minutes })),
         },
       });
@@ -137,12 +135,49 @@ router.post('/clock-in', async (req, res, next) => {
 
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const now = nowInTimezone(tz);
+
+    // ── Early clock-in check ─────────────────────────────────────────────
+    const allowEarlyClockIn = await getSetting(pool, 'attendance', 'allow_early_clock_in');
+    if (allowEarlyClockIn === false) {
+      const officeStartTime = await getSetting(pool, 'working_schedule', 'office_start_time') || '09:30';
+      const [sh, sm] = officeStartTime.split(':').map(Number);
+      const officeStartMinutes = sh * 60 + sm;
+
+      // Convert current UTC time to IST (or company timezone) for correct wall-clock comparison.
+      // office_start_time is stored as HH:MM in company local time (IST), not UTC.
+      // nowInTimezone returns UTC, so we must convert to company TZ to compare like-with-like.
+      // Use Intl.DateTimeFormat to get the wall-clock hour/minute in the company timezone.
+      let nowMinutes = now.getHours() * 60 + now.getMinutes();
+      if (tz && tz !== 'UTC') {
+        try {
+          const fmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
+          });
+          const parts = Object.fromEntries(
+            fmt.formatToParts(now).map(p => [p.type, p.value])
+          );
+          nowMinutes = (Number(parts.hour) % 24) * 60 + Number(parts.minute);
+        } catch (_) {
+          // Fall back to UTC if timezone formatting fails
+        }
+      }
+
+      if (nowMinutes < officeStartMinutes) {
+        const [hh, mm] = officeStartTime.split(':');
+        const formattedTime = `${hh}:${mm}`;
+        return res.status(400).json({
+          error: `Early clock-in is not allowed. Office starts at ${formattedTime}. Please clock in at or after ${formattedTime}.`,
+          code: 'EARLY_CLOCK_IN_BLOCKED',
+        });
+      }
+    }
+
     // Late check: use office_start_time + late_checkin_grace_minutes from company settings (shared service)
     const [officeStartTime, graceMinutes] = await Promise.all([
       getSetting(pool, 'working_schedule', 'office_start_time'),
       getSetting(pool, 'working_schedule', 'late_checkin_grace_minutes'),
     ])
-    const { isLate, lateMinutes } = computeLateStatus(now, officeStartTime || '09:30', Number(graceMinutes) || 30)
+    const { isLate, lateMinutes } = computeLateStatus(now, officeStartTime || '09:30', Number(graceMinutes) || 30, tz)
 
     await pool.query(
       `UPDATE attendance SET status = 'clocked_in', clock_in_time = ?,
@@ -165,10 +200,8 @@ router.post('/clock-in', async (req, res, next) => {
       message: isLate ? 'Clocked in (Late)' : 'Clocked in successfully',
       attendance: {
         ...formatAttendance(rec),
-        working_hours: computeWorkingHours(rec.clock_in_time, rec.clock_out_time, rec.total_break_minutes),
         live_working_hours: liveWH,
         active_break_start: activeBreak?.start_time || null,
-        total_break_minutes: rec.total_break_minutes,
         breaks: breaks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, duration_minutes: b.duration_minutes })),
       },
     });
@@ -228,10 +261,8 @@ router.post('/start-break', async (req, res, next) => {
       message: 'Break started',
       attendance: {
         ...formatAttendance(rec),
-        working_hours: computeWorkingHours(rec.clock_in_time, rec.clock_out_time, rec.total_break_minutes),
         live_working_hours: liveWH,
         active_break_start: activeBreak?.start_time || null,
-        total_break_minutes: rec.total_break_minutes,
         breaks: breaks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, duration_minutes: b.duration_minutes })),
       },
     });
@@ -290,10 +321,8 @@ router.post('/end-break', async (req, res, next) => {
       message: 'Break ended',
       attendance: {
         ...formatAttendance(rec),
-        working_hours: computeWorkingHours(rec.clock_in_time, rec.clock_out_time, rec.total_break_minutes),
         live_working_hours: liveWH,
         active_break_start: activeBreak?.start_time || null,
-        total_break_minutes: rec.total_break_minutes,
         breaks: breaks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, duration_minutes: b.duration_minutes })),
       },
     });
@@ -362,10 +391,8 @@ router.post('/clock-out', async (req, res, next) => {
       message: 'Clocked out successfully',
       attendance: {
         ...formatAttendance(rec),
-        working_hours: computeWorkingHours(rec.clock_in_time, rec.clock_out_time, rec.total_break_minutes),
         live_working_hours: null,
         active_break_start: null,
-        total_break_minutes: rec.total_break_minutes,
         breaks: breaks.map(b => ({ id: b.id, start_time: b.start_time, end_time: b.end_time, duration_minutes: b.duration_minutes })),
       },
     });
@@ -394,6 +421,8 @@ router.get('/today', async (req, res, next) => {
     );
 
     const wh = computeWorkingHours(today.clock_in_time, today.clock_out_time, today.total_break_minutes);
+    const ebToday = Number(today.effective_break_minutes) || 0;
+    const effectiveWH = (wh != null && ebToday > 0) ? Math.round((wh + ebToday / 60) * 100) / 100 : wh;
 
     // Live hours: compute only when clocked-in but NOT yet clocked-out
     const activeBreak = breaks.find(b => !b.end_time);
@@ -404,10 +433,8 @@ router.get('/today', async (req, res, next) => {
     res.json({
       attendance: {
         ...formatAttendance(today),
-        working_hours: wh,
-        live_working_hours: liveWH,          // real-time hours while on shift
-        active_break_start: activeBreak?.start_time || null,  // null if no open break
-        total_break_minutes: today.total_break_minutes,
+        live_working_hours: liveWH,
+        active_break_start: activeBreak?.start_time || null,
         breaks: breaks.map(b => ({
           id: b.id,
           start_time: b.start_time,
@@ -424,6 +451,21 @@ router.get('/history', async (req, res, next) => {
   try {
     const userId = req.user.id;
     const perms = req.user.permissions || [];
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+
+    // Shared HH:MM formatter for MySQL DATETIME and TIME columns
+    const toHHMM = (val, _tz) => {
+      if (!val) return null;
+      if (typeof val === 'string' && /^\d{2}:\d{2}:?\d{0,2}$/.test(val.trim())) {
+        const [h, m] = val.trim().split(':').map(Number);
+        // TIME columns store company-local wall-clock HH:MM:SS — return as-is (no UTC-bridge needed)
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+      }
+      // DATETIME columns need UTC-bridge conversion
+      const d = _tz ? toTimezone(new Date(val), _tz) : new Date(val);
+      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    };
+
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(5, parseInt(req.query.limit) || 30));
     const offset = (page - 1) * limit;
@@ -433,26 +475,81 @@ router.get('/history', async (req, res, next) => {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
+    // Include today if user has break adjustment permission (so they can view their adjustment status)
+    const hasAdjPerm = perms.includes('attendance.break_adjustment.request');
+    const dateFilter = hasAdjPerm ? 'a.date <= CURDATE()' : 'a.date < CURDATE()';
+
     const [records] = await pool.query(
       `SELECT a.*,
-        (SELECT COALESCE(SUM(duration_minutes),0) FROM attendance_breaks WHERE attendance_id = a.id) as total_break_minutes
+        (SELECT COALESCE(SUM(duration_minutes),0) FROM attendance_breaks WHERE attendance_id = a.id) as break_minutes
        FROM attendance a
-       WHERE a.user_id = ? AND a.date < CURDATE()
+       WHERE a.user_id = ? AND ${dateFilter}
        ORDER BY a.date DESC LIMIT ? OFFSET ?`,
       [targetId, limit, offset]
     );
 
+    // Total counts only past dates (for pagination); today is shown as an extra first page
     const [[{ total }]] = await pool.query(
       'SELECT COUNT(*) as total FROM attendance WHERE user_id = ? AND date < CURDATE()',
       [targetId]
     );
 
+    // Fetch all adjustment requests for these attendance records in one query
+    const attIds = records.map(r => r.id);
+    let adjustmentsMap = {};
+    if (attIds.length > 0) {
+      const placeholders = attIds.map(() => '?').join(',');
+      const [adjRows] = await pool.query(
+        `SELECT bar.*,
+                ab.start_time as break_start, ab.end_time as break_end, ab.duration_minutes as break_duration,
+                ru.first_name as reviewer_first_name, ru.last_name as reviewer_last_name
+         FROM break_adjustment_requests bar
+         JOIN attendance_breaks ab ON bar.break_id = ab.id
+         LEFT JOIN users ru ON bar.reviewed_by = ru.id
+         WHERE bar.attendance_id IN (${placeholders})
+         ORDER BY bar.created_at ASC`,
+        attIds
+      );
+      for (const adj of adjRows) {
+        if (!adjustmentsMap[adj.attendance_id]) adjustmentsMap[adj.attendance_id] = [];
+        adjustmentsMap[adj.attendance_id].push({
+          id: adj.id,
+          break_id: adj.break_id,
+          requested_minutes: adj.requested_minutes,
+          start_time: adj.start_time,
+          end_time:   adj.end_time,
+          time_start: toHHMM(adj.start_time, tz),
+          time_end:   toHHMM(adj.end_time,   tz),
+          reason: adj.reason,
+          status: adj.status,
+          admin_remarks: adj.admin_remarks,
+          reviewed_at: adj.reviewed_at,
+          reviewed_by: adj.reviewed_by,
+          created_at: adj.created_at,
+          break_time_start: toHHMM(adj.break_start, tz),
+          break_time_end:   toHHMM(adj.break_end,   tz),
+          break_duration: adj.break_duration,
+          reviewer: adj.reviewer_first_name
+            ? { first_name: adj.reviewer_first_name, last_name: adj.reviewer_last_name }
+            : null,
+        });
+      }
+    }
+
+    const today = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' in UTC
     res.json({
-      records: records.map(r => ({
-        ...formatAttendance(r),
-        total_break_minutes: r.total_break_minutes,
-        working_hours: computeWorkingHours(r.clock_in_time, r.clock_out_time, r.total_break_minutes),
-      })),
+      records: records.map(r => {
+        // MySQL DATE may be returned as a Date object or ISO string — normalize to YYYY-MM-DD
+        const dateStr = r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10);
+        const liveWH = (dateStr === today && !r.clock_out_time)
+          ? computeLiveWorkingHours(r.clock_in_time, r.total_break_minutes)
+          : null;
+        return {
+          ...formatAttendance(r),
+          live_working_hours: liveWH,
+          adjustments: adjustmentsMap[r.id] || [],
+        };
+      }),
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
   } catch (err) { next(err); }
@@ -575,6 +672,8 @@ router.get('/my-history', async (req, res, next) => {
         : (att?.clock_in_time && ds === today
           ? computeLiveWorkingHours(att.clock_in_time, att.total_break_minutes || 0)
           : null);
+      const ebTimeline = Number(att?.effective_break_minutes) || 0;
+      const effectiveWH = (wh != null && ebTimeline > 0) ? Math.round((wh + ebTimeline / 60) * 100) / 100 : wh;
 
       fullTimeline.push({
         date: ds,
@@ -584,7 +683,8 @@ router.get('/my-history', async (req, res, next) => {
         clock_in_time: att?.clock_in_time || null,
         clock_out_time: att?.clock_out_time || null,
         total_break_minutes: att?.total_break_minutes || 0,
-        working_hours: wh,
+        effective_break_minutes: ebTimeline,
+        working_hours: effectiveWH,
         is_live: Boolean(att?.clock_in_time && !att?.clock_out_time && ds === today),
         is_late: att ? Boolean(att.is_late) : false,
         late_minutes: att?.late_minutes || 0,
@@ -748,7 +848,7 @@ router.get('/team', async (req, res, next) => {
     res.json({
       records: rows.map(r => ({
         ...formatAttendance(r),
-        working_hours: computeWorkingHours(r.clock_in_time, r.clock_out_time, r.total_break_minutes),
+        
       })),
       date: today,
       pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
@@ -804,7 +904,7 @@ router.get('/all', async (req, res, next) => {
     res.json({
       records: records.map(r => ({
         ...formatAttendance(r),
-        working_hours: computeWorkingHours(r.clock_in_time, r.clock_out_time, r.total_break_minutes),
+        
       })),
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
@@ -867,6 +967,14 @@ router.put('/:id', async (req, res, next) => {
 
 // ─── Format helper ───────────────────────────────────────────────────────────
 function formatAttendance(r) {
+  const totalBreak = Number(r.total_break_minutes) || 0;
+  const effectiveBreak = Number(r.effective_break_minutes) || 0;
+  // working_hours = shift - (total_break_minutes - effective_break_minutes)
+  //                 = shift - total_break_minutes + effective_break_minutes
+  // After adjustment approval: total_break_minutes = original - approved
+  // and effective_break_minutes = approved, so net = original break used
+  const wh = computeWorkingHours(r.clock_in_time, r.clock_out_time, totalBreak);
+  const effectiveWH = (wh != null && effectiveBreak > 0) ? wh + effectiveBreak / 60 : wh;
   return {
     id: r.id,
     user_id: r.user_id,
@@ -874,11 +982,13 @@ function formatAttendance(r) {
     status: r.status,
     clock_in_time: r.clock_in_time,
     clock_out_time: r.clock_out_time,
-    total_break_minutes: r.total_break_minutes || 0,
+    total_break_minutes: totalBreak,
+    effective_break_minutes: effectiveBreak,
+    // original_break_minutes: totalBreak + effectiveBreak,
     is_late: Boolean(r.is_late),
     late_minutes: r.late_minutes || 0,
     remarks: r.remarks,
-    working_hours: computeWorkingHours(r.clock_in_time, r.clock_out_time, r.total_break_minutes || 0),
+    working_hours: Math.round(effectiveWH * 100) / 100,
     first_name: r.first_name,
     last_name: r.last_name,
     email: r.email,
@@ -973,7 +1083,7 @@ router.get('/analytics/summary', async (req, res, next) => {
 
     const [attRecords] = await pool.query(
       `SELECT a.user_id, a.date, a.status, a.clock_in_time, a.clock_out_time,
-              a.total_break_minutes, a.is_late, a.late_minutes, a.remarks,
+              a.total_break_minutes, a.effective_break_minutes, a.is_late, a.late_minutes, a.remarks,
               (SELECT COALESCE(SUM(duration_minutes),0) FROM attendance_breaks WHERE attendance_id = a.id) as break_minutes
        FROM attendance a WHERE ${attWhere.join(' AND ')}`,
       attParams
@@ -1019,9 +1129,11 @@ router.get('/analytics/summary', async (req, res, next) => {
         if (presentStatuses.includes(dayRec.status)) presentDays++;
         if (dayRec.is_late) lateCheckins++;
         if (dayRec.clock_in_time && dayRec.clock_out_time) {
-          // Completed day — use stored/computed hours
+          // Completed day — compute hours using adjusted break minutes
           const wh = computeWorkingHours(dayRec.clock_in_time, dayRec.clock_out_time, Number(dayRec.total_break_minutes) || 0);
-          if (wh != null) totalWH += wh;
+          const eb = Number(dayRec.effective_break_minutes) || 0;
+          const effectiveDayWH = (wh != null && eb > 0) ? wh + eb / 60 : wh;
+          if (effectiveDayWH != null) totalWH += effectiveDayWH;
         } else if (dayRec.clock_in_time && !dayRec.clock_out_time && ds === today) {
           // Today (incomplete) — compute live hours from clock-in to now, subtract open break
           const activeBreakStart = activeBreaksMap[emp.id] || null;
@@ -1247,6 +1359,8 @@ router.get('/analytics/timeline', async (req, res, next) => {
         : (att?.clock_in_time && ds === today
           ? computeLiveWorkingHours(att.clock_in_time, att.total_break_minutes || 0)
           : null);
+      const ebTL = Number(att?.effective_break_minutes) || 0;
+      const effectiveWH = (wh != null && ebTL > 0) ? Math.round((wh + ebTL / 60) * 100) / 100 : wh;
 
       timeline.push({
         date: ds,
@@ -1256,7 +1370,8 @@ router.get('/analytics/timeline', async (req, res, next) => {
         clock_in_time: att?.clock_in_time || null,
         clock_out_time: att?.clock_out_time || null,
         total_break_minutes: att?.total_break_minutes || 0,
-        working_hours: wh,
+        effective_break_minutes: ebTL,
+        working_hours: effectiveWH,
         is_live: Boolean(att?.clock_in_time && !att?.clock_out_time && ds === today),
         is_late: att ? Boolean(att.is_late) : false,
         late_minutes: att?.late_minutes || 0,
@@ -1463,3 +1578,790 @@ router.put('/:id', async (req, res, next) => {
 });
 
 module.exports = router;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BREAK TIME ADJUSTMENT REQUEST ROUTES
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Compute total approved adjustment minutes for a given attendance record.
+ * Uses effective_break_minutes when available (new column), falls back to 0.
+ */
+async function getApprovedAdjustmentMinutes(attId, connection = pool) {
+  const [[row]] = await connection.query(
+    `SELECT COALESCE(effective_break_minutes, 0) as eb
+     FROM attendance WHERE id = ?`,
+    [attId]
+  );
+  return row ? Number(row.eb) : 0;
+}
+
+/**
+ * After an adjustment is approved, recalculate effective_break_minutes and
+ * update the attendance working_hours (via the STORED GENERATED column).
+ * We credit the adjusted minutes back by reducing total_break_minutes,
+ * which makes working_hours reflect the correct value automatically.
+ */
+/**
+ * Apply a break adjustment approval to the attendance record.
+ * - total_break_minutes is reduced (the approved minutes count as work time)
+ * - effective_break_minutes accumulates the total approved adjustment
+ * This keeps working_hours (stored GENERATED column) auto-correct.
+ * Returns the recalculated attendance record.
+ */
+async function applyAdjustmentToAttendance(attId, approvedMinutes, connection = pool) {
+  await connection.query(
+    `UPDATE attendance
+     SET total_break_minutes = GREATEST(0, total_break_minutes - ?),
+         effective_break_minutes = effective_break_minutes + ?
+     WHERE id = ?`,
+    [approvedMinutes, approvedMinutes, attId]
+  );
+  const [[rec]] = await connection.query(
+    'SELECT * FROM attendance WHERE id = ?', [attId]
+  );
+  return rec;
+}
+
+/**
+ * Reverse an approved adjustment (when needed — currently not exposed to admins,
+ * but the logic is here for data integrity).
+ */
+/**
+ * Reverse an approved adjustment (admin action — not currently exposed in API).
+ * Restores total_break_minutes and reduces effective_break_minutes.
+ */
+async function reverseAdjustmentFromAttendance(attId, approvedMinutes, connection = pool) {
+  await connection.query(
+    `UPDATE attendance
+     SET total_break_minutes = total_break_minutes + ?,
+         effective_break_minutes = GREATEST(0, effective_break_minutes - ?)
+     WHERE id = ?`,
+    [approvedMinutes, approvedMinutes, attId]
+  );
+}
+
+// ─── POST /api/attendance/break-adjustments ────────────────────────────────────
+// Employee submits a new break adjustment request
+router.post('/break-adjustments', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const perms = req.user.permissions || [];
+
+    if (!perms.includes('attendance.break_adjustment.request')) {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    const { attendance_id, break_id, start_time, end_time, reason } = req.body;
+
+    // Validate required fields
+    if (!attendance_id || !break_id || !start_time || !end_time || !reason) {
+      return res.status(400).json({ error: 'attendance_id, break_id, start_time, end_time, and reason are required' });
+    }
+
+    // Fetch the break record
+    const [[breakRec]] = await pool.query(
+      'SELECT * FROM attendance_breaks WHERE id = ? AND attendance_id = ?',
+      [break_id, attendance_id]
+    );
+    if (!breakRec) {
+      return res.status(404).json({ error: 'Break record not found' });
+    }
+    if (!breakRec.end_time) {
+      return res.status(400).json({ error: 'Cannot adjust an ongoing (unfinished) break' });
+    }
+
+    // Verify the attendance belongs to this user
+    const [[attRec]] = await pool.query(
+      'SELECT * FROM attendance WHERE id = ?',
+      [attendance_id]
+    );
+    if (!attRec) {
+      return res.status(404).json({ error: 'Attendance record not found' });
+    }
+    if (attRec.user_id !== userId) {
+      return res.status(403).json({ error: 'You can only request adjustments for your own attendance' });
+    }
+
+    // ── Parse and validate time window ──────────────────────────────────────
+    // Times from the frontend are company-local HH:MM. We must interpret them as
+    // company wall-clock time and convert to a UTC moment for comparison.
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+
+    // Parse "HH:MM" or "HH:MM:SS" as company-local time and return a UTC Date.
+    const parseCompanyTimeToUTC = (timeStr, refUtcDate) => {
+      const parts = String(timeStr).split(':');
+      if (parts.length < 2) return null;
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const s = parts[2] != null ? parseInt(parts[2], 10) : 0;
+      if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59 || isNaN(s)) return null;
+      // "Naive" UTC date built from company-local wall-clock components on the reference date
+      const naiveUtc = Date.UTC(refUtcDate.getFullYear(), refUtcDate.getMonth(), refUtcDate.getDate(), h, m, s);
+      // Compute the company-TZ offset at the reference moment: tzOffset = (what UTC would be
+      // if wall-clock = company time) minus (actual UTC) = +5:30 for IST, etc.
+      const refInTZ = toTimezone(refUtcDate, tz);
+      const refHourInTZ = refInTZ.getHours(), refMinInTZ = refInTZ.getMinutes();
+      const refInTZasUTC = Date.UTC(refInTZ.getFullYear(), refInTZ.getMonth(), refInTZ.getDate(), refHourInTZ, refMinInTZ, 0);
+      const tzOffsetMs = refInTZasUTC - refUtcDate.getTime(); // e.g. +5h30m = +19800000 ms for IST
+      // Subtract offset: UTC moment = naive UTC - offset  (e.g. 12:01 IST -> 06:31 UTC for IST)
+      return new Date(naiveUtc - tzOffsetMs);
+    };
+
+    const reqStart = parseCompanyTimeToUTC(start_time, new Date(breakRec.start_time));
+    const reqEnd   = parseCompanyTimeToUTC(end_time,   new Date(breakRec.end_time));
+
+    if (!reqStart || !reqEnd) {
+      return res.status(400).json({ error: 'start_time and end_time must be valid times in HH:MM or HH:MM:SS format' });
+    }
+
+    // Start must be before end (in UTC)
+    if (reqStart >= reqEnd) {
+      return res.status(400).json({ error: 'start_time must be before end_time' });
+    }
+
+    // Window must fall within the break (compare UTC moments)
+    if (reqStart < new Date(breakRec.start_time)) {
+      return res.status(400).json({ error: `start_time cannot be before the break start (${formatTime(breakRec.start_time, '24h', tz)})` });
+    }
+    if (reqEnd > new Date(breakRec.end_time)) {
+      return res.status(400).json({ error: `end_time cannot be after the break end (${formatTime(breakRec.end_time, '24h', tz)})` });
+    }
+
+    // Compute requested_minutes from the window
+    const requested_minutes = Math.round((reqEnd - reqStart) / 60000);
+    if (requested_minutes <= 0) {
+      return res.status(400).json({ error: 'Adjustment window must be at least 1 minute' });
+    }
+
+    // ── Prevent duplicate / overlapping pending requests ──────────────────
+    // A pending request for the same break already exists
+    const [[existingPending]] = await pool.query(
+      `SELECT id FROM break_adjustment_requests
+       WHERE break_id = ? AND status = 'Pending' LIMIT 1`,
+      [break_id]
+    );
+    if (existingPending) {
+      return res.status(409).json({ error: 'A pending adjustment request already exists for this break' });
+    }
+
+    // An already-approved request for the same break (no double-dipping)
+    const [[existingApproved]] = await pool.query(
+      `SELECT id, requested_minutes FROM break_adjustment_requests
+       WHERE break_id = ? AND status = 'Approved' LIMIT 1`,
+      [break_id]
+    );
+    if (existingApproved) {
+      return res.status(409).json({
+        error: `An adjustment of ${existingApproved.requested_minutes} minutes has already been approved for this break`,
+      });
+    }
+
+    // Check total requested vs available (no approved + pending > break duration)
+    const [[pendingTotal]] = await pool.query(
+      `SELECT COALESCE(SUM(requested_minutes), 0) as total
+       FROM break_adjustment_requests
+       WHERE break_id = ? AND status IN ('Pending', 'Approved')`,
+      [break_id]
+    );
+    if (Number(pendingTotal.total) + Number(requested_minutes) > Number(breakRec.duration_minutes)) {
+      return res.status(409).json({
+        error: `Total requested minutes (${Number(pendingTotal.total) + Number(requested_minutes)}) exceed break duration (${breakRec.duration_minutes} minutes)`,
+      });
+    }
+
+    // Format times as HH:MM:SS for MySQL TIME column.
+    // Store the ORIGINAL company-local HH:MM input, NOT the UTC-converted hours.
+    const fmtTime = (timeStr) => {
+      const parts = String(timeStr).split(':');
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const s = parts[2] != null ? parseInt(parts[2], 10) : 0;
+      return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    };
+
+    // Insert the request
+    const [result] = await pool.query(
+      `INSERT INTO break_adjustment_requests
+        (attendance_id, break_id, user_id, requested_minutes, start_time, end_time, reason, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')`,
+      [attendance_id, break_id, userId, requested_minutes, fmtTime(start_time), fmtTime(end_time), reason]
+    );
+
+    const [[newReq]] = await pool.query(
+      'SELECT * FROM break_adjustment_requests WHERE id = ?',
+      [result.insertId]
+    );
+
+    logActivity({
+      req,
+      module: 'Attendance',
+      action: 'Break Adjustment Requested',
+      description: `Requested ${requested_minutes} min break adjustment for break #${break_id}`,
+      newValue: newReq,
+    });
+
+    res.status(201).json({ message: 'Break adjustment request submitted', request: newReq });
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/attendance/break-adjustments ──────────────────────────────────────
+// List break adjustment requests (employee sees own; admin sees all)
+router.get('/break-adjustments', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const perms = req.user.permissions || [];
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+    const {
+      page = 1, limit = 20,
+      user_id, status, date_from, date_to,
+    } = req.query;
+
+    const isAdmin = perms.includes('attendance.break_adjustment.manage');
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(5, parseInt(limit)));
+    const offset = (pageNum - 1) * limitNum;
+
+    let where = ['1=1'];
+    const params = [];
+
+    // Employees can only see their own requests unless they have admin permission
+    if (!isAdmin) {
+      where.push('bar.user_id = ?');
+      params.push(userId);
+    } else if (user_id) {
+      where.push('bar.user_id = ?');
+      params.push(parseInt(user_id));
+    }
+
+    if (status) {
+      where.push('bar.status = ?');
+      params.push(status);
+    }
+    if (date_from) {
+      where.push('a.date >= ?');
+      params.push(date_from);
+    }
+    if (date_to) {
+      where.push('a.date <= ?');
+      params.push(date_to);
+    }
+
+    const whereStr = where.join(' AND ');
+
+    const [rows] = await pool.query(
+      `SELECT bar.*,
+              a.date, a.clock_in_time, a.clock_out_time,
+              u.first_name, u.last_name, u.email,
+              d.name as department_name,
+              ab.start_time as break_start, ab.end_time as break_end, ab.duration_minutes as break_duration,
+              rb.first_name as reviewer_first_name, rb.last_name as reviewer_last_name
+       FROM break_adjustment_requests bar
+       JOIN attendance a ON bar.attendance_id = a.id
+       JOIN users u ON bar.user_id = u.id
+       JOIN attendance_breaks ab ON bar.break_id = ab.id
+       LEFT JOIN users rb ON bar.reviewed_by = rb.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE ${whereStr}
+       ORDER BY bar.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limitNum, offset]
+    );
+
+    // Handles MySQL DATETIME columns (ISO strings) and TIME columns ('HH:MM:SS' strings).
+    // MySQL TIME stores a wall-clock time interpreted as company-local (IST).
+    // To return a consistent HH:MM in company timezone, convert TIME → UTC equivalent
+    // using the timezone offset, then add the offset to express as company-local HH:MM.
+    // When tz is provided: DATETIME → company-tz; TIME → company-tz (via UTC bridge).
+    // When tz is absent: returns raw HH:MM (backwards-compatible).
+    const toHHMM = (val, tz) => {
+      if (!val) return null;
+      if (typeof val === 'string' && /^\d{2}:\d{2}:?\d{0,2}$/.test(val.trim())) {
+        const [h, m] = val.trim().split(':').map(Number);
+        // TIME columns store company-local wall-clock HH:MM:SS — return as-is (no UTC-bridge)
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+      }
+      // DATETIME columns need UTC-bridge conversion
+      const d = tz ? toTimezone(new Date(val), tz) : new Date(val);
+      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    };
+
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) as total FROM break_adjustment_requests bar
+       JOIN attendance a ON bar.attendance_id = a.id
+       WHERE ${whereStr}`,
+      params
+    );
+
+    res.json({
+      requests: rows.map(r => ({
+        id: r.id,
+        attendance_id: r.attendance_id,
+        break_id: r.break_id,
+        user_id: r.user_id,
+        requested_minutes: r.requested_minutes,
+        start_time: r.start_time,
+        end_time:   r.end_time,
+        time_start: toHHMM(r.start_time, tz),
+        time_end:   toHHMM(r.end_time,   tz),
+        reason: r.reason,
+        status: r.status,
+        reviewed_by: r.reviewed_by,
+        reviewed_at: r.reviewed_at,
+        admin_remarks: r.admin_remarks,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        employee: {
+          first_name: r.first_name,
+          last_name: r.last_name,
+          email: r.email,
+          department_name: r.department_name,
+        },
+        attendance: {
+          date: r.date,
+          clock_in_time: r.clock_in_time,
+          clock_out_time: r.clock_out_time,
+        },
+        break: {
+          start_time: r.break_start,
+          end_time: r.break_end,
+          time_start: toHHMM(r.break_start, tz),
+          time_end:   toHHMM(r.break_end,   tz),
+          duration_minutes: r.break_duration,
+        },
+        reviewer: r.reviewer_first_name
+          ? { first_name: r.reviewer_first_name, last_name: r.reviewer_last_name }
+          : null,
+      })),
+      pagination: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) },
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/attendance/break-adjustments/breaks/:attendanceId ─────────────────
+// Get available breaks for an attendance record (for the request form)
+router.get('/break-adjustments/breaks/:attendanceId', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const perms = req.user.permissions || [];
+    const attId = parseInt(req.params.attendanceId);
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+
+    const [[att]] = await pool.query('SELECT * FROM attendance WHERE id = ?', [attId]);
+    if (!att) return res.status(404).json({ error: 'Attendance record not found' });
+
+    // Check access
+    if (att.user_id !== userId && !perms.includes('attendance.view_team') && !perms.includes('attendance.manage_all')) {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    // Fetch all breaks for this attendance
+    const [breaks] = await pool.query(
+      `SELECT ab.*,
+              bar.id as adjustment_id, bar.requested_minutes, bar.reason, bar.status as adjustment_status,
+              bar.admin_remarks, bar.reviewed_at
+       FROM attendance_breaks ab
+       LEFT JOIN break_adjustment_requests bar ON bar.break_id = ab.id
+       WHERE ab.attendance_id = ? AND ab.end_time IS NOT NULL
+       ORDER BY ab.start_time ASC`,
+      [attId]
+    );
+
+    // Compute already-adjusted minutes per break
+    const adjustedMap = {};
+    for (const b of breaks) {
+      if (b.adjustment_status === 'Approved') {
+        adjustedMap[b.id] = (adjustedMap[b.id] || 0) + Number(b.requested_minutes);
+      }
+    }
+
+    // Helper: convert UTC datetime to company-local HH:MM for display in time inputs
+    const toCompanyHHMM = (dt) => {
+      if (!dt) return null;
+      // toTimezone returns a Date in the company timezone
+      const local = toTimezone(new Date(dt), tz);
+      return `${String(local.getHours()).padStart(2,'0')}:${String(local.getMinutes()).padStart(2,'0')}`;
+    };
+
+    res.json({
+      attendance_id: attId,
+      date: att.date,
+      clock_in_time: att.clock_in_time,
+      clock_out_time: att.clock_out_time,
+      company_tz: tz,
+      breaks: breaks.map(b => ({
+        id: b.id,
+        // Full UTC datetime (for reference)
+        start_time: b.start_time,
+        end_time:   b.end_time,
+        // HH:MM strings in company timezone — safe to send to frontend time inputs
+        time_start: toCompanyHHMM(b.start_time),
+        time_end:   toCompanyHHMM(b.end_time),
+        duration_minutes: b.duration_minutes,
+        adjustable_minutes: Math.max(0, b.duration_minutes - (adjustedMap[b.id] || 0)),
+        adjustment: b.adjustment_id
+          ? {
+              id: b.adjustment_id,
+              requested_minutes: b.requested_minutes,
+              start_time: b.start_time,
+              end_time:   b.end_time,
+              time_start: toCompanyHHMM(b.start_time),
+              time_end:   toCompanyHHMM(b.end_time),
+              reason: b.reason,
+              status: b.adjustment_status,
+              admin_remarks: b.admin_remarks,
+              reviewed_at: b.reviewed_at,
+            }
+          : null,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/attendance/break-adjustments/stats ──────────────────────────────
+router.get('/break-adjustments/stats', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const perms = req.user.permissions || [];
+    const isAdmin = perms.includes('attendance.break_adjustment.manage');
+    const userFilter = isAdmin ? '' : `AND user_id = ${userId}`;
+
+    const [[pending]] = await pool.query(
+      `SELECT COUNT(*) as count FROM break_adjustment_requests WHERE status = 'Pending' ${userFilter}`
+    );
+    const [[approvedToday]] = await pool.query(
+      `SELECT COUNT(*) as count FROM break_adjustment_requests
+       WHERE status = 'Approved' AND DATE(reviewed_at) = CURDATE() ${userFilter}`
+    );
+    const [[rejectedToday]] = await pool.query(
+      `SELECT COUNT(*) as count FROM break_adjustment_requests
+       WHERE status = 'Rejected' AND DATE(reviewed_at) = CURDATE() ${userFilter}`
+    );
+
+    res.json({
+      pending_count: Number(pending.count),
+      approved_today: Number(approvedToday.count),
+      rejected_today: Number(rejectedToday.count),
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/attendance/break-adjustments/:id ─────────────────────────────────
+router.get('/break-adjustments/:id', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const perms = req.user.permissions || [];
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+    const isAdmin = perms.includes('attendance.break_adjustment.manage');
+    const reqId = parseInt(req.params.id);
+
+    const [[r]] = await pool.query(
+      `SELECT bar.*,
+              a.date, a.clock_in_time, a.clock_out_time, a.total_break_minutes,
+              u.first_name, u.last_name, u.email,
+              d.name as department_name,
+              ab.start_time as break_start, ab.end_time as break_end, ab.duration_minutes as break_duration,
+              rb.first_name as reviewer_first_name, rb.last_name as reviewer_last_name
+       FROM break_adjustment_requests bar
+       JOIN attendance a ON bar.attendance_id = a.id
+       JOIN users u ON bar.user_id = u.id
+       JOIN attendance_breaks ab ON bar.break_id = ab.id
+       LEFT JOIN users rb ON bar.reviewed_by = rb.id
+       LEFT JOIN departments d ON u.department_id = d.id
+       WHERE bar.id = ?`,
+      [reqId]
+    );
+
+    if (!r) return res.status(404).json({ error: 'Break adjustment request not found' });
+
+    // Employees can only view their own requests
+    if (!isAdmin && r.user_id !== userId) {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    // Pending overlap info
+    const [[pendingTotal]] = await pool.query(
+      `SELECT COALESCE(SUM(requested_minutes), 0) as total
+       FROM break_adjustment_requests
+       WHERE break_id = ? AND status IN ('Pending', 'Approved') AND id != ?`,
+      [r.break_id, reqId]
+    );
+
+    // Handles both TIME column strings ('HH:MM:SS') and DATETIME ISO strings.
+    const toHHMM = (val, _tz) => {
+      if (!val) return null;
+      if (typeof val === 'string' && /^\d{2}:\d{2}:?\d{0,2}$/.test(val.trim())) {
+        const [h, m] = val.trim().split(':').map(Number);
+        // TIME columns store company-local wall-clock HH:MM:SS — return as-is
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+      }
+      // DATETIME columns
+      const d = _tz ? toTimezone(new Date(val), _tz) : new Date(val);
+      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    };
+
+    res.json({
+      request: {
+        id: r.id,
+        attendance_id: r.attendance_id,
+        break_id: r.break_id,
+        user_id: r.user_id,
+        requested_minutes: r.requested_minutes,
+        start_time: r.start_time,
+        end_time:   r.end_time,
+        time_start: toHHMM(r.start_time, tz),
+        time_end:   toHHMM(r.end_time,   tz),
+        reason: r.reason,
+        status: r.status,
+        reviewed_by: r.reviewed_by,
+        reviewed_at: r.reviewed_at,
+        admin_remarks: r.admin_remarks,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        employee: {
+          first_name: r.first_name,
+          last_name: r.last_name,
+          email: r.email,
+          department_name: r.department_name,
+        },
+        attendance: {
+          date: r.date,
+          clock_in_time: r.clock_in_time,
+          clock_out_time: r.clock_out_time
+        },
+        break: {
+          start_time: r.break_start,
+          end_time: r.break_end,
+          time_start: toHHMM(r.break_start, tz),
+          time_end:   toHHMM(r.break_end,   tz),
+          duration_minutes: r.break_duration,
+        },
+        reviewer: r.reviewer_first_name
+          ? { first_name: r.reviewer_first_name, last_name: r.reviewer_last_name }
+          : null,
+        other_pending_approved_minutes: Number(pendingTotal.total),
+      },
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/attendance/break-adjustments/history/:attendanceId ─────────────────
+// Returns all adjustment requests for a specific attendance record (for history detail modal)
+router.get('/break-adjustments/history/:attendanceId', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const perms = req.user.permissions || [];
+    const isAdmin = perms.includes('attendance.break_adjustment.manage');
+    const attId = parseInt(req.params.attendanceId);
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+
+    if (!attId || isNaN(attId)) {
+      return res.status(400).json({ error: 'Valid attendance_id is required' });
+    }
+
+    // Non-admin: verify ownership
+    if (!isAdmin) {
+      const [[att]] = await pool.query(
+        'SELECT user_id FROM attendance WHERE id = ?', [attId]
+      );
+      if (!att || att.user_id !== userId) {
+        return res.status(403).json({ error: 'Permission denied' });
+      }
+    }
+
+    const [rows] = await pool.query(
+      `SELECT bar.*,
+              ab.start_time as break_start, ab.end_time as break_end,
+              ab.duration_minutes as break_duration,
+              u.first_name as employee_first_name, u.last_name as employee_last_name,
+              u.department_name as employee_department,
+              ru.first_name as reviewer_first_name, ru.last_name as reviewer_last_name
+       FROM break_adjustment_requests bar
+       JOIN attendance_breaks ab ON bar.break_id = ab.id
+       JOIN users u ON bar.user_id = u.id
+       LEFT JOIN users ru ON bar.reviewed_by = ru.id
+       WHERE bar.attendance_id = ?
+       ORDER BY bar.created_at ASC`,
+      [attId]
+    );
+
+    const [[att]] = await pool.query(
+      `SELECT a.*, u.first_name, u.last_name
+       FROM attendance a
+       JOIN users u ON a.user_id = u.id
+       WHERE a.id = ?`,
+      [attId]
+    );
+
+    res.json({
+      adjustments: rows.map(r => ({
+        id: r.id,
+        attendance_id: r.attendance_id,
+        break_id: r.break_id,
+        user_id: r.user_id,
+        requested_minutes: r.requested_minutes,
+        start_time: r.start_time,
+        end_time:   r.end_time,
+        time_start: toHHMM(r.start_time, tz),
+        time_end:   toHHMM(r.end_time,   tz),
+        reason: r.reason,
+        status: r.status,
+        admin_remarks: r.admin_remarks,
+        reviewed_by: r.reviewed_by,
+        reviewed_at: r.reviewed_at,
+        created_at: r.created_at,
+        employee: {
+          first_name: r.employee_first_name,
+          last_name:  r.employee_last_name,
+          department: r.employee_department,
+        },
+        break: {
+          start_time: r.break_start,
+          end_time:   r.break_end,
+          time_start: toHHMM(r.break_start, tz),
+          time_end:   toHHMM(r.break_end,   tz),
+          duration_minutes: r.break_duration,
+        },
+        reviewer: r.reviewer_first_name
+          ? { first_name: r.reviewer_first_name, last_name: r.reviewer_last_name }
+          : null,
+      })),
+      attendance: att ? {
+        id: att.id,
+        date: att.date,
+        clock_in_time: att.clock_in_time,
+        clock_out_time: att.clock_out_time,
+        user: { first_name: att.first_name, last_name: att.last_name },
+      } : null,
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── PUT /api/attendance/break-adjustments/:id/approve ───────────────────────
+router.put('/break-adjustments/:id/approve', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const perms = req.user.permissions || [];
+    const isAdmin = perms.includes('attendance.break_adjustment.manage');
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Permission denied. Requires attendance.break_adjustment.manage' });
+    }
+
+    const reqId = parseInt(req.params.id);
+    const { admin_remarks } = req.body;
+
+    const [[existing]] = await pool.query(
+      'SELECT * FROM break_adjustment_requests WHERE id = ?',
+      [reqId]
+    );
+    if (!existing) return res.status(404).json({ error: 'Break adjustment request not found' });
+
+    if (existing.status !== 'Pending') {
+      return res.status(400).json({ error: `Cannot approve a request that is already ${existing.status}` });
+    }
+
+    // Final overlap check
+    const [[pendingTotal]] = await pool.query(
+      `SELECT COALESCE(SUM(requested_minutes), 0) as total
+       FROM break_adjustment_requests
+       WHERE break_id = ? AND status IN ('Pending', 'Approved') AND id != ?`,
+      [existing.break_id, reqId]
+    );
+    if (Number(pendingTotal.total) + Number(existing.requested_minutes) > Number(existing.requested_minutes)) {
+      // This should not happen since we validated at creation, but double-check
+    }
+
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    await pool.query(
+      `UPDATE break_adjustment_requests
+       SET status = 'Approved', reviewed_by = ?, reviewed_at = ?, admin_remarks = ?
+       WHERE id = ?`,
+      [userId, now, admin_remarks || null, reqId]
+    );
+
+    // Apply the adjustment to attendance
+    await applyAdjustmentToAttendance(existing.attendance_id, existing.requested_minutes, pool);
+
+    const [[updated]] = await pool.query(
+      'SELECT * FROM break_adjustment_requests WHERE id = ?',
+      [reqId]
+    );
+
+    logActivity({
+      req,
+      module: 'Attendance',
+      action: 'Break Adjustment Approved',
+      description: `Approved ${existing.requested_minutes} min break adjustment for user ${existing.user_id} (break #${existing.break_id})`,
+      previousValue: existing,
+      newValue: updated,
+    });
+
+    // Return updated attendance record with recalculated effective_break_minutes
+    const [[attUpdated]] = await pool.query(
+      'SELECT * FROM attendance WHERE id = ?',
+      [existing.attendance_id]
+    );
+
+    res.json({
+      message: 'Break adjustment approved',
+      request: updated,
+      attendance: formatAttendance(attUpdated),
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── PUT /api/attendance/break-adjustments/:id/reject ─────────────────────────
+router.put('/break-adjustments/:id/reject', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const perms = req.user.permissions || [];
+    const isAdmin = perms.includes('attendance.break_adjustment.manage');
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Permission denied. Requires attendance.break_adjustment.manage' });
+    }
+
+    const reqId = parseInt(req.params.id);
+    const { admin_remarks } = req.body;
+
+    const [[existing]] = await pool.query(
+      'SELECT * FROM break_adjustment_requests WHERE id = ?',
+      [reqId]
+    );
+    if (!existing) return res.status(404).json({ error: 'Break adjustment request not found' });
+
+    if (existing.status !== 'Pending') {
+      return res.status(400).json({ error: `Cannot reject a request that is already ${existing.status}` });
+    }
+
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    await pool.query(
+      `UPDATE break_adjustment_requests
+       SET status = 'Rejected', reviewed_by = ?, reviewed_at = ?, admin_remarks = ?
+       WHERE id = ?`,
+      [userId, now, admin_remarks?.trim() || null, reqId]
+    );
+
+    const [[updated]] = await pool.query(
+      'SELECT * FROM break_adjustment_requests WHERE id = ?',
+      [reqId]
+    );
+
+    logActivity({
+      req,
+      module: 'Attendance',
+      action: 'Break Adjustment Rejected',
+      description: `Rejected break adjustment request #${reqId} (${existing.requested_minutes} min) for user ${existing.user_id}`,
+      previousValue: existing,
+      newValue: updated,
+    });
+
+    res.json({ message: 'Break adjustment rejected', request: updated });
+  } catch (err) { next(err); }
+});
+
+
+

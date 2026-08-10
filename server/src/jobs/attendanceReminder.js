@@ -62,7 +62,23 @@ async function runAttendanceReminder() {
   const tz = await getCompanySetting('general', 'timezone', 'UTC');
   const today = todayInTimezone(tz);
   const now = nowInTimezone(tz);
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  // Convert UTC now to company timezone for correct wall-clock comparison.
+  // office_start_time is stored as HH:MM in company local time, not UTC.
+  let currentMinutes = now.getHours() * 60 + now.getMinutes();
+  if (tz && tz !== 'UTC') {
+    try {
+      const fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
+      });
+      const parts = Object.fromEntries(
+        fmt.formatToParts(now).map(p => [p.type, p.value])
+      );
+      currentMinutes = (Number(parts.hour) % 24) * 60 + Number(parts.minute);
+    } catch (_) {
+      // Fall back to UTC
+    }
+  }
 
   // Check if we've already sent reminders today
   try {

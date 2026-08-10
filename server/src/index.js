@@ -37,6 +37,7 @@ const companySettingsRoutes = require("./routes/company-settings");
 const activityLogRoutes = require("./routes/activityLogs");
 const { langMiddleware } = require("./i18n");
 const { startAttendanceReminderCron } = require("./jobs/attendanceReminder");
+const { startAutoClockOutCron } = require("./jobs/autoClockOut");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -99,4 +100,5 @@ app.use((err, req, res, next) => {
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`Serveravatar Hub API server running on port ${PORT}`);
   startAttendanceReminderCron();
+  startAutoClockOutCron();
 });

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
 import PageLoader from '@/components/PageLoader'
+import { useDateSettings } from '@/contexts/CompanySettingsContext'
 import {
   CheckCircle, Coffee, Clock, Edit2, Eye, LogIn,
   LogOut, PlayCircle, Search, StopCircle, Users, X,
@@ -35,6 +36,19 @@ function fmtTime(raw: string | null | undefined): string {
   } catch { return String(raw) }
 }
 
+// Format "HH:MM" 24-hour string to "1:30 PM" 12-hour with AM/PM
+function fmtHHMM(raw: string | null | undefined): string {
+  if (!raw) return '—'
+  const parts = String(raw).split(':')
+  const h = parseInt(parts[0], 10)
+  const m = parseInt(parts[1], 10)
+  if (isNaN(h) || isNaN(m)) return String(raw)
+  const ampm = h < 12 ? 'AM' : 'PM'
+  const h12 = h % 12 || 12
+  const mm = String(m).padStart(2, '0')
+  return h12 + ':' + mm + ' ' + ampm
+}
+
 function fmtHours(decimal: number | null | undefined): string {
   if (decimal == null) return '—'
   const h = Math.floor(decimal)
@@ -57,6 +71,19 @@ function fmtDateTimeLocal(raw: string): string {
   const d = new Date(raw)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+// ─── Timezone helpers ────────────────────────────────────────────────────────
+// Backend returns times as company-local HH:MM strings (e.g. "13:00" means 1:00 PM
+// in the company timezone). The browser's input[type=time] also expects HH:MM in
+// browser-local time. Since company TZ = browser TZ, no conversion is needed here.
+// These helpers are kept as no-ops for semantic clarity.
+function companyTimeToInputValue(companyTime: string, _companyTz: string): string {
+  return companyTime || ''
+}
+
+function inputValueToCompanyTime(inputTime: string, _companyTz: string): string {
+  return inputTime || ''
 }
 
 function fmtShortDate(raw: string | null | undefined): string {
@@ -86,7 +113,7 @@ const TIMELINE_STATUS_META: Record<string, { label: string; color: string; bg: s
 
 // --- Types ---------------------------------------------------------------------
 
-type TopTab = 'today' | 'history' | 'team' | 'reports'
+type TopTab = 'today' | 'history' | 'team' | 'reports' | 'adjustments'
 type ReportSubTab = 'summary' | 'timeline'
 
 interface Summary {
@@ -104,11 +131,46 @@ interface TimelineDay {
   total_break_minutes: number; working_hours: number | null
   is_late: boolean; late_minutes: number; remarks: string | null
   holiday_name: string | null; leave_reason: string | null
-  breaks: any[]; attendance_id: number | null; raw_status: string | null
+  breaks: any[]; attendance_id: number | null; raw_status: string | null;
+  adjustments?: InlineAdjustment[];
+}
+
+interface InlineAdjustment {
+  id: number; break_id: number; requested_minutes: number;
+  start_time: string; end_time: string; time_start: string; time_end: string;
+  reason: string; status: 'Pending' | 'Approved' | 'Rejected';
+  admin_remarks: string | null; reviewed_at: string | null; reviewed_by?: number | null;
+  created_at?: string;
+  break_time_start: string; break_time_end: string; break_duration: number;
+  reviewer?: { first_name: string; last_name: string };
 }
 
 interface Break {
-  id: number; attendance_id: number; start_time: string; end_time: string | null; duration_minutes: number
+  id: number; attendance_id: number; start_time: string; end_time: string | null;
+  duration_minutes: number; time_start: string; time_end: string;
+}
+
+interface BreakWithAdjustment extends Break {
+  adjustable_minutes: number;
+  adjustment: {
+    id: number; requested_minutes: number; reason: string;
+    status: 'Pending' | 'Approved' | 'Rejected';
+    admin_remarks: string | null; reviewed_at: string | null;
+  } | null;
+}
+
+interface AdjustmentRequest {
+  id: number; attendance_id: number; break_id: number; user_id: number;
+  requested_minutes: number; start_time: string; end_time: string;
+  time_start: string; time_end: string; reason: string;
+  status: 'Pending' | 'Approved' | 'Rejected';
+  reviewed_by: number | null; reviewed_at: string | null;
+  admin_remarks: string | null;
+  created_at: string; updated_at: string;
+  employee: { first_name: string; last_name: string; email: string; department_name: string };
+  attendance: { date: string; clock_in_time: string; clock_out_time: string };
+  break: { start_time: string; end_time: string; time_start: string; time_end: string; duration_minutes: number };
+  reviewer: { first_name: string; last_name: string } | null;
 }
 
 // --- Status Badge -------------------------------------------------------------
@@ -342,6 +404,30 @@ export default function AttendancePage() {
   const [teamRecords, setTeamRecords] = useState<any[]>([])
   const [stats, setStats] = useState<any>({})
 
+  // -- Break Adjustments ------------------------------------------------------
+  const [adjustments, setAdjustments] = useState<AdjustmentRequest[]>([])
+  const [adjPage, setAdjPage] = useState(1)
+  const [adjTotal, setAdjTotal] = useState(0)
+  const [adjFilter, setAdjFilter] = useState<'Pending' | 'Approved' | 'Rejected' | ''>('')
+  const [adjStats, setAdjStats] = useState({ pending_count: 0, approved_today: 0, rejected_today: 0 })
+  // Request modal state
+  const [showRequestModal, setShowRequestModal] = useState(false)
+  const [requestAttendanceId, setRequestAttendanceId] = useState<number | null>(null)
+  const [requestCompanyTz, setRequestCompanyTz] = useState<string>('UTC')
+  const [requestBreaks, setRequestBreaks] = useState<BreakWithAdjustment[]>([])
+  const [selectedBreak, setSelectedBreak] = useState<BreakWithAdjustment | null>(null)
+  const [requestStartTime, setRequestStartTime] = useState('')
+  const [requestEndTime, setRequestEndTime] = useState('')
+  const [requestReason, setRequestReason] = useState('')
+  const [requesting, setRequesting] = useState(false)
+  // Approve/Reject modal
+  const [reviewModal, setReviewModal] = useState<AdjustmentRequest | null>(null)
+  const [adjDetailModal, setAdjDetailModal] = useState<{ date: string; adjustments: InlineAdjustment[] } | null>(null)
+  const [historyAdjModal, setHistoryAdjModal] = useState<{ attendance_id: number; date: string; loading: boolean; adjustments: InlineAdjustment[]; attendance: any } | null>(null)
+  const [reviewAction, setReviewAction] = useState<'approve' | 'reject'>('approve')
+  const [reviewRemarks, setReviewRemarks] = useState('')
+  const [reviewing, setReviewing] = useState(false)
+
   // -- Reports (HR/Admin) -----------------------------------------------------
   const [reportSubTab, setReportSubTab] = useState<ReportSubTab>('summary')
 
@@ -385,7 +471,9 @@ export default function AttendancePage() {
       const r = await api.get('/attendance/today')
       setMyToday(r.attendance)
       setMyBreaks(r.attendance?.breaks || [])
-    } catch {}
+    } catch (err: any) {
+      console.error('[Attendance] loadToday failed:', err?.message)
+    }
   }
 
   const loadHistory = async (page = 1) => {
@@ -408,6 +496,93 @@ export default function AttendancePage() {
       setStats(st.stats || {})
       setDepartments(depts.departments || [])
     } catch {}
+  }
+
+  const loadAdjustmentStats = async () => {
+    try {
+      const r = await api.get('/attendance/break-adjustments/stats')
+      setAdjStats(r)
+    } catch {}
+  }
+
+  const loadAdjustments = async (page = adjPage, status = adjFilter) => {
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: '20' })
+      if (status) params.set('status', status)
+      const r = await api.get(`/attendance/break-adjustments?${params}`)
+      setAdjustments(r.requests || [])
+      setAdjTotal(r.pagination?.total || 0)
+    } catch {}
+  }
+
+  const openRequestModal = async (attendanceId: number) => {
+    try {
+      const r = await api.get(`/attendance/break-adjustments/breaks/${attendanceId}`)
+      setRequestAttendanceId(r.attendance_id)
+      setRequestCompanyTz(r.company_tz || 'UTC')
+      setRequestBreaks(r.breaks || [])
+      setSelectedBreak(null)
+      setRequestStartTime('')
+      setRequestEndTime('')
+      setRequestReason('')
+      setShowRequestModal(true)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to load breaks')
+    }
+  }
+
+  const submitAdjustmentRequest = async () => {
+    if (!selectedBreak || !requestStartTime || !requestEndTime || !requestReason.trim()) {
+      toast.error('Please select a break, pick start and end times, and provide a reason')
+      return
+    }
+    if (requestStartTime >= requestEndTime) {
+      toast.error('Start time must be before end time')
+      return
+    }
+    setRequesting(true)
+    try {
+      await api.post('/attendance/break-adjustments', {
+        attendance_id: requestAttendanceId,
+        break_id: selectedBreak.id,
+        start_time: inputValueToCompanyTime(requestStartTime, requestCompanyTz),
+        end_time:   inputValueToCompanyTime(requestEndTime, requestCompanyTz),
+        reason: requestReason.trim(),
+      })
+      toast.success('Break adjustment request submitted')
+      setShowRequestModal(false)
+      if (tab === 'adjustments') loadAdjustments(1)
+      loadAdjustmentStats()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to submit request')
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  const reviewAdjustment = async () => {
+    if (!reviewModal) return;
+    setReviewing(true)
+    try {
+      if (reviewAction === 'approve') {
+        await api.put(`/attendance/break-adjustments/${reviewModal.id}/approve`, {
+          admin_remarks: reviewRemarks.trim(),
+        })
+        toast.success('Adjustment approved')
+      } else {
+        await api.put(`/attendance/break-adjustments/${reviewModal.id}/reject`, {
+          admin_remarks: reviewRemarks.trim(),
+        })
+        toast.success('Adjustment rejected')
+      }
+      setReviewModal(null)
+      loadAdjustments(adjPage)
+      loadAdjustmentStats()
+    } catch (err: any) {
+      toast.error(err.message || 'Action failed')
+    } finally {
+      setReviewing(false)
+    }
   }
 
   const loadReportLookups = async () => {
@@ -470,6 +645,8 @@ export default function AttendancePage() {
 
   useEffect(() => { if (tab === 'history') loadHistory(1) }, [tab])
   useEffect(() => { if (tab === 'team') loadTeam() }, [tab])
+  useEffect(() => { if (tab === 'adjustments') { loadAdjustments(1); loadAdjustmentStats() } }, [tab])
+  useEffect(() => { if (tab === 'adjustments') loadAdjustments(adjPage, adjFilter) }, [adjPage, adjFilter, tab])
 
   useEffect(() => {
     if (tab === 'reports') {
@@ -518,12 +695,34 @@ export default function AttendancePage() {
 
   const doAction = async (action: 'clock-in' | 'clock-out' | 'start-break' | 'end-break') => {
     setActioning(action)
+    let newStatus: string | null = null
     try {
       const r = await api.post(`/attendance/${action}`, {})
       toast.success(r.message || 'Done')
+      // Optimistically update local state so button reflects correct availability immediately
+      if (action === 'clock-out') {
+        setMyToday((prev: any) => prev ? { ...prev, status: 'completed' } : prev)
+        newStatus = 'completed'
+      } else if (action === 'clock-in') {
+        setMyToday((prev: any) => prev ? { ...prev, status: 'clocked_in' } : prev)
+        newStatus = 'clocked_in'
+      } else if (action === 'start-break') {
+        setMyToday((prev: any) => prev ? { ...prev, status: 'on_break' } : prev)
+        newStatus = 'on_break'
+      } else if (action === 'end-break') {
+        setMyToday((prev: any) => prev ? { ...prev, status: 'clocked_in' } : prev)
+        newStatus = 'clocked_in'
+      }
       await loadToday()
     } catch (err: any) {
-      toast.error(err.message || 'Failed')
+      // Handle early clock-in blocked specially — show a more informative message
+      if (err.code === 'EARLY_CLOCK_IN_BLOCKED' || (err.message && err.message.includes('Early clock-in is not allowed'))) {
+        toast.error(err.message || 'Early clock-in is not allowed at this time. Please wait until office hours begin.')
+      } else {
+        toast.error(err.message || 'Failed')
+      }
+      // Reload to resync state on error
+      await loadToday()
     } finally {
       setActioning(null)
     }
@@ -585,11 +784,16 @@ export default function AttendancePage() {
 
   // -- Tabs config -------------------------------------------------------------
 
+  const canViewAdjustments = perms.includes('attendance.break_adjustment.request');
+
   const topTabs: { key: TopTab; label: string }[] = [
     { key: 'today', label: 'My Today' },
     { key: 'history', label: 'History' },
     ...(canViewTeam ? [{ key: 'team' as TopTab, label: 'Team' }] : []),
-    ...(isHRAdmin ? [{ key: 'reports' as TopTab, label: 'Reports' }] : []),
+    ...(isHRAdmin ? [
+      { key: 'reports' as TopTab, label: 'Reports' },
+    ] : []),
+    ...(isHRAdmin ? [{ key: 'adjustments' as TopTab, label: 'Break Adjustments' }] : []),
   ]
 
   const histPages = Math.ceil(histTotal / 20)
@@ -687,9 +891,15 @@ export default function AttendancePage() {
                           <span className="text-gray-500">Total Break</span>
                           <span className="font-semibold text-amber-600">{fmtBreak(myToday.total_break_minutes)}</span>
                         </div>
+                        {myToday.effective_break_minutes > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Adjusted As Work</span>
+                            <span className="font-semibold text-emerald-600">+{myToday.effective_break_minutes} min</span>
+                          </div>
+                        )}
                         <div className="flex justify-between">
                           <span className="text-gray-500">Working Hours</span>
-                          <span className="font-semibold text-indigo-600">{fmtHours(myToday.working_hours)}</span>
+                          <span className="font-semibold text-indigo-600">{fmtHours(myToday.live_working_hours ?? myToday.working_hours)}</span>
                         </div>
                         {myToday.is_late && (
                           <div className="flex justify-between">
@@ -702,6 +912,12 @@ export default function AttendancePage() {
                             <span className="text-gray-500 text-xs">Remarks</span>
                             <span className="text-gray-700 dark:text-gray-300 text-sm italic">"{myToday.remarks}"</span>
                           </div>
+                        )}
+                        {perms.includes('attendance.break_adjustment.request') && myToday.breaks?.some((b: any) => b.end_time) && (
+                          <button onClick={() => myToday.attendance_id ? openRequestModal(myToday.attendance_id) : openRequestModal(myToday.id)}
+                            className="mt-3 w-full px-3 py-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-700 rounded-lg transition cursor-pointer">
+                            Request Break Adjustment
+                          </button>
                         )}
                       </div>
                     </div>
@@ -808,6 +1024,8 @@ export default function AttendancePage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Working Hrs</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Late</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Remarks</th>
+                    {perms.includes('attendance.break_adjustment.request') && <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Adjustments</th>}
+                    {perms.includes('attendance.break_adjustment.request') && <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -818,9 +1036,41 @@ export default function AttendancePage() {
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{fmtTime(r.clock_in_time)}</td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{fmtTime(r.clock_out_time)}</td>
                       <td className="px-4 py-3 font-semibold text-amber-600 dark:text-amber-400">{fmtBreak(r.total_break_minutes)}</td>
-                      <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{fmtHours(r.working_hours)}</td>
+                      <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{fmtHours(r.live_working_hours ?? r.working_hours)}</td>
                       <td className="px-4 py-3 text-red-500">{r.is_late ? `${r.late_minutes}m` : '—'}</td>
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs max-w-[150px] truncate">{r.remarks || '—'}</td>
+                      {perms.includes('attendance.break_adjustment.request') && (
+                        <td className="px-4 py-3 text-center">
+                          {r.adjustments && r.adjustments.length > 0 ? (
+                            <button
+                              onClick={() => setAdjDetailModal({ date: r.date, adjustments: r.adjustments })}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold cursor-pointer border-0 transition"
+                              style={{
+                                background: r.adjustments.some((a: any) => a.status === 'Pending') ? 'rgba(251,191,36,0.15)' : r.adjustments.some((a: any) => a.status === 'Rejected') ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
+                                color: r.adjustments.some((a: any) => a.status === 'Pending') ? '#b45309' : r.adjustments.some((a: any) => a.status === 'Rejected') ? '#dc2626' : '#059669',
+                              }}
+                            >
+                              {r.adjustments.length === 1 ? r.adjustments[0].status : r.adjustments.filter((a: any) => a.status === 'Pending').length > 0 ? `${r.adjustments.filter((a: any) => a.status === 'Pending').length} Pending` : `${r.adjustments.length} Adjusted`}
+                            </button>
+                          ) : <span className="text-gray-300 dark:text-gray-600 text-xs">—</span>}
+                        </td>
+                      )}
+                      {perms.includes('attendance.break_adjustment.request') && (
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => setAdjDetailModal({ date: r.date, adjustments: r.adjustments || [] })}
+                            className="px-2 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-lg transition cursor-pointer mr-1"
+                          >
+                            View
+                          </button>
+                          <button
+                            onClick={() => openRequestModal(r.attendance_id || r.id)}
+                            className="px-2 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-700 rounded-lg transition cursor-pointer"
+                          >
+                            Adjust
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -877,7 +1127,7 @@ export default function AttendancePage() {
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{fmtTime(r.clock_in_time)}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{fmtTime(r.clock_out_time)}</td>
                     <td className="px-4 py-3 font-semibold text-amber-600 dark:text-amber-400">{fmtBreak(r.total_break_minutes)}</td>
-                    <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{fmtHours(r.working_hours)}</td>
+                    <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{fmtHours(r.live_working_hours ?? r.working_hours)}</td>
                     <td className="px-4 py-3 text-red-500">{r.is_late ? `${r.late_minutes}m` : '—'}</td>
                   </tr>
                 ))}
@@ -1358,6 +1608,394 @@ export default function AttendancePage() {
             </>
           )}
         </>
+      )}
+
+      {/* ====================================================================== */}
+      {/* == BREAK ADJUSTMENTS TAB ========================================= */}
+      {/* ====================================================================== */}
+      {tab === 'adjustments' && isHRAdmin && (
+        <div className="space-y-4">
+          {/* Header + Stats */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+              {isHRAdmin ? 'Break Adjustment Requests' : 'My Adjustments'}
+            </h2>
+            <div className="flex gap-3 flex-wrap">
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-2 text-center">
+                <div className="text-xl font-bold text-amber-600">{adjStats.pending_count}</div>
+                <div className="text-xs text-amber-500">Pending</div>
+              </div>
+              <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-2 text-center">
+                <div className="text-xl font-bold text-emerald-600">{adjStats.approved_today}</div>
+                <div className="text-xs text-emerald-500">Approved Today</div>
+              </div>
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-2 text-center">
+                <div className="text-xl font-bold text-red-600">{adjStats.rejected_today}</div>
+                <div className="text-xs text-red-500">Rejected Today</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Filter tabs */}
+          <div className="flex gap-1 bg-gray-100 dark:bg-gray-700/50 rounded-xl p-1 w-fit">
+            {['', 'Pending', 'Approved', 'Rejected'].map(s => (
+              <button key={s || 'all'} onClick={() => { setAdjFilter(s as any); setAdjPage(1) }}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border-0 ${
+                  adjFilter === s ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}>
+                {s || 'All'}
+              </button>
+            ))}
+          </div>
+
+          {/* Table */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700/50">
+                  <tr>
+                    {isHRAdmin && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Employee</th>}
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Break</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Adj. Mins</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Reason</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Reviewed By</th>
+                    {isHRAdmin && <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {adjustments.length === 0 ? (
+                    <tr><td colSpan={isHRAdmin ? 8 : 7} className="px-4 py-8 text-center text-gray-400 text-sm">No adjustment requests found.</td></tr>
+                  ) : adjustments.map(r => (
+                    <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                      {isHRAdmin && (
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-gray-900 dark:text-white text-xs">{r.employee.first_name} {r.employee.last_name}</div>
+                          <div className="text-gray-400 text-xs">{r.employee.department_name || '—'}</div>
+                        </td>
+                      )}
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{fmtDate(r.attendance.date)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
+                        <div>{fmtTime(r.break.start_time)} → {fmtTime(r.break.end_time)}</div>
+                        <div className="text-gray-400">({r.break.duration_minutes} min break)</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {r.time_start && r.time_end ? (
+                          <div>
+                            <span className="font-bold text-indigo-600 text-xs">{fmtHHMM(r.time_start)}</span>
+                            <span className="text-gray-400 text-xs mx-1">→</span>
+                            <span className="font-bold text-indigo-600 text-xs">{fmtHHMM(r.time_end)}</span>
+                            <div className="text-xs text-gray-400">+{r.requested_minutes} min</div>
+                          </div>
+                        ) : (
+                          <span className="font-bold text-indigo-600 text-sm">+{r.requested_minutes} min</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 max-w-[200px]">
+                        <p className="text-xs text-gray-600 dark:text-gray-300 truncate block" title={r.reason}>{r.reason}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        {r.status === 'Pending' && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Pending</span>}
+                        {r.status === 'Approved' && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Approved</span>}
+                        {r.status === 'Rejected' && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">Rejected</span>}
+                        {r.admin_remarks && <p className="text-xs text-gray-400 mt-0.5 italic truncate block max-w-[160px]" title={r.admin_remarks}>"{r.admin_remarks}"</p>}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+                        {r.reviewer ? `${r.reviewer.first_name} ${r.reviewer.last_name}` : '—'}
+                        {r.reviewed_at && <div className="text-gray-400">{fmtDate(r.reviewed_at)}</div>}
+                      </td>
+                      {isHRAdmin && (
+                        <td className="px-4 py-3 text-center">
+                          {r.status === 'Pending' ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <button onClick={() => { setReviewModal(r); setReviewAction('approve'); setReviewRemarks(''); setShowRequestModal(false) }}
+                                className="px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition cursor-pointer border-0">
+                                Approve
+                              </button>
+                              <button onClick={() => { setReviewModal(r); setReviewAction('reject'); setReviewRemarks(''); setShowRequestModal(false) }}
+                                className="px-3 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition cursor-pointer border-0">
+                                Reject
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {adjTotal > 20 && (
+              <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 flex items-center justify-between gap-3">
+                <span className="text-xs text-gray-500">Page {adjPage} of {Math.ceil(adjTotal / 20)}</span>
+                <div className="flex gap-2">
+                  <button onClick={() => setAdjPage(p => Math.max(1, p - 1))} disabled={adjPage <= 1}
+                    className="px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-40 cursor-pointer">Prev</button>
+                  <button onClick={() => setAdjPage(p => p + 1)} disabled={adjPage >= Math.ceil(adjTotal / 20)}
+                    className="px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-40 cursor-pointer">Next</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================== */}
+      {/* == REQUEST ADJUSTMENT MODAL (Employee) ============================== */}
+      {/* ====================================================================== */}
+      {showRequestModal && (
+        <PortalModal>
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-black/50 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 my-[10vh]">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Request Break Adjustment</h3>
+              <button onClick={() => setShowRequestModal(false)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 bg-transparent border-0 cursor-pointer text-2xl leading-none">×</button>
+            </div>
+            <div className="px-6 py-5 space-y-5">
+              {/* Select Break */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Break</label>
+                <div className="space-y-2">
+                  {requestBreaks.filter(b => b.adjustable_minutes > 0).length === 0 && (
+                    <p className="text-sm text-gray-400 italic">No adjustable breaks available.</p>
+                  )}
+                  {requestBreaks.filter(b => b.adjustable_minutes > 0).map(br => (
+                    <div key={br.id}
+                      onClick={() => {
+                        setSelectedBreak(br)
+                        // Convert company-local times from backend to browser-local for input display
+                        setRequestStartTime(companyTimeToInputValue(br.time_start, requestCompanyTz))
+                        setRequestEndTime(companyTimeToInputValue(br.time_end, requestCompanyTz))
+                      }}
+                      className={`p-3 rounded-xl border-2 cursor-pointer transition ${
+                        selectedBreak?.id === br.id
+                          ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                          : 'border-gray-200 dark:border-gray-600 hover:border-indigo-300 dark:hover:border-indigo-600'
+                      }`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {fmtTime(br.start_time)} → {fmtTime(br.end_time)}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">Break: {br.duration_minutes} min</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-bold text-emerald-600">Up to {br.adjustable_minutes} min</div>
+                          <div className="text-xs text-gray-400">adjustable</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Time Window */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Count This Time Window As Work</label>
+                {selectedBreak ? (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex-1 min-w-[120px]">
+                      <label className="block text-xs text-gray-400 mb-1">Start time</label>
+                      <input type="time"
+                        min={selectedBreak.time_start}
+                        max={requestEndTime || selectedBreak.time_end}
+                        value={requestStartTime}
+                        onChange={e => setRequestStartTime(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <span className="text-gray-400 text-sm mt-5">—</span>
+                    <div className="flex-1 min-w-[120px]">
+                      <label className="block text-xs text-gray-400 mb-1">End time</label>
+                      <input type="time"
+                        min={requestStartTime || selectedBreak.time_start}
+                        max={selectedBreak.time_end}
+                        value={requestEndTime}
+                        onChange={e => setRequestEndTime(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 italic">Select a break to pick a time window</p>
+                )}
+                {selectedBreak && requestStartTime && requestEndTime && (
+                  <p className="text-xs text-emerald-500 mt-1.5 font-medium">
+                    = {Math.round((new Date(`2000-01-01T${requestEndTime}`).getTime() - new Date(`2000-01-01T${requestStartTime}`).getTime()) / 60000)} min
+                    &nbsp;(break window: {fmtHHMM(selectedBreak.time_start)} – {fmtHHMM(selectedBreak.time_end)})
+                  </p>
+                )}
+              </div>
+
+              {/* Reason */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reason</label>
+                <textarea value={requestReason} onChange={e => setRequestReason(e.target.value)} rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  placeholder="Explain why this break should count as working time..."
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+              <button onClick={() => setShowRequestModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
+                Cancel
+              </button>
+              <button onClick={submitAdjustmentRequest} disabled={requesting}
+                className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
+                {requesting ? 'Submitting...' : 'Submit Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+        </PortalModal>
+      )}
+
+      {/* ====================================================================== */}
+      {/* == APPROVE/REJECT MODAL (Admin) ===================================== */}
+      {/* ====================================================================== */}
+      {reviewModal && (
+        <PortalModal>
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] bg-black/50 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 my-[10vh]">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                {reviewAction === 'approve' ? 'Approve' : 'Reject'} Adjustment
+              </h3>
+              <button onClick={() => setReviewModal(null)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 bg-transparent border-0 cursor-pointer text-2xl leading-none">×</button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Employee</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{reviewModal.employee.first_name} {reviewModal.employee.last_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Date</span>
+                  <span className="font-medium text-gray-900 dark:text-white">{fmtDate(reviewModal.attendance.date)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Break</span>
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {fmtTime(reviewModal.break.start_time)} → {fmtTime(reviewModal.break.end_time)} ({reviewModal.break.duration_minutes} min)
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Requested</span>
+                  <span className="font-bold text-indigo-600">
+                    {reviewModal.time_start && reviewModal.time_end
+                      ? fmtHHMM(reviewModal.time_start) + ' – ' + fmtHHMM(reviewModal.time_end) + ' (+' + reviewModal.requested_minutes + ' min)'
+                      : '+' + reviewModal.requested_minutes + ' min as work'
+                    }
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-gray-500">Reason</span>
+                  <span className="text-gray-700 dark:text-gray-300 italic">"{reviewModal.reason}"</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                  Remarks <span className="text-gray-400 text-xs font-normal">(optional)</span>
+                </label>
+                <textarea value={reviewRemarks} onChange={e => setReviewRemarks(e.target.value)} rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  placeholder="Optional remarks..."
+                />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+              <button onClick={() => setReviewModal(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
+                Cancel
+              </button>
+              <button onClick={reviewAdjustment} disabled={reviewing || (reviewAction === 'reject' && !reviewRemarks.trim())}
+                className={`px-5 py-2 text-sm font-semibold text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0 ${
+                  reviewAction === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'
+                }`}>
+                {reviewing ? 'Processing...' : (reviewAction === 'approve' ? 'Confirm Approval' : 'Confirm Rejection')}
+              </button>
+            </div>
+          </div>
+        </div>
+        </PortalModal>
+      )}
+
+      {/* -- Adjustment Detail Modal (Employee View) -------------------------- */}
+      {adjDetailModal && (
+        <PortalModal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 rounded-t-2xl z-10">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-white">Adjustment Details</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Date: {fmtDate(adjDetailModal.date)}</p>
+                </div>
+                <button onClick={() => setAdjDetailModal(null)}
+                  className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 bg-transparent border-0 cursor-pointer text-2xl leading-none">
+                  ×
+                </button>
+              </div>
+              <div className="px-6 py-4 space-y-3">
+                {adjDetailModal.adjustments.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-4">No adjustments found.</p>
+                ) : adjDetailModal.adjustments.map((adj) => (
+                  <div key={adj.id} className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        adj.status === 'Approved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                        adj.status === 'Rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                        'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                      }`}>
+                        {adj.status}
+                      </span>
+                      <span className="text-xs text-gray-400">+{adj.requested_minutes} min</span>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-24 shrink-0">Requested Time:</span>
+                        <span className="text-xs text-gray-700 dark:text-gray-200">{fmtHHMM(adj.time_start)} → {fmtHHMM(adj.time_end)}</span>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-24 shrink-0">Break:</span>
+                        <span className="text-xs text-gray-700 dark:text-gray-200">{fmtHHMM(adj.break_time_start)} → {fmtHHMM(adj.break_time_end)} ({adj.break_duration} min)</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-300 italic">"{adj.reason}"</p>
+                    {adj.status === 'Rejected' && adj.admin_remarks && (
+                      <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-lg p-2">
+                        <p className="text-xs text-red-600 dark:text-red-400 italic">
+                          <span className="font-semibold not-italic">Rejection reason: </span>{adj.admin_remarks}
+                        </p>
+                      </div>
+                    )}
+                    {adj.created_at && (
+                      <p className="text-xs text-gray-400">Requested on {fmtDate(adj.created_at)}</p>
+                    )}
+                    {adj.reviewed_at && (
+                      <p className="text-xs text-gray-400">
+                        {adj.status === 'Approved' ? 'Approved' : adj.status === 'Rejected' ? 'Rejected' : 'Reviewed'} on {fmtDate(adj.reviewed_at)}
+                        {adj.reviewer && <> by {adj.reviewer.first_name} {adj.reviewer.last_name}</>}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end sticky bottom-0 bg-white dark:bg-gray-800 rounded-b-2xl z-10">
+                <button onClick={() => setAdjDetailModal(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </PortalModal>
       )}
 
       {/* -- Edit Modal ------------------------------------------------------- */}

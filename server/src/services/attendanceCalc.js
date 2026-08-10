@@ -101,12 +101,31 @@ function isHoliday(dateStr, holidaySet) {
  * @param {number} graceMinutes
  * @returns {{ isLate: boolean, lateMinutes: number }}
  */
-function computeLateStatus(clockInTime, officeStartTime, graceMinutes = 30) {
+function computeLateStatus(clockInTime, officeStartTime, graceMinutes = 30, companyTimezone = 'UTC') {
   if (!clockInTime) return { isLate: false, lateMinutes: 0 };
   const [sh, sm] = (officeStartTime || '09:30').split(':').map(Number);
-  const clockIn = new Date(clockInTime);
   const officeMinutes = sh * 60 + sm;
-  const clockMinutes = clockIn.getHours() * 60 + clockIn.getMinutes();
+  const clockIn = new Date(clockInTime);
+
+  // Get clock-in time in company timezone for correct late detection.
+  // officeStartTime is stored as HH:MM in company local time, not UTC.
+  let clockMinutes;
+  if (companyTimezone && companyTimezone !== 'UTC') {
+    try {
+      const fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: companyTimezone, hour: '2-digit', minute: '2-digit', hour12: false,
+      });
+      const parts = Object.fromEntries(
+        fmt.formatToParts(clockIn).map(p => [p.type, p.value])
+      );
+      clockMinutes = (Number(parts.hour) % 24) * 60 + Number(parts.minute);
+    } catch (_) {
+      clockMinutes = clockIn.getHours() * 60 + clockIn.getMinutes();
+    }
+  } else {
+    clockMinutes = clockIn.getHours() * 60 + clockIn.getMinutes();
+  }
+
   const latestAllowed = officeMinutes + (Number(graceMinutes) || 0);
   const isLate = clockMinutes > latestAllowed;
   return {

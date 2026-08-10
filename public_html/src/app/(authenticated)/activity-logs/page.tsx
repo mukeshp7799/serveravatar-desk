@@ -101,8 +101,7 @@ export default function ActivityLogsPage() {
   const [page, setPage] = useState(1)
   const [limit] = useState(20)
   const [totalPages, setTotalPages] = useState(1)
-  const [showFilters, setShowFilters] = useState(false)
-  const [employees, setEmployees] = useState<any[]>([])
+const [employees, setEmployees] = useState<any[]>([])
   const [modules, setModules] = useState<string[]>([])
   const [actions, setActions] = useState<string[]>([])
 
@@ -200,7 +199,7 @@ export default function ActivityLogsPage() {
   }
 
   return (
-    <div className="space-y-5 max-w-6xl">
+    <div className="space-y-5">
       {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
@@ -215,24 +214,7 @@ export default function ActivityLogsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {hasViewAll && (
-            <button
-              onClick={() => setShowFilters(f => !f)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition cursor-pointer ${
-                showFilters || hasActiveFilters
-                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:border-indigo-700 dark:text-indigo-300'
-                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700'
-              }`}
-            >
-              <Filter size={15} />
-              Filters
-              {hasActiveFilters && (
-                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-bold">
-                  {Number(!!filters.module) + Number(!!filters.action) + Number(!!filters.date_from) + Number(!!filters.date_to) + Number(!!filters.filter_user_id)}
-                </span>
-              )}
-            </button>
-          )}
+
           <button
             onClick={fetchLogs}
             className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition cursor-pointer dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700"
@@ -243,8 +225,8 @@ export default function ActivityLogsPage() {
         </div>
       </div>
 
-      {/* ── Filter Panel ────────────────────────────────────────────────── */}
-      {showFilters && hasViewAll && (
+      {/* ── Filter Panel — always visible ───────────────────────────────── */}
+      {hasViewAll && (
         <div className="rounded-2xl border border-gray-200 bg-white dark:bg-gray-900 dark:border-gray-700 shadow-sm p-4 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Filter Activities</h3>
