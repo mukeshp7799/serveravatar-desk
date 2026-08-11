@@ -147,37 +147,65 @@ function PaginationBar({ page, total, limit, onPage }: {
 }) {
   const totalPages = Math.max(1, Math.ceil(total / limit))
   if (totalPages <= 1) return null
-  const prev = Math.max(1, page - 1)
-  const next = Math.min(totalPages, page + 1)
+
+  // Build compact page list: 1, 2, 3, ..., N-1, N
+  const getPages = (): (number | '...')[] => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1)
+    }
+    const pages: (number | '...')[] = []
+    const showLeft  = page > 3
+    const showRight = page < totalPages - 2
+
+    pages.push(1, 2)
+    if (showLeft)  pages.push('...')
+    const start = showLeft ? (showRight ? page - 1 : totalPages - 3) : 3
+    const end   = showRight ? (showLeft ? page + 1 : 4)        : totalPages - 1
+    for (let p = start; p <= end; p++) pages.push(p)
+    if (showRight) pages.push('...')
+    pages.push(totalPages)
+    return [...new Set(pages)].sort((a, b) =>
+      a === '...' || b === '...' ? 0 : (a as number) - (b as number)
+    ) as (number | '...')[]
+  }
+
+  const pages = getPages()
+  const prev  = Math.max(1, page - 1)
+  const next  = Math.min(totalPages, page + 1)
+
   return (
-    <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/50">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/50">
       <span className="text-xs text-gray-400">
         {total} result{total !== 1 ? 's' : ''}
       </span>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5 flex-wrap">
         <button
           onClick={() => onPage(prev)}
           disabled={page <= 1}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer border-0 bg-transparent"
+          className="min-w-[32px] h-8 px-2 flex items-center justify-center rounded-lg text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer border-0 bg-transparent"
         >‹</button>
-        {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-          <button
-            key={p}
-            onClick={() => onPage(p)}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-medium transition cursor-pointer border-0 ${
-              p === page
-                ? 'text-white shadow-sm'
-                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }`}
-            style={p === page ? { backgroundColor: ACCENT } : {}}
-          >
-            {p}
-          </button>
-        ))}
+        {pages.map((p, i) =>
+          p === '...' ? (
+            <span key={`ellipsis-${i}`} className="w-8 h-8 flex items-center justify-center text-gray-400 select-none">…</span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onPage(p)}
+              className={`min-w-[32px] h-8 px-1 flex items-center justify-center rounded-lg text-xs font-medium transition cursor-pointer border-0 ${
+                p === page
+                  ? 'text-white'
+                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              style={p === page ? { backgroundColor: ACCENT } : {}}
+            >
+              {p}
+            </button>
+          )
+        )}
         <button
           onClick={() => onPage(next)}
           disabled={page >= totalPages}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer border-0 bg-transparent"
+          className="min-w-[32px] h-8 px-2 flex items-center justify-center rounded-lg text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer border-0 bg-transparent"
         >›</button>
       </div>
     </div>
@@ -541,7 +569,7 @@ export default function LeavesPage() {
     <div className="min-h-screen bg-slate-50 dark:bg-gray-900">
 
       {/* ── PAGE WRAPPER ──────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <div className="px-4 sm:px-6 py-6 space-y-6">
 
         {/* ── PAGE HEADER ─────────────────────────────────── */}
         <div className="flex flex-wrap items-center justify-between gap-4">
