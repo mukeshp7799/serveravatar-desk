@@ -142,8 +142,10 @@ function ActionMenu({ children }: { children: React.ReactNode }) {
 // PAGINATION
 // ────────────────────────────────────────────────────────────
 
-function PaginationBar({ page, total, limit, onPage }: {
-  page: number; total: number; limit: number; onPage: (p: number) => void
+const PER_PAGE_OPTIONS = [10, 20, 30, 50, 100]
+
+function PaginationBar({ page, total, limit, onPage, onLimitChange }: {
+  page: number; total: number; limit: number; onPage: (p: number) => void; onLimitChange: (l: number) => void
 }) {
   const totalPages = Math.max(1, Math.ceil(total / limit))
   if (totalPages <= 1) return null
@@ -175,9 +177,22 @@ function PaginationBar({ page, total, limit, onPage }: {
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/50">
-      <span className="text-xs text-gray-400">
-        {total} result{total !== 1 ? 's' : ''}
-      </span>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-400 whitespace-nowrap">Per page:</span>
+        <select
+          value={limit}
+          onChange={e => onLimitChange(Number(e.target.value))}
+          className="appearance-none pl-2 pr-6 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer focus:outline-none focus:ring-2 transition"
+          style={{ colorScheme: 'normal' }}
+        >
+          {PER_PAGE_OPTIONS.map(o => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+        <span className="text-xs text-gray-400">
+          {total} result{total !== 1 ? 's' : ''}
+        </span>
+      </div>
       <div className="flex items-center gap-0.5 flex-wrap">
         <button
           onClick={() => onPage(prev)}
@@ -284,17 +299,16 @@ export default function LeavesPage() {
   // Pagination
   const [myReqPage, setMyReqPage] = useState(1)
   const [myReqTotal, setMyReqTotal] = useState(0)
+  const [myReqLimit, setMyReqLimit] = useState(10)
   const [teamReqPage, setTeamReqPage] = useState(1)
   const [teamReqTotal, setTeamReqTotal] = useState(0)
+  const [teamReqLimit, setTeamReqLimit] = useState(10)
   const [typesPage, setTypesPage] = useState(1)
   const [typesTotal, setTypesTotal] = useState(0)
+  const [typesLimit, setTypesLimit] = useState(10)
   const [allocPage, setAllocPage] = useState(1)
   const [allocTotal, setAllocTotal] = useState(0)
-
-  const MY_LIMIT = 10
-  const TEAM_LIMIT = 10
-  const TYPES_LIMIT = 10
-  const ALLOC_LIMIT = 10
+  const [allocLimit, setAllocLimit] = useState(10)
 
   // ── Data loading ──────────────────────────────────────────
 
@@ -311,7 +325,7 @@ export default function LeavesPage() {
   }
 
   const loadMyRequests = (page = 1) => {
-    const params = new URLSearchParams({ page: String(page), limit: String(MY_LIMIT), userId: String(user.id) })
+    const params = new URLSearchParams({ page: String(page), limit: String(myReqLimit), userId: String(user.id) })
     api.get(`/leaves?${params}`).then(d => {
       setRequests(d.leaveRequests || [])
       setMyReqTotal(d.pagination?.total || 0)
@@ -320,7 +334,7 @@ export default function LeavesPage() {
   }
 
   const loadTeamRequests = (page = 1, filter = reqFilter) => {
-    const params = new URLSearchParams({ page: String(page), limit: String(TEAM_LIMIT) })
+    const params = new URLSearchParams({ page: String(page), limit: String(teamReqLimit) })
     if (filter) params.set('status', filter)
     if (teamSearch) params.set('search', teamSearch)
     Promise.all([
@@ -335,7 +349,7 @@ export default function LeavesPage() {
   }
 
   const loadLeaveTypes = (page = 1) => {
-    const params = new URLSearchParams({ page: String(page), limit: String(TYPES_LIMIT) })
+    const params = new URLSearchParams({ page: String(page), limit: String(typesLimit) })
     api.get(`/leaves/types?${params}`).then(d => {
       setLeaveTypes(d.leaveTypes || [])
       setTypesTotal(d.pagination?.total || 0)
@@ -344,7 +358,7 @@ export default function LeavesPage() {
   }
 
   const fetchAllAllocs = (page = 1) => {
-    const params = new URLSearchParams({ page: String(page), limit: String(ALLOC_LIMIT) })
+    const params = new URLSearchParams({ page: String(page), limit: String(allocLimit) })
     if (allocSearch) params.set('search', allocSearch)
     if (allocDept) params.set('departmentId', allocDept)
     if (allocLeaveType) params.set('leaveTypeId', allocLeaveType)
@@ -783,8 +797,9 @@ export default function LeavesPage() {
               <PaginationBar
                 page={myReqPage}
                 total={myReqTotal}
-                limit={MY_LIMIT}
+                limit={myReqLimit}
                 onPage={p => { setMyReqPage(p); loadMyRequests(p) }}
+                onLimitChange={l => { setMyReqLimit(l); setMyReqPage(1); loadMyRequests(1) }}
               />
             </div>
           </>
@@ -932,8 +947,9 @@ export default function LeavesPage() {
               <PaginationBar
                 page={teamReqPage}
                 total={teamReqTotal}
-                limit={TEAM_LIMIT}
+                limit={teamReqLimit}
                 onPage={p => { setTeamReqPage(p); loadTeamRequests(p, reqFilter) }}
+                onLimitChange={l => { setTeamReqLimit(l); setTeamReqPage(1); loadTeamRequests(1, reqFilter) }}
               />
             </div>
           </>
@@ -1037,8 +1053,9 @@ export default function LeavesPage() {
               <PaginationBar
                 page={typesPage}
                 total={typesTotal}
-                limit={TYPES_LIMIT}
+                limit={typesLimit}
                 onPage={p => { setTypesPage(p); loadLeaveTypes(p) }}
+                onLimitChange={l => { setTypesLimit(l); setTypesPage(1); loadLeaveTypes(1) }}
               />
             </div>
           </>
@@ -1159,8 +1176,9 @@ export default function LeavesPage() {
               <PaginationBar
                 page={allocPage}
                 total={allocTotal}
-                limit={ALLOC_LIMIT}
+                limit={allocLimit}
                 onPage={p => { setAllocPage(p); fetchAllAllocs(p) }}
+                onLimitChange={l => { setAllocLimit(l); setAllocPage(1); fetchAllAllocs(1) }}
               />
             </div>
           </>
