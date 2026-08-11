@@ -206,7 +206,9 @@ router.get('/view', auth, async (req, res, next) => {
 
     const [anniversaries] = await pool.query(
       `SELECT id, first_name, last_name, avatar_url, hire_date,
-              TIMESTAMPDIFF(YEAR, hire_date, CURDATE()) as years
+              TIMESTAMPDIFF(YEAR, hire_date, CURDATE()) as years,
+              TIMESTAMPDIFF(MONTH, hire_date, CURDATE()) -
+              TIMESTAMPDIFF(YEAR, hire_date, CURDATE()) * 12 as months
        FROM users
        WHERE hire_date IS NOT NULL AND hire_date != '0000-00-00'
        AND MONTH(hire_date) = ? AND status = 'active'

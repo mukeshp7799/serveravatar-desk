@@ -46,6 +46,14 @@ function yearsLabel(years: number): string {
   return `${years} year${years > 1 ? 's' : ''}`
 }
 
+function anniversaryLabel(years: number, months: number): string {
+  if (!years && !months) return 'Just joined'
+  const y = years > 0 ? `${years} year${years > 1 ? 's' : ''}` : ''
+  const m = months > 0 ? `${months} month${months > 1 ? 's' : ''}` : ''
+  if (y && m) return `${y} ${m}`
+  return y || m || 'Just joined'
+}
+
 function fmtDate(dateStr: string): string {
   if (!dateStr) return ''
   // Handle both "2026-08-01" and "2026-08-01T00:00:00.000Z"
@@ -291,10 +299,10 @@ function ItemModal({ item, onClose, onSave, canManage, defaultMode }: {
                   <div className="text-xs text-green-600 dark:text-green-400 mb-1">Joining Date</div>
                   <div className="text-sm font-semibold text-gray-900 dark:text-white">{fmtLong(item.item.hire_date)}</div>
                 </div>
-                {item.item.years > 0 && (
+                {(item.item.years > 0 || item.item.months > 0) && (
                   <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
-                    <div className="text-xs text-green-600 dark:text-green-400 mb-1">Years at Company</div>
-                    <div className="text-sm font-bold text-green-700 dark:text-green-300">{item.item.years} year{item.item.years > 1 ? 's' : ''} 🎉</div>
+                    <div className="text-xs text-green-600 dark:text-green-400 mb-1">Time at Company</div>
+                    <div className="text-sm font-bold text-green-700 dark:text-green-300">{anniversaryLabel(item.item.years || 0, item.item.months || 0)} 🎉</div>
                   </div>
                 )}
               </>
@@ -501,7 +509,7 @@ export default function CalendarPage() {
     }
     if (filters.leave) data.leaves.filter(l => ds >= l.start_date && ds <= l.end_date).forEach(l => items.push({ type:'leave', title:`${l.first_name} ${l.last_name}`, subtitle:l.leave_type, color:l.leave_color||TYPE_COLORS.leave, item:l }));
     if (filters.birthday) data.birthdays.filter(b => { if(!b.date_of_birth||b.date_of_birth==='0000-00-00')return false; const bd=b.date_of_birth.includes('T')?new Date(b.date_of_birth):new Date(b.date_of_birth+'T00:00:00'); return bd.getMonth()===day.getMonth()&&bd.getDate()===day.getDate(); }).forEach(b => { const age=calcYears(b.date_of_birth); items.push({ type:'birthday', title:`${b.first_name} ${b.last_name}'s Birthday`, subtitle: age > 0 ? `Turning ${age}` : 'Birthday', color:TYPE_COLORS.birthday, item:{...b, years: age} }); });
-    if (filters.anniversary) data.anniversaries.filter(a => { if(!a.hire_date||a.hire_date==='0000-00-00')return false; const hd=a.hire_date.includes('T')?new Date(a.hire_date):new Date(a.hire_date+'T00:00:00'); return hd.getMonth()===day.getMonth()&&hd.getDate()===day.getDate(); }).forEach(a => { const yrs=a.years ?? calcYears(a.hire_date); items.push({ type:'anniversary', title:`${a.first_name} ${a.last_name}'s Work Anniversary`, subtitle: yearsLabel(yrs)||'Work Anniversary', color:TYPE_COLORS.anniversary, item:{...a, years: yrs} }); });
+    if (filters.anniversary) data.anniversaries.filter(a => { if(!a.hire_date||a.hire_date==='0000-00-00')return false; const hd=a.hire_date.includes('T')?new Date(a.hire_date):new Date(a.hire_date+'T00:00:00'); return hd.getMonth()===day.getMonth()&&hd.getDate()===day.getDate(); }).forEach(a => { const yrs=a.years ?? calcYears(a.hire_date); const mos=a.months ?? 0; items.push({ type:'anniversary', title:`${a.first_name} ${a.last_name}'s Work Anniversary`, subtitle: anniversaryLabel(yrs, mos)||'Work Anniversary', color:TYPE_COLORS.anniversary, item:{...a, years: yrs, months: mos} }); });
     return items;
   };
 
@@ -530,7 +538,7 @@ export default function CalendarPage() {
     if (filters.event) data.events.filter(e=>{const s=(e.start_date||'').slice(0,10),en=(e.end_date||e.start_date||'').slice(0,10);if(ds>=s&&ds<=en)items.push({type:'event',title:e.title,subtitle:e.category,color:e.color||TYPE_COLORS[e.category]||TYPE_COLORS.event,item:e});});
     if (filters.leave) data.leaves.filter(l=>ds>=l.start_date&&ds<=l.end_date).forEach(l=>items.push({type:'leave',title:`${l.first_name} ${l.last_name}`,subtitle:l.leave_type,color:l.leave_color||TYPE_COLORS.leave,item:l}));
     if (filters.birthday) data.birthdays.filter(b=>{if(!b.date_of_birth||b.date_of_birth==='0000-00-00')return false;const bd=b.date_of_birth.includes('T')?new Date(b.date_of_birth):new Date(b.date_of_birth+'T00:00:00');return bd.getMonth()===day.getMonth()&&bd.getDate()===day.getDate();}).forEach(b=>{const age=calcYears(b.date_of_birth);items.push({type:'birthday',title:`${b.first_name} ${b.last_name}'s Birthday`,subtitle:age>0?`Turning ${age}`:'Birthday',color:TYPE_COLORS.birthday,item:{...b,years:age}})});
-    if (filters.anniversary) data.anniversaries.filter(a=>{if(!a.hire_date||a.hire_date==='0000-00-00')return false;const hd=a.hire_date.includes('T')?new Date(a.hire_date):new Date(a.hire_date+'T00:00:00');return hd.getMonth()===day.getMonth()&&hd.getDate()===day.getDate();}).forEach(a=>{const yrs=a.years ?? calcYears(a.hire_date);items.push({type:'anniversary',title:`${a.first_name} ${a.last_name}'s Work Anniversary`,subtitle:yearsLabel(yrs)||'Work Anniversary',color:TYPE_COLORS.anniversary,item:{...a,years:yrs}})});
+    if (filters.anniversary) data.anniversaries.filter(a=>{if(!a.hire_date||a.hire_date==='0000-00-00')return false;const hd=a.hire_date.includes('T')?new Date(a.hire_date):new Date(a.hire_date+'T00:00:00');return hd.getMonth()===day.getMonth()&&hd.getDate()===day.getDate();}).forEach(a=>{const yrs=a.years ?? calcYears(a.hire_date);const mos=a.months ?? 0;items.push({type:'anniversary',title:`${a.first_name} ${a.last_name}'s Work Anniversary`,subtitle:anniversaryLabel(yrs, mos)||'Work Anniversary',color:TYPE_COLORS.anniversary,item:{...a,years:yrs,months:mos}})});
     return items;
   };
 
@@ -541,7 +549,7 @@ export default function CalendarPage() {
     if(filters.event) data.events.forEach(e=>{const raw=e.start_date||'';const day=raw.includes('T')?raw.slice(8,10):raw.slice(8,10);items.push({ date:day, rawDate:raw, type:'event', title:e.title, subtitle:e.category, color:e.color||TYPE_COLORS[e.category]||TYPE_COLORS.event, item:e } as CalItem);});
     if(filters.leave) data.leaves.forEach(l=>{const raw=l.start_date||'';const day=raw.includes('T')?raw.slice(8,10):raw.slice(8,10);items.push({ date:day, rawDate:raw, type:'leave', title:`${l.first_name} ${l.last_name}`, subtitle:l.leave_type, color:l.leave_color||TYPE_COLORS.leave, item:l } as CalItem);});
     if(filters.birthday) data.birthdays.forEach(b=>{if(!b.date_of_birth||b.date_of_birth==='0000-00-00')return;const age=calcYears(b.date_of_birth);const dob=b.date_of_birth.includes('T')?b.date_of_birth:b.date_of_birth+'T00:00:00';const d=new Date(dob);const day=String(d.getDate()).padStart(2,'0');items.push({ date:day, rawDate:dob, type:'birthday', title:`${b.first_name} ${b.last_name}'s Birthday`, subtitle:age>0?`Turning ${age}`:'Birthday', color:TYPE_COLORS.birthday, item:{...b,years:age} } as CalItem);});
-    if(filters.anniversary) data.anniversaries.forEach(a=>{if(!a.hire_date||a.hire_date==='0000-00-00')return;const yrs=a.years ?? calcYears(a.hire_date);const hd=a.hire_date.includes('T')?a.hire_date:a.hire_date+'T00:00:00';const d=new Date(hd);const day=String(d.getDate()).padStart(2,'0');items.push({ date:day, rawDate:hd, type:'anniversary', title:`${a.first_name} ${a.last_name}'s Work Anniversary`, subtitle:yearsLabel(yrs)||'Work Anniversary', color:TYPE_COLORS.anniversary, item:{...a,years:yrs} } as CalItem);});
+    if(filters.anniversary) data.anniversaries.forEach(a=>{if(!a.hire_date||a.hire_date==='0000-00-00')return;const yrs=a.years ?? calcYears(a.hire_date);const mos=a.months ?? 0;const hd=a.hire_date.includes('T')?a.hire_date:a.hire_date+'T00:00:00';const d=new Date(hd);const day=String(d.getDate()).padStart(2,'0');items.push({ date:day, rawDate:hd, type:'anniversary', title:`${a.first_name} ${a.last_name}'s Work Anniversary`, subtitle:anniversaryLabel(yrs, mos)||'Work Anniversary', color:TYPE_COLORS.anniversary, item:{...a,years:yrs,months:mos} } as CalItem);});
     return items.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   };
 

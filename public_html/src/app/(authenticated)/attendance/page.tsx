@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useDebouncedCallback } from 'use-debounce'
 import toast from 'react-hot-toast'
 import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
@@ -93,6 +94,50 @@ function fmtShortDate(raw: string | null | undefined): string {
   return `${m}/${d}`
 }
 
+// Date range preset helpers
+function getDateRange(preset: string): { from: string; to: string } {
+  const now = new Date()
+  const todayStr = now.toISOString().slice(0, 10)
+  const day = now.getDay() // 0 = Sun
+  const diffToMon = day === 0 ? 6 : day - 1 // days since Monday
+  const diffToSun = day === 0 ? 0 : 7 - day // days until Sunday
+
+  switch (preset) {
+    case 'today':
+      return { from: todayStr, to: todayStr }
+    case 'this_week': {
+      const monday = new Date(now)
+      monday.setDate(now.getDate() - diffToMon)
+      const sunday = new Date(now)
+      sunday.setDate(now.getDate() + diffToSun)
+      return { from: monday.toISOString().slice(0, 10), to: sunday.toISOString().slice(0, 10) }
+    }
+    case 'last_week': {
+      const lastMonday = new Date(now)
+      lastMonday.setDate(now.getDate() - diffToMon - 7)
+      const lastSunday = new Date(now)
+      lastSunday.setDate(now.getDate() - diffToMon - 1)
+      return { from: lastMonday.toISOString().slice(0, 10), to: lastSunday.toISOString().slice(0, 10) }
+    }
+    case 'this_month': {
+      const first = new Date(now.getFullYear(), now.getMonth(), 1)
+      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      return { from: first.toISOString().slice(0, 10), to: last.toISOString().slice(0, 10) }
+    }
+    case 'last_month': {
+      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const last = new Date(now.getFullYear(), now.getMonth(), 0)
+      return { from: first.toISOString().slice(0, 10), to: last.toISOString().slice(0, 10) }
+    }
+    default:
+      return { from: todayStr, to: todayStr }
+  }
+}
+
+function fmtDateInput(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string; icon: any }> = {
@@ -122,7 +167,7 @@ interface Summary {
   total_days: number; working_days: number; weekends: number; company_holidays: number
   present_days: number; approved_leave_days: number; absent_days: number
   late_checkins: number; total_working_hours: number; total_break_minutes: number
-  average_working_hours: number
+  total_break_adjustment_minutes: number; average_working_hours: number
 }
 
 interface TimelineDay {
@@ -399,6 +444,16 @@ export default function AttendancePage() {
   const [history, setHistory] = useState<any[]>([])
   const [histPage, setHistPage] = useState(1)
   const [histTotal, setHistTotal] = useState(0)
+  const [histLimit, setHistLimit] = useState(10)
+  const [histSummary, setHistSummary] = useState<any>(null)
+  // Date range state for history
+  const histToday = new Date()
+  const histYm = histToday.getFullYear(), histMm = histToday.getMonth()
+  const histDefaultFrom = new Date(histYm, histMm, 1).toISOString().slice(0, 10)
+  const histDefaultTo = new Date(histYm, histMm + 1, 0).toISOString().slice(0, 10)
+  const [histDateFrom, setHistDateFrom] = useState(histDefaultFrom)
+  const [histDateTo, setHistDateTo] = useState(histDefaultTo)
+  const [histPreset, setHistPreset] = useState<'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'custom'>('this_month')
 
   // -- Team --------------------------------------------------------------------
   const [teamRecords, setTeamRecords] = useState<any[]>([])
@@ -408,7 +463,10 @@ export default function AttendancePage() {
   const [adjustments, setAdjustments] = useState<AdjustmentRequest[]>([])
   const [adjPage, setAdjPage] = useState(1)
   const [adjTotal, setAdjTotal] = useState(0)
+  const [adjLimit, setAdjLimit] = useState(10)
   const [adjFilter, setAdjFilter] = useState<'Pending' | 'Approved' | 'Rejected' | ''>('')
+  const [adjSearch, setAdjSearch] = useState('')
+  const [adjLoading, setAdjLoading] = useState(false)
   const [adjStats, setAdjStats] = useState({ pending_count: 0, approved_today: 0, rejected_today: 0 })
   // Request modal state
   const [showRequestModal, setShowRequestModal] = useState(false)
@@ -439,7 +497,6 @@ export default function AttendancePage() {
   const [dateFrom, setDateFrom] = useState(defaultFrom)
   const [dateTo, setDateTo] = useState(defaultTo)
   const [selDept, setSelDept] = useState('')
-  const [selEmp, setSelEmp] = useState('')
   const [selStatus, setSelStatus] = useState('')
 
   // Summary data
@@ -448,13 +505,17 @@ export default function AttendancePage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [summPage, setSummPage] = useState(1)
   const [summLimit, setSummLimit] = useState(10)
+  const summLimitRef = useRef(summLimit)
   const [summTotal, setSummTotal] = useState(0)
   const [summSearch, setSummSearch] = useState('')
 
   // Timeline data
   const [tlUserId, setTlUserId] = useState<string>('')
   const [tlEmpName, setTlEmpName] = useState('')
+  const [tlSearch, setTlSearch] = useState('')
   const [timeline, setTimeline] = useState<TimelineDay[]>([])
+  const [tlPage, setTlPage] = useState(1)
+  const [tlLimit, setTlLimit] = useState(15)
   const [tlEmpInfo, setTlEmpInfo] = useState<any>(null)
 
   // Lookups
@@ -476,11 +537,19 @@ export default function AttendancePage() {
     }
   }
 
-  const loadHistory = async (page = 1) => {
+  const loadHistory = async (page = 1, limit = histLimit) => {
+    if (!histDateFrom || !histDateTo) return
     try {
-      const r = await api.get(`/attendance/history?page=${page}&limit=20`)
-      setHistory(r.records || [])
-      setHistPage(page)
+      const params = new URLSearchParams({
+        date_from: histDateFrom,
+        date_to: histDateTo,
+        page: String(page),
+        limit: String(limit),
+      })
+      const r = await api.get(`/attendance/my-history?${params}`)
+      setHistory(r.timeline || [])
+      setHistSummary(r.summary || null)
+      setHistPage(r.pagination?.page || page)
       setHistTotal(r.pagination?.total || 0)
     } catch {}
   }
@@ -505,15 +574,25 @@ export default function AttendancePage() {
     } catch {}
   }
 
-  const loadAdjustments = async (page = adjPage, status = adjFilter) => {
+  const loadAdjustments = async (page = adjPage, status = adjFilter, limit = 10, search = adjSearch) => {
+    setAdjLoading(true)
     try {
-      const params = new URLSearchParams({ page: String(page), limit: '20' })
+      const params = new URLSearchParams({ page: String(page), limit: String(limit) })
       if (status) params.set('status', status)
+      if (search) params.set('search', search)
       const r = await api.get(`/attendance/break-adjustments?${params}`)
       setAdjustments(r.requests || [])
       setAdjTotal(r.pagination?.total || 0)
-    } catch {}
+    } catch {} finally {
+      setAdjLoading(false)
+    }
   }
+
+  // Debounced search
+  const debouncedLoadAdjustments = useDebouncedCallback(
+    (search: string) => { loadAdjustments(1, adjFilter, 10, search) },
+    400
+  )
 
   const openRequestModal = async (attendanceId: number) => {
     try {
@@ -576,7 +655,7 @@ export default function AttendancePage() {
         toast.success('Adjustment rejected')
       }
       setReviewModal(null)
-      loadAdjustments(adjPage)
+      loadAdjustments(adjPage, adjFilter, adjLimit, adjSearch)
       loadAdjustmentStats()
     } catch (err: any) {
       toast.error(err.message || 'Action failed')
@@ -596,35 +675,36 @@ export default function AttendancePage() {
     } catch {}
   }
 
-  const loadSummary = useCallback(async (page = summPage) => {
+  const loadSummary = useCallback(async (page: number, limitOverride?: number) => {
     if (!dateFrom || !dateTo) return
+    const activeLimit = limitOverride ?? summLimitRef.current
     setLoading(true)
     try {
       const params = new URLSearchParams({
         date_from: dateFrom,
         date_to: dateTo,
         page: String(page),
-        limit: String(summLimit),
+        limit: String(activeLimit),
       })
       if (selDept) params.set('department_id', selDept)
-      if (selEmp) params.set('user_id', selEmp)
       if (selStatus) params.set('status', selStatus)
       if (summSearch) params.set('search', summSearch)
       const r = await api.get(`/attendance/analytics/summary?${params.toString()}`)
       setSummaries(r.summaries || [])
-      setSummPage(r.pagination?.page || page)
-      setSummTotal(r.pagination?.total || 0)
+      setSummPage(r.pagination?.page ?? page)
+      setSummTotal(r.pagination?.total ?? 0)
     } catch (err: any) {
       toast.error(err.message || 'Failed to load summary')
     } finally {
       setLoading(false)
     }
-  }, [dateFrom, dateTo, selDept, selEmp, selStatus, summLimit, summSearch])
+  }, [dateFrom, dateTo, selDept, selStatus, summSearch])
 
   const loadTimeline = useCallback(async (empId?: string) => {
     const targetId = empId || tlUserId
     if (!targetId || !dateFrom || !dateTo) return
     setLoading(true)
+    setTlPage(1)
     try {
       const params = new URLSearchParams({ user_id: targetId, date_from: dateFrom, date_to: dateTo })
       const r = await api.get(`/attendance/analytics/timeline?${params.toString()}`)
@@ -643,10 +723,10 @@ export default function AttendancePage() {
     Promise.all([loadToday()]).finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { if (tab === 'history') loadHistory(1) }, [tab])
+  useEffect(() => { if (tab === 'history') loadHistory(1) }, [tab, histDateFrom, histDateTo])
   useEffect(() => { if (tab === 'team') loadTeam() }, [tab])
   useEffect(() => { if (tab === 'adjustments') { loadAdjustments(1); loadAdjustmentStats() } }, [tab])
-  useEffect(() => { if (tab === 'adjustments') loadAdjustments(adjPage, adjFilter) }, [adjPage, adjFilter, tab])
+  useEffect(() => { if (tab === 'adjustments') loadAdjustments(adjPage, adjFilter, adjLimit, adjSearch) }, [adjPage, adjFilter, adjLimit, adjSearch, tab])
 
   useEffect(() => {
     if (tab === 'reports') {
@@ -656,40 +736,26 @@ export default function AttendancePage() {
     }
   }, [tab])
 
-  // Reset to page 1 when filters change
-  useEffect(() => {
-    if (tab === 'reports' && reportSubTab === 'summary') {
-      setSummPage(1)
-      loadSummary(1)
-    }
-  }, [dateFrom, dateTo, selDept, selEmp, selStatus])
+  // Keep summLimitRef in sync with summLimit state
+  useEffect(() => { summLimitRef.current = summLimit }, [summLimit])
 
-  // Debounced search
+  // Reset to page 1 and reload when any filter changes (including search via debounce)
   useEffect(() => {
-    if (tab === 'reports' && reportSubTab === 'summary') {
+    if (tab === 'reports') {
       const timer = setTimeout(() => {
         setSummPage(1)
         loadSummary(1)
       }, 400)
       return () => clearTimeout(timer)
     }
-  }, [summSearch])
+  }, [dateFrom, dateTo, selDept, selStatus, summSearch])
 
-  // When switching to timeline sub-tab
+  // When tlUserId changes, load timeline
   useEffect(() => {
-    if (tab === 'reports' && reportSubTab === 'timeline') {
-      if (tlUserId) {
-        loadTimeline(tlUserId)
-      } else if (selEmp && summaries.length > 0) {
-        const emp = summaries.find(s => String(s.user_id) === String(selEmp))
-        if (emp) {
-          setTlUserId(String(emp.user_id))
-          setTlEmpName(`${emp.first_name} ${emp.last_name}`)
-          loadTimeline(String(emp.user_id))
-        }
-      }
+    if (tab === 'reports' && tlUserId) {
+      loadTimeline(tlUserId)
     }
-  }, [tab, reportSubTab])
+  }, [tab, tlUserId])
 
   // -- Actions -----------------------------------------------------------------
 
@@ -731,12 +797,9 @@ export default function AttendancePage() {
   // -- Report helpers ----------------------------------------------------------
 
   function viewTimeline(emp: Summary) {
-    // Set the employee filter to the selected employee
-    setSelEmp(String(emp.user_id))
     setTlUserId(String(emp.user_id))
     setTlEmpName(`${emp.first_name} ${emp.last_name}`)
     setReportSubTab('timeline')
-    // Load timeline data for this employee
     loadTimeline(String(emp.user_id))
   }
 
@@ -749,7 +812,7 @@ export default function AttendancePage() {
 
   function applyReportFilters() {
     if (reportSubTab === 'summary') {
-      loadSummary()
+      loadSummary(summPage)
     } else if (tlUserId) {
       loadTimeline(tlUserId)
     }
@@ -757,10 +820,10 @@ export default function AttendancePage() {
 
   function resetReportFilters() {
     setSelDept('')
-    setSelEmp('')
     setSelStatus('')
     setTlUserId('')
     setTlEmpName('')
+    setTlSearch('')
     setTimeline([])
     setSortKey('')
     setSortDir('asc')
@@ -778,7 +841,7 @@ export default function AttendancePage() {
 
   function handleEditSave() {
     // Refresh both summary and timeline
-    loadSummary()
+    loadSummary(summPage)
     if (tlUserId) loadTimeline(tlUserId)
   }
 
@@ -795,8 +858,6 @@ export default function AttendancePage() {
     ] : []),
     ...(isHRAdmin ? [{ key: 'adjustments' as TopTab, label: 'Break Adjustments' }] : []),
   ]
-
-  const histPages = Math.ceil(histTotal / 20)
 
   // canClockIn: allow for 'absent' (first clock-in of the day) OR 'completed' (re-clock-in after clock-out)
   const canClockIn = myToday && (myToday.status === 'absent' || myToday.status === 'completed') && canClock
@@ -987,13 +1048,103 @@ export default function AttendancePage() {
       {/* == HISTORY TAB ======================================================= */}
       {/* ====================================================================== */}
       {tab === 'history' && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">My Attendance History</h2>
+        <div className="space-y-4">
+          {/* Date Range Filter */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-5 py-4">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Preset buttons */}
+              <div className="flex flex-wrap gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                {([
+                  { key: 'today', label: 'Today' },
+                  { key: 'this_week', label: 'This Week' },
+                  { key: 'last_week', label: 'Last Week' },
+                  { key: 'this_month', label: 'This Month' },
+                  { key: 'last_month', label: 'Last Month' },
+                  { key: 'custom', label: 'Custom' },
+                ] as const).map(p => (
+                  <button
+                    key={p.key}
+                    onClick={() => {
+                      const range = getDateRange(p.key)
+                      setHistPreset(p.key)
+                      setHistDateFrom(range.from)
+                      setHistDateTo(range.to)
+                      setHistPage(1)
+                    }}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition cursor-pointer border-0 ${
+                      histPreset === p.key
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Date inputs */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={histDateFrom}
+                  onChange={e => { setHistPreset('custom'); setHistDateFrom(e.target.value) }}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-500 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+                <span className="text-gray-400 text-xs">to</span>
+                <input
+                  type="date"
+                  value={histDateTo}
+                  onChange={e => { setHistPreset('custom'); setHistDateTo(e.target.value) }}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-500 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* Apply & Reset */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const range = getDateRange('this_month')
+                    setHistPreset('this_month')
+                    setHistDateFrom(range.from)
+                    setHistDateTo(range.to)
+                    setHistPage(1)
+                    loadHistory(1)
+                  }}
+                  className="px-4 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition cursor-pointer border border-gray-200 dark:border-gray-600"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
           </div>
-          {history.length === 0 ? (
-            <div className="p-12 text-center text-gray-400 dark:text-gray-500 text-sm">No attendance records yet.</div>
-          ) : (
+
+          {/* Summary Cards */}
+          {histSummary && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+              {[
+                { label: 'Total Working Hrs', value: fmtHours(histSummary.total_working_hours), color: 'text-indigo-600' },
+                { label: 'Total Break Time', value: fmtBreak(histSummary.total_break_minutes), color: 'text-amber-600' },
+                { label: 'Break Adj. Time', value: fmtBreak(histSummary.break_adjustment_minutes), color: 'text-emerald-600' },
+                { label: 'Avg Working Hrs', value: fmtHours(histSummary.average_working_hours), color: 'text-sky-600' },
+                { label: 'Total Days', value: histSummary.total_days, color: 'text-gray-600' },
+                { label: 'Working Days', value: histSummary.working_days, color: 'text-gray-600' },
+                { label: 'Present Days', value: histSummary.present_days, color: 'text-emerald-600' },
+                { label: 'Approved Leave', value: histSummary.approved_leave_days, color: 'text-blue-600' },
+                { label: 'Absent Days', value: histSummary.absent_days, color: 'text-red-500' },
+                { label: 'Late Check-ins', value: histSummary.late_checkins, color: 'text-orange-500' },
+                { label: 'Company Holidays', value: histSummary.company_holidays, color: 'text-purple-600' },
+                { label: 'Attendance Rate', value: histSummary.working_days > 0 ? `${Math.round((histSummary.present_days / histSummary.working_days) * 100)}%` : '—', color: 'text-teal-600' },
+              ].map((card, i) => (
+                <div key={i} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
+                  <div className={`text-xl font-bold ${card.color} dark:text-opacity-90`}>{card.value}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{card.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Table */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -1011,16 +1162,33 @@ export default function AttendancePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {history.map((r: any) => (
-                    <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                  {history.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500 text-sm">No attendance records found.</td>
+                    </tr>
+                  ) : history.map((r: any) => (
+                    <tr key={r.date} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                       <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{fmtDate(r.date)}</td>
-                      <td className="px-4 py-3">{statusBadge(r.status)}</td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{fmtTime(r.clock_in_time)}</td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{fmtTime(r.clock_out_time)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          r.status === 'present' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                          r.status === 'absent' ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' :
+                          r.status === 'leave' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                          r.status === 'holiday' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
+                          r.status === 'weekend' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                          'bg-gray-100 text-gray-600 dark:bg-gray-700'
+                        }`}>
+                          {r.status_label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.clock_in_time ? fmtHHMM(r.clock_in_time) : '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.clock_out_time ? fmtHHMM(r.clock_out_time) : '—'}</td>
                       <td className="px-4 py-3 font-semibold text-amber-600 dark:text-amber-400">{fmtBreak(r.total_break_minutes)}</td>
-                      <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{fmtHours(r.live_working_hours ?? r.working_hours)}</td>
+                      <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{fmtHours(r.working_hours)}</td>
                       <td className="px-4 py-3 text-red-500">{r.is_late ? `${r.late_minutes}m` : '—'}</td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs max-w-[150px] truncate">{r.remarks || '—'}</td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs max-w-[150px] truncate">
+                        {r.holiday_name ? r.holiday_name : r.leave_reason ? r.leave_reason : r.remarks || '—'}
+                      </td>
                       {perms.includes('attendance.break_adjustment.request') && (
                         <td className="px-4 py-3 text-center">
                           {r.adjustments && r.adjustments.length > 0 ? (
@@ -1039,18 +1207,22 @@ export default function AttendancePage() {
                       )}
                       {perms.includes('attendance.break_adjustment.request') && (
                         <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => setAdjDetailModal({ date: r.date, adjustments: r.adjustments || [] })}
-                            className="px-2 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-lg transition cursor-pointer mr-1"
-                          >
-                            View
-                          </button>
-                          <button
-                            onClick={() => openRequestModal(r.attendance_id || r.id)}
-                            className="px-2 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-700 rounded-lg transition cursor-pointer"
-                          >
-                            Adjust
-                          </button>
+                          {r.attendance_id && r.status === 'present' && (
+                            <>
+                              <button
+                                onClick={() => setAdjDetailModal({ date: r.date, adjustments: r.adjustments || [] })}
+                                className="px-2 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-lg transition cursor-pointer mr-1"
+                              >
+                                View
+                              </button>
+                              <button
+                                onClick={() => openRequestModal(r.attendance_id)}
+                                className="px-2 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-700 rounded-lg transition cursor-pointer"
+                              >
+                                Adjust
+                              </button>
+                            </>
+                          )}
                         </td>
                       )}
                     </tr>
@@ -1058,18 +1230,58 @@ export default function AttendancePage() {
                 </tbody>
               </table>
             </div>
-          )}
-          {histPages > 1 && (
-            <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <span className="text-xs text-gray-400">Page {histPage} of {histPages} ({histTotal} records)</span>
-              <div className="flex gap-2">
-                <button onClick={() => loadHistory(histPage - 1)} disabled={histPage <= 1}
-                  className="px-3 py-1 text-xs font-medium bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg disabled:opacity-40 cursor-pointer border border-gray-200 dark:border-gray-600">Previous</button>
-                <button onClick={() => loadHistory(histPage + 1)} disabled={histPage >= histPages}
-                  className="px-3 py-1 text-xs font-medium bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg disabled:opacity-40 cursor-pointer border border-gray-200 dark:border-gray-600">Next</button>
+
+            {/* Pagination */}
+            {histTotal > histLimit && (
+              <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500">
+                    Showing <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min((histPage - 1) * histLimit + 1, histTotal)}</span>
+                    {' '}to{' '}
+                    <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min(histPage * histLimit, histTotal)}</span>
+                    {' '}of{' '}
+                    <span className="font-semibold text-gray-700 dark:text-gray-200">{histTotal}</span>
+                  </span>
+                  <select
+                    value={histLimit}
+                    onChange={e => { const l = Number(e.target.value); setHistLimit(l); setHistPage(1); loadHistory(1, l) }}
+                    className="px-2 py-1 border border-gray-300 dark:border-gray-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div className="flex items-center gap-1 flex-wrap">
+                  <button
+                    onClick={() => { const p = Math.max(1, histPage - 1); setHistPage(p); loadHistory(p) }}
+                    disabled={histPage <= 1}
+                    className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
+                  >
+                    ‹
+                  </button>
+                  {Array.from({ length: Math.ceil(histTotal / histLimit) }, (_, i) => i + 1).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => { setHistPage(p); loadHistory(p) }}
+                      className={`min-w-[32px] h-8 flex items-center justify-center rounded-md text-xs font-medium transition cursor-pointer border-0 ${
+                        histPage === p
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => { const p = Math.min(Math.ceil(histTotal / histLimit), histPage + 1); setHistPage(p); loadHistory(p) }}
+                    disabled={histPage >= Math.ceil(histTotal / histLimit)}
+                    className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
+                  >
+                    ›
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
@@ -1148,72 +1360,54 @@ export default function AttendancePage() {
       {/* ====================================================================== */}
       {tab === 'reports' && isHRAdmin && (
         <>
-          {/* Sub-tabs: Summary / Timeline */}
-          <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 dark:[background-color:#1f2937]">
-            <button onClick={() => setReportSubTab('summary')}
-              className={`px-4 sm:px-5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer border-0 ${
-                reportSubTab === 'summary'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300'
-              }`}>
-              Summary
-            </button>
-            <button onClick={() => setReportSubTab('timeline')}
-              className={`px-4 sm:px-5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer border-0 ${
-                reportSubTab === 'timeline'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300'
-              }`}>
-              Timeline
-            </button>
-          </div>
-
-          {/* -- Shared Filters ----------------------------------------- */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex flex-wrap gap-3 items-end">
-            {/* Date From */}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">From</label>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            </div>
-            {/* Date To */}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">To</label>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            </div>
-            {/* Department */}
-            <div className="flex-1 min-w-[150px]">
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Department</label>
-              <select value={selDept} onChange={e => setSelDept(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
-                <option value="">All Departments</option>
-                {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
-            {/* Employee */}
-            <div className="flex-1 min-w-[180px]">
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                {reportSubTab === 'timeline' ? 'Employee (Timeline)' : 'Employee'}
-              </label>
-              {reportSubTab === 'timeline' ? (
-                <select value={tlUserId} onChange={e => handleTimelineEmpChange(e.target.value)}
+          {/* -- Shared Filters (Summary only) ----------------------------------------- */}
+          {reportSubTab === 'summary' && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex flex-wrap gap-3 items-end">
+              {/* Date From */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">From</label>
+                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              {/* Date To */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">To</label>
+                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              {/* Department */}
+              <div className="flex-1 min-w-[150px]">
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Department</label>
+                <select value={selDept} onChange={e => setSelDept(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
-                  <option value="">Select employee...</option>
-                  {summaries.map(s => (
-                    <option key={s.user_id} value={s.user_id}>{s.first_name} {s.last_name}</option>
-                  ))}
+                  <option value="">All Departments</option>
+                  {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
-              ) : (
-                <select value={selEmp} onChange={e => setSelEmp(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
-                  <option value="">All Employees</option>
-                  {employees.map((e: any) => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
-                </select>
-              )}
-            </div>
-            {/* Status (Summary only) */}
-            {reportSubTab === 'summary' && (
+              </div>
+              {/* Employee Search */}
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Search Employee</label>
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={summSearch}
+                    onChange={e => setSummSearch(e.target.value)}
+                    placeholder="Search by name or email..."
+                    className="w-full pl-8 pr-8 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-400"
+                  />
+                  {summSearch && (
+                    <button
+                      onClick={() => { setSummSearch('') }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer border-0 bg-transparent"
+                      title="Clear"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+              {/* Status */}
               <div className="min-w-[140px]">
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Status</label>
                 <select value={selStatus} onChange={e => setSelStatus(e.target.value)}
@@ -1225,20 +1419,17 @@ export default function AttendancePage() {
                   <option value="absent">Absent</option>
                 </select>
               </div>
-            )}
-            {/* Actions */}
-            <button onClick={applyReportFilters}
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition cursor-pointer border-0">
-              Apply
-            </button>
-            <button onClick={resetReportFilters}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition cursor-pointer border border-gray-200 dark:border-gray-600">
-              Reset
-            </button>
-          </div>
+              {/* Actions */}
+              <button onClick={resetReportFilters}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition cursor-pointer border border-gray-200 dark:border-gray-600">
+                Reset
+              </button>
+            </div>
+          )}
 
                     {/* -- SUMMARY SUB-TAB ---------------------------------------- */}
-          {reportSubTab === 'summary' && (() => {
+          {reportSubTab === 'summary' && (<>
+            {(() => {
                 const totalPages = Math.ceil(summTotal / summLimit)
                 const SortTh = ({ col, label, align = 'left' }: { col: string; label: string; align?: string }) => {
                   const active = sortKey === col
@@ -1257,23 +1448,11 @@ export default function AttendancePage() {
                 return loading ? <PageLoader /> : (
                   <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                     {/* Toolbar */}
-                    <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center gap-3 justify-between">
-                      <div>
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">Employee Attendance Summary</h3>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {summTotal === 0 ? 'No' : summTotal} employee{summTotal !== 1 ? 's' : ''} &middot; {fmtDate(dateFrom)} &ndash; {fmtDate(dateTo)}
-                        </p>
-                      </div>
-                      <div className="relative">
-                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                        <input
-                          type="text"
-                          value={summSearch}
-                          onChange={e => setSummSearch(e.target.value)}
-                          placeholder="Search employee..."
-                          className="pl-8 pr-4 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs w-52 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-400"
-                        />
-                      </div>
+                    <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-white">Employee Attendance Summary</h3>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {summTotal === 0 ? 'No' : summTotal} employee{summTotal !== 1 ? 's' : ''} &middot; {fmtDate(dateFrom)} &ndash; {fmtDate(dateTo)}
+                      </p>
                     </div>
 
                     {summaries.length === 0 ? (
@@ -1294,6 +1473,7 @@ export default function AttendancePage() {
                               <SortTh col="late_checkins" label="Late Check-ins" align="center" />
                               <SortTh col="total_working_hours" label="Total Working Hrs" align="center" />
                               <SortTh col="total_break_minutes" label="Total Break" align="center" />
+                              <SortTh col="total_break_adjustment_minutes" label="Break Adj" align="center" />
                               <SortTh col="average_working_hours" label="Avg Working Hrs" align="center" />
                               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Action</th>
                             </tr>
@@ -1315,6 +1495,7 @@ export default function AttendancePage() {
                                 <td className="px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">{s.late_checkins}</span></td>
                                 <td className="px-4 py-3 text-center text-teal-600 dark:text-teal-400 font-semibold whitespace-nowrap">{fmtHours(s.total_working_hours)}</td>
                                 <td className="px-4 py-3 text-center text-orange-600 dark:text-orange-400 whitespace-nowrap">{fmtBreak(s.total_break_minutes)}</td>
+                                <td className="px-4 py-3 text-center text-rose-600 dark:text-rose-400 whitespace-nowrap">{fmtBreak(s.total_break_adjustment_minutes)}</td>
                                 <td className="px-4 py-3 text-center text-indigo-600 dark:text-indigo-400 font-semibold whitespace-nowrap">{fmtHours(s.average_working_hours)}</td>
                                 <td className="px-4 py-3 text-center whitespace-nowrap">
                                   <button onClick={() => viewTimeline(s)} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 rounded-lg transition cursor-pointer border-0">
@@ -1342,7 +1523,7 @@ export default function AttendancePage() {
                         </span>
                         <select
                           value={summLimit}
-                          onChange={e => { setSummLimit(Number(e.target.value)); setSummPage(1); loadSummary(1) }}
+                          onChange={e => { const newLimit = Number(e.target.value); setSummLimit(newLimit); setSummPage(1); loadSummary(1, newLimit) }}
                           className="px-2 py-1 border border-gray-300 dark:border-gray-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
                         >
                           {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
@@ -1428,13 +1609,20 @@ export default function AttendancePage() {
                     </div>
                   </div>
                 )
-              })()}
-
+          })()}
+          </>)}
 
 
           {/* -- TIMELINE SUB-TAB --------------------------------------- */}
           {reportSubTab === 'timeline' && (
             <>
+              {/* Back to Summary */}
+              <button
+                onClick={() => setReportSubTab('summary')}
+                className="mb-3 flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium transition cursor-pointer border-0 bg-transparent"
+              >
+                &larr; Back to Summary
+              </button>
               {/* Employee summary banner */}
               {tlEmpInfo && (
                 <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800 p-4 flex items-center justify-between flex-wrap gap-3">
@@ -1490,8 +1678,14 @@ export default function AttendancePage() {
                     <PageLoader />
                   ) : timeline.length === 0 ? (
                     <div className="text-center py-16 text-gray-400 dark:text-gray-500 text-sm">No timeline data found.</div>
-                  ) : (
-                    <div className="overflow-x-auto">
+                  ) : (() => {
+                    const tlTotal = timeline.length
+                    const tlTotalPages = Math.max(1, Math.ceil(tlTotal / tlLimit))
+                    const currentPage = Math.min(tlPage, tlTotalPages)
+                    const paginatedTimeline = timeline.slice((currentPage - 1) * tlLimit, currentPage * tlLimit)
+                    return (
+                      <>
+                        <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50 dark:bg-gray-700/60">
                           <tr>
@@ -1510,7 +1704,7 @@ export default function AttendancePage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                          {timeline.map((day, idx) => {
+                          {paginatedTimeline.map((day, idx) => {
                             const meta = TIMELINE_STATUS_META[day.status] || TIMELINE_STATUS_META.absent
                             const isEditable = day.attendance_id != null && isHRAdmin
                             const isOdd = idx % 2 === 1
@@ -1605,7 +1799,70 @@ export default function AttendancePage() {
                         </tbody>
                       </table>
                     </div>
-                  )}
+
+                        {/* Pagination footer */}
+                        {tlTotalPages > 1 && (
+                          <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 flex flex-wrap items-center justify-between gap-3 mt-0">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <span className="text-xs text-gray-500">
+                                Showing <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min((currentPage - 1) * tlLimit + 1, tlTotal)}</span>
+                                {' '}to{' '}
+                                <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min(currentPage * tlLimit, tlTotal)}</span>
+                                {' '}of{' '}
+                                <span className="font-semibold text-gray-700 dark:text-gray-200">{tlTotal}</span>
+                              </span>
+                              <select
+                                value={tlLimit}
+                                onChange={e => { setTlLimit(Number(e.target.value)); setTlPage(1) }}
+                                className="px-2 py-1 border border-gray-300 dark:border-gray-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                              >
+                                {[10, 15, 20, 30, 50].map(n => <option key={n} value={n}>{n}</option>)}
+                              </select>
+                            </div>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <button
+                                onClick={() => { const p = Math.max(1, currentPage - 1); setTlPage(p) }}
+                                disabled={currentPage <= 1}
+                                className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
+                              >
+                                &lsaquo;
+                              </button>
+                              {currentPage > 3 && tlTotalPages > 4 && (
+                                <span className="px-1 text-gray-400 text-xs select-none">...</span>
+                              )}
+                              {(() => {
+                                const start = Math.max(1, Math.min(tlTotalPages - 4, currentPage - 2))
+                                const end = Math.min(tlTotalPages, start + 4)
+                                return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+                              })().map(pageNum => (
+                                <button
+                                  key={pageNum}
+                                  onClick={() => setTlPage(pageNum)}
+                                  className={`min-w-[32px] h-8 flex items-center justify-center rounded-md text-xs font-medium transition cursor-pointer border-0 ${
+                                    currentPage === pageNum
+                                      ? 'bg-indigo-600 text-white shadow-sm'
+                                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                  }`}
+                                >
+                                  {pageNum}
+                                </button>
+                              ))}
+                              {currentPage < tlTotalPages - 2 && tlTotalPages > 4 && (
+                                <span className="px-1 text-gray-400 text-xs select-none">...</span>
+                              )}
+                              <button
+                                onClick={() => { const p = Math.min(tlTotalPages, currentPage + 1); setTlPage(p) }}
+                                disabled={currentPage >= tlTotalPages}
+                                className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
+                              >
+                                &rsaquo;
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
             </>
@@ -1618,37 +1875,77 @@ export default function AttendancePage() {
       {/* ====================================================================== */}
       {tab === 'adjustments' && isHRAdmin && (
         <div className="space-y-4">
-          {/* Header + Stats */}
+          {/* Header */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
               {isHRAdmin ? 'Break Adjustment Requests' : 'My Adjustments'}
             </h2>
-            <div className="flex gap-3 flex-wrap">
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-2 text-center">
-                <div className="text-xl font-bold text-amber-600">{adjStats.pending_count}</div>
-                <div className="text-xs text-amber-500">Pending</div>
-              </div>
-              <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-2 text-center">
-                <div className="text-xl font-bold text-emerald-600">{adjStats.approved_today}</div>
-                <div className="text-xs text-emerald-500">Approved Today</div>
-              </div>
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-2 text-center">
-                <div className="text-xl font-bold text-red-600">{adjStats.rejected_today}</div>
-                <div className="text-xs text-red-500">Rejected Today</div>
-              </div>
+          </div>
+
+          {/* Stats cards */}
+          <div className="flex gap-3 flex-wrap">
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-2 text-center">
+              <div className="text-xl font-bold text-amber-600">{adjStats.pending_count}</div>
+              <div className="text-xs text-amber-500">Pending</div>
+            </div>
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-2 text-center">
+              <div className="text-xl font-bold text-emerald-600">{adjStats.approved_today}</div>
+              <div className="text-xs text-emerald-500">Approved Today</div>
+            </div>
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-2 text-center">
+              <div className="text-xl font-bold text-red-600">{adjStats.rejected_today}</div>
+              <div className="text-xs text-red-500">Rejected Today</div>
             </div>
           </div>
 
-          {/* Filter tabs */}
-          <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 dark:[background-color:#1f2937]">
-            {['', 'Pending', 'Approved', 'Rejected'].map(s => (
-              <button key={s || 'all'} onClick={() => { setAdjFilter(s as any); setAdjPage(1) }}
-                className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border-0 ${
-                  adjFilter === s ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300'
-                }`}>
-                {s || 'All'}
-              </button>
-            ))}
+          {/* Filter bar: Search → Status → Refresh */}
+          <div className="flex flex-wrap justify-end gap-3 items-center">
+            {/* Search field */}
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m21 21-4.35-4.35"/></svg>
+              <input
+                type="text"
+                placeholder="Search..."
+                value={adjSearch}
+                onChange={e => { setAdjSearch(e.target.value); debouncedLoadAdjustments(e.target.value) }}
+                className="w-full pl-9 pr-8 py-2.5 border border-gray-300 dark:border-gray-500 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder-gray-400"
+              />
+              {adjSearch && (
+                <button
+                  onClick={() => { setAdjSearch(''); setAdjPage(1); loadAdjustments(1, adjFilter, 10, '') }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer border-0 bg-transparent"
+                  title="Clear"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              )}
+            </div>
+
+            {/* Status */}
+            <select
+              value={adjFilter}
+              onChange={e => { const val = e.target.value as '' | 'Pending' | 'Approved' | 'Rejected'; setAdjFilter(val); setAdjPage(1); loadAdjustments(1, val, 10, adjSearch) }}
+              className="px-3 py-2.5 border border-gray-300 dark:border-gray-500 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+            >
+              <option value="">All</option>
+              <option value="Pending">Pending</option>
+              <option value="Approved">Approved</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+
+            {/* Refresh */}
+            <button
+              onClick={() => loadAdjustments(adjPage, adjFilter, 10, adjSearch)}
+              disabled={adjLoading}
+              className={`p-2 rounded-lg transition border-0 ${adjLoading ? 'text-gray-400 cursor-not-allowed bg-gray-100 dark:bg-gray-700' : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer'}`}
+              title="Refresh"
+            >
+              {adjLoading ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              )}
+            </button>
           </div>
 
           {/* Table */}
@@ -1733,14 +2030,58 @@ export default function AttendancePage() {
             </div>
 
             {/* Pagination */}
-            {adjTotal > 20 && (
-              <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 flex items-center justify-between gap-3">
-                <span className="text-xs text-gray-500">Page {adjPage} of {Math.ceil(adjTotal / 20)}</span>
-                <div className="flex gap-2">
-                  <button onClick={() => setAdjPage(p => Math.max(1, p - 1))} disabled={adjPage <= 1}
-                    className="px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-40 cursor-pointer">Prev</button>
-                  <button onClick={() => setAdjPage(p => p + 1)} disabled={adjPage >= Math.ceil(adjTotal / 20)}
-                    className="px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-40 cursor-pointer">Next</button>
+            {adjTotal > 0 && (
+              <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 flex flex-wrap items-center justify-between gap-3">
+                {/* Left: results count + per-page */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-xs text-gray-500">
+                    Showing <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min((adjPage - 1) * adjLimit + 1, adjTotal)}</span>
+                    {' '}to{' '}
+                    <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min(adjPage * adjLimit, adjTotal)}</span>
+                    {' '}of{' '}
+                    <span className="font-semibold text-gray-700 dark:text-gray-200">{adjTotal}</span>
+                    {' '}results
+                  </span>
+                  <select
+                    value={adjLimit}
+                    onChange={e => { const l = Number(e.target.value); setAdjLimit(l); setAdjPage(1); loadAdjustments(1, adjFilter, l, adjSearch) }}
+                    className="px-2 py-1 border border-gray-300 dark:border-gray-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+
+                {/* Right: page number buttons */}
+                <div className="flex items-center gap-1 flex-wrap">
+                  <button
+                    onClick={() => { const p = Math.max(1, adjPage - 1); setAdjPage(p); loadAdjustments(p, adjFilter, adjLimit, adjSearch) }}
+                    disabled={adjPage <= 1}
+                    className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
+                  >
+                    ‹
+                  </button>
+
+                  {Array.from({ length: Math.ceil(adjTotal / adjLimit) }, (_, i) => i + 1).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => { setAdjPage(p); loadAdjustments(p, adjFilter, adjLimit, adjSearch) }}
+                      className={`min-w-[32px] h-8 flex items-center justify-center rounded-md text-xs font-medium transition cursor-pointer border-0 ${
+                        adjPage === p
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+
+                  <button
+                    onClick={() => { const p = Math.min(Math.ceil(adjTotal / adjLimit), adjPage + 1); setAdjPage(p); loadAdjustments(p, adjFilter, adjLimit, adjSearch) }}
+                    disabled={adjPage >= Math.ceil(adjTotal / adjLimit)}
+                    className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
+                  >
+                    ›
+                  </button>
                 </div>
               </div>
             )}

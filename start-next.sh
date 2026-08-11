@@ -5,7 +5,7 @@ set -e
 
 PROJECT_DIR="/var/www/seravavatar-hub/public_html"
 LOG="/var/log/seravavatar-frontend.log"
-PORT=3006
+PORT=3000
 PATTERN="next start -p $PORT"   # narrow: only our own project
 
 # Kill any existing seravavatar-hub next-server processes

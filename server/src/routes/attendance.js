@@ -563,6 +563,17 @@ router.get('/my-history', async (req, res, next) => {
     const userId = req.user.id;
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
 
+    // toHHMM helper (same as in /history endpoint)
+    const toHHMM = (val, _tz) => {
+      if (!val) return null;
+      if (typeof val === 'string' && /^\d{2}:\d{2}:?\d{0,2}$/.test(val.trim())) {
+        const [h, m] = val.trim().split(':').map(Number);
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+      }
+      const d = _tz ? toTimezone(new Date(val), _tz) : new Date(val);
+      return d.toISOString().slice(11, 16);
+    };
+
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(5, parseInt(req.query.limit) || 14));
     const offset = (page - 1) * limit;
@@ -699,6 +710,53 @@ router.get('/my-history', async (req, res, next) => {
       cur.setDate(cur.getDate() + 1);
     }
 
+    // Fetch break adjustment requests for all attendance records in timeline
+    const attIdsInTimeline = fullTimeline.filter(d => d.attendance_id).map(d => d.attendance_id);
+    let adjustmentsMap = {};
+    if (attIdsInTimeline.length > 0) {
+      const placeholders = attIdsInTimeline.map(() => '?').join(',');
+      const [adjRows] = await pool.query(
+        `SELECT bar.*,
+                ab.start_time as break_start, ab.end_time as break_end, ab.duration_minutes as break_duration,
+                ru.first_name as reviewer_first_name, ru.last_name as reviewer_last_name
+         FROM break_adjustment_requests bar
+         JOIN attendance_breaks ab ON bar.break_id = ab.id
+         LEFT JOIN users ru ON bar.reviewed_by = ru.id
+         WHERE bar.attendance_id IN (${placeholders})
+         ORDER BY bar.created_at ASC`,
+        attIdsInTimeline
+      );
+      for (const adj of adjRows) {
+        if (!adjustmentsMap[adj.attendance_id]) adjustmentsMap[adj.attendance_id] = [];
+        adjustmentsMap[adj.attendance_id].push({
+          id: adj.id,
+          break_id: adj.break_id,
+          requested_minutes: adj.requested_minutes,
+          start_time: adj.start_time,
+          end_time:   adj.end_time,
+          time_start: toHHMM(adj.start_time, tz),
+          time_end:   toHHMM(adj.end_time,   tz),
+          reason: adj.reason,
+          status: adj.status,
+          admin_remarks: adj.admin_remarks,
+          reviewed_at: adj.reviewed_at,
+          reviewed_by: adj.reviewed_by,
+          created_at: adj.created_at,
+          break_time_start: toHHMM(adj.break_start, tz),
+          break_time_end:   toHHMM(adj.break_end,   tz),
+          break_duration: adj.break_duration,
+          reviewer: adj.reviewer_first_name
+            ? { first_name: adj.reviewer_first_name, last_name: adj.reviewer_last_name }
+            : null,
+        });
+      }
+    }
+
+    // Attach adjustments to each timeline entry
+    for (const entry of fullTimeline) {
+      entry.adjustments = entry.attendance_id ? (adjustmentsMap[entry.attendance_id] || []) : [];
+    }
+
     // Compute summary from full timeline
     const totalDays = fullTimeline.length;
     const weekends = fullTimeline.filter(d => d.status === 'weekend').length;
@@ -708,6 +766,8 @@ router.get('/my-history', async (req, res, next) => {
     const absentDays = fullTimeline.filter(d => d.status === 'absent').length;
     const lateCheckins = fullTimeline.filter(d => d.is_late).length;
     const totalBreakMinutes = fullTimeline.reduce((s, d) => s + (d.total_break_minutes || 0), 0);
+    // Break adjustment time: sum of all approved effective_break_minutes in the range
+    const breakAdjustmentMinutes = fullTimeline.reduce((s, d) => s + (d.effective_break_minutes > 0 ? d.effective_break_minutes : 0), 0);
 
     // Working days = days that are NOT weekend AND NOT holiday
     const workingDaysCount = totalDays - weekends - companyHolidays;
@@ -739,6 +799,7 @@ router.get('/my-history', async (req, res, next) => {
         absent_days: absentDays,
         late_checkins: lateCheckins,
         total_break_minutes: totalBreakMinutes,
+        break_adjustment_minutes: breakAdjustmentMinutes,
         total_working_hours: Math.round(totalWorkingHours * 100) / 100,
         average_working_hours: Math.round(averageWorkingHours * 100) / 100,
       },
@@ -1030,7 +1091,7 @@ router.get('/analytics/summary', async (req, res, next) => {
     if (user_id) { userWhere.push('u.id = ?'); userParams.push(user_id); }
 
     const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(5, parseInt(req.query.limit) || 20));
+    const limit = Math.min(100, Math.max(5, parseInt(req.query.limit || req.query.per_page) || 20));
     const offset = (page - 1) * limit;
     const { search } = req.query;
 
@@ -1124,7 +1185,7 @@ router.get('/analytics/summary', async (req, res, next) => {
       const empWorkingDays = countWorkingDays(date_from, date_to, emp.hire_date, workingDays, holidaySet);
 
       const empAtt = attByUser[emp.id] || {};
-      let presentDays = 0, lateCheckins = 0, totalWH = 0, totalBreak = 0;
+      let presentDays = 0, lateCheckins = 0, totalWH = 0, totalBreak = 0, totalBreakAdjustment = 0;
       for (const [ds, dayRec] of Object.entries(empAtt)) {
         if (presentStatuses.includes(dayRec.status)) presentDays++;
         if (dayRec.is_late) lateCheckins++;
@@ -1141,6 +1202,7 @@ router.get('/analytics/summary', async (req, res, next) => {
           if (liveWH != null) totalWH += liveWH;
         }
         totalBreak += Number(dayRec.break_minutes) || 0;
+        totalBreakAdjustment += Math.max(0, (Number(dayRec.total_break_minutes) || 0) - (Number(dayRec.effective_break_minutes) || 0));
       }
 
       // Approved leave overlapping days
@@ -1174,6 +1236,7 @@ router.get('/analytics/summary', async (req, res, next) => {
         late_checkins: lateCheckins,
         total_working_hours: Math.round(totalWH * 100) / 100,
         total_break_minutes: totalBreak,
+        total_break_adjustment_minutes: totalBreakAdjustment,
         average_working_hours: Math.round(avgWH * 100) / 100,
       };
     });
@@ -1814,7 +1877,7 @@ router.get('/break-adjustments', async (req, res, next) => {
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const {
       page = 1, limit = 20,
-      user_id, status, date_from, date_to,
+      user_id, status, date_from, date_to, search,
     } = req.query;
 
     const isAdmin = perms.includes('attendance.break_adjustment.manage');
@@ -1845,6 +1908,11 @@ router.get('/break-adjustments', async (req, res, next) => {
     if (date_to) {
       where.push('a.date <= ?');
       params.push(date_to);
+    }
+    if (search) {
+      where.push('(u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ? OR bar.reason LIKE ?)');
+      const searchTerm = `%${search}%`;
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm);
     }
 
     const whereStr = where.join(' AND ');
@@ -1889,6 +1957,7 @@ router.get('/break-adjustments', async (req, res, next) => {
     const [[{ total }]] = await pool.query(
       `SELECT COUNT(*) as total FROM break_adjustment_requests bar
        JOIN attendance a ON bar.attendance_id = a.id
+       JOIN users u ON bar.user_id = u.id
        WHERE ${whereStr}`,
       params
     );
