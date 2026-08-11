@@ -812,34 +812,16 @@ export default function AttendancePage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Attendance</h1>
-        {canViewTeam && (
-          <div className="flex flex-wrap gap-2 text-xs">
-            {[
-              { label: 'Present Today', value: stats.present_today, color: 'text-emerald-600' },
-              { label: 'Absent Today', value: stats.absent_today, color: 'text-gray-500' },
-              { label: 'Working Now', value: stats.working_now, color: 'text-sky-600' },
-              { label: 'On Break', value: stats.on_break, color: 'text-amber-600' },
-              { label: 'Completed', value: stats.completed_today, color: 'text-indigo-600' },
-              { label: 'Late', value: stats.late_checkins, color: 'text-red-500' },
-            ].map(s => (
-              <div key={s.label}
-                className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-center">
-                <div className={`text-lg font-bold ${s.color}`}>{s.value ?? 0}</div>
-                <div className="text-gray-500 dark:text-gray-400 text-[10px] font-medium">{s.label}</div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Top-level Tabs */}
-      <div className="flex gap-1 bg-gray-100 dark:bg-gray-700/50 rounded-xl p-1 w-fit">
+      <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 dark:[background-color:#1f2937]">
         {topTabs.map(tb => (
           <button key={tb.key} onClick={() => setTab(tb.key)}
-            className={`px-5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer border-0 ${
+            className={`px-4 sm:px-5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer border-0 ${
               tab === tb.key
-                ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300'
             }`}>
             {tb.label}
           </button>
@@ -1095,13 +1077,33 @@ export default function AttendancePage() {
       {/* == TEAM TAB ======================================================== */}
       {/* ====================================================================== */}
       {tab === 'team' && canViewTeam && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-              Team Attendance — {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            </h2>
+        <>
+          {/* Stats cards — only on Team tab */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+            {[
+              { label: 'Present Today', value: stats.present_today, color: 'text-emerald-600' },
+              { label: 'Absent Today', value: stats.absent_today, color: 'text-gray-500' },
+              { label: 'Working Now', value: stats.working_now, color: 'text-sky-600' },
+              { label: 'On Break', value: stats.on_break, color: 'text-amber-600' },
+              { label: 'Completed', value: stats.completed_today, color: 'text-indigo-600' },
+              { label: 'Late', value: stats.late_checkins, color: 'text-red-500' },
+            ].map(s => (
+              <div key={s.label}
+                className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 px-3 sm:px-4 py-2 sm:py-3 text-center">
+                <div className={`text-xl sm:text-2xl font-bold ${s.color}`}>{s.value ?? 0}</div>
+                <div className="text-gray-500 dark:text-gray-400 text-[10px] sm:text-xs font-medium mt-0.5">{s.label}</div>
+              </div>
+            ))}
           </div>
-          <div className="overflow-x-auto">
+
+          {/* Team table */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                Team Attendance — {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </h2>
+            </div>
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
                 <tr>
@@ -1137,7 +1139,8 @@ export default function AttendancePage() {
               </tbody>
             </table>
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       {/* ====================================================================== */}
@@ -1146,20 +1149,20 @@ export default function AttendancePage() {
       {tab === 'reports' && isHRAdmin && (
         <>
           {/* Sub-tabs: Summary / Timeline */}
-          <div className="flex gap-1 bg-gray-100 dark:bg-gray-700/50 rounded-xl p-1 w-fit">
+          <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 dark:[background-color:#1f2937]">
             <button onClick={() => setReportSubTab('summary')}
-              className={`px-5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer border-0 ${
+              className={`px-4 sm:px-5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer border-0 ${
                 reportSubTab === 'summary'
-                  ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300'
               }`}>
               Summary
             </button>
             <button onClick={() => setReportSubTab('timeline')}
-              className={`px-5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer border-0 ${
+              className={`px-4 sm:px-5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer border-0 ${
                 reportSubTab === 'timeline'
-                  ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300'
               }`}>
               Timeline
             </button>
@@ -1637,11 +1640,11 @@ export default function AttendancePage() {
           </div>
 
           {/* Filter tabs */}
-          <div className="flex gap-1 bg-gray-100 dark:bg-gray-700/50 rounded-xl p-1 w-fit">
+          <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 dark:[background-color:#1f2937]">
             {['', 'Pending', 'Approved', 'Rejected'].map(s => (
               <button key={s || 'all'} onClick={() => { setAdjFilter(s as any); setAdjPage(1) }}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border-0 ${
-                  adjFilter === s ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border-0 ${
+                  adjFilter === s ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300'
                 }`}>
                 {s || 'All'}
               </button>

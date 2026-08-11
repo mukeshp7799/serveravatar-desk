@@ -205,7 +205,9 @@ router.get('/view', auth, async (req, res, next) => {
     );
 
     const [anniversaries] = await pool.query(
-      `SELECT id, first_name, last_name, avatar_url, hire_date FROM users
+      `SELECT id, first_name, last_name, avatar_url, hire_date,
+              TIMESTAMPDIFF(YEAR, hire_date, CURDATE()) as years
+       FROM users
        WHERE hire_date IS NOT NULL AND hire_date != '0000-00-00'
        AND MONTH(hire_date) = ? AND status = 'active'
        ORDER BY DAYOFMONTH(hire_date)`,
@@ -252,7 +254,7 @@ router.get('/dashboard', auth, async (req, res, next) => {
 
     const [upcomingAnniversaries] = await pool.query(
       `SELECT id, first_name, last_name, avatar_url, hire_date,
-              TIMESTAMPDIFF(YEAR, hire_date, CURDATE()) + 1 as years
+              TIMESTAMPDIFF(YEAR, hire_date, CURDATE()) as years
        FROM users
        WHERE hire_date IS NOT NULL AND hire_date != '0000-00-00' AND status = 'active'
        AND MONTH(hire_date) = MONTH(CURDATE()) AND DAYOFMONTH(hire_date) >= DAYOFMONTH(CURDATE())

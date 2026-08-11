@@ -286,11 +286,16 @@ export default function LeavesPage() {
 
   // ── Apply for leave ─────────────────────────────────────────
   // ── Minimum selectable date based on company settings ──────
+  // Uses the company's configured timezone (from dateSettings), not the browser's.
+  // getTimezoneOffset() returns the browser's offset in minutes; we convert to ms.
+  // offsetMs is already in ms (getTimezoneOffset * 60 * 1000), so use directly
+  // without multiplying by 60000 again.
   const getMinDate = (): string => {
     const tz = timezone || 'UTC'
     const now = new Date()
+    // getTimezoneOffset returns minutes; * 60 * 1000 converts to ms
     const offsetMs = tz === 'UTC' ? 0 : now.getTimezoneOffset() * 60 * 1000
-    const localNow = new Date(now.getTime() - offsetMs * 60000)
+    const localNow = new Date(now.getTime() - offsetMs)
     if (lv?.allow_backdated_leave) {
       localNow.setDate(localNow.getDate() - 365)
       return localNow.toISOString().split('T')[0]
