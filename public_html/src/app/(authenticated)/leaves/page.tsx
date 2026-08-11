@@ -7,7 +7,15 @@ import api from '@/lib/api'
 import { useDateSettings, useCompanySettings } from '@/contexts/CompanySettingsContext'
 import Tabs from '@/components/Tabs'
 import PageLoader from '@/components/PageLoader'
-import { Calendar, Check, CheckSquare, Clock, Info, Plus, Search, Settings, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
+import {
+  Calendar, Check, CheckSquare, Clock, Info, Plus, Search, Settings,
+  ThumbsDown, ThumbsUp, Trash2, X, MoreHorizontal, ChevronDown,
+  User, Users, Briefcase, Sparkles
+} from 'lucide-react'
+
+// ────────────────────────────────────────────────────────────
+// HELPERS
+// ────────────────────────────────────────────────────────────
 
 function fmtDateDefault(raw: string | null | undefined): string {
   if (!raw) return '—'
@@ -23,61 +31,73 @@ function fmtDateDefault(raw: string | null | undefined): string {
   return s
 }
 
-const BALANCE_ICONS: Record<string, any> = {
-  'Annual Leave':        '🏖️',
-  'Sick Leave':          '🩺',
-  'Casual Leave':        '🌴',
-  'Maternity Leave':    '🤱',
-  'Paternity Leave':     '👔',
-  'Bereavement Leave':   '🕯️',
+function fmtDate(raw: string | null | undefined): string {
+  if (!raw) return '—'
+  const parts = String(raw).split('T')[0].split('-')
+  if (parts.length !== 3) return String(raw)
+  const [y, m, d] = parts.map(Number)
+  if (isNaN(y)) return String(raw)
+  const mm = String(m).padStart(2, '0')
+  const dd = String(d).padStart(2, '0')
+  return `${mm}/${dd}/${y}`
+}
+
+// ────────────────────────────────────────────────────────────
+// CONSTANTS
+// ────────────────────────────────────────────────────────────
+
+const ACCENT = '#4F46E5'
+
+const BALANCE_META: Record<string, { icon: string; color: string; bg: string }> = {
+  'Annual Leave':      { icon: '🏖️', color: 'text-indigo-600',    bg: 'bg-indigo-50' },
+  'Sick Leave':        { icon: '🩺', color: 'text-rose-600',      bg: 'bg-rose-50' },
+  'Casual Leave':      { icon: '🌴', color: 'text-amber-600',     bg: 'bg-amber-50' },
+  'Maternity Leave':   { icon: '🤱', color: 'text-pink-600',      bg: 'bg-pink-50' },
+  'Paternity Leave':   { icon: '👔', color: 'text-blue-600',      bg: 'bg-blue-50' },
+  'Bereavement Leave': { icon: '🕯️', color: 'text-gray-600',     bg: 'bg-gray-50' },
+}
+
+const STATUS_META: Record<string, { label: string; dot: string; bg: string; text: string }> = {
+  approved:  { label: 'Approved',  dot: 'bg-emerald-500', bg: 'bg-emerald-50',  text: 'text-emerald-700' },
+  rejected:  { label: 'Rejected',  dot: 'bg-red-500',     bg: 'bg-red-50',      text: 'text-red-700' },
+  pending:   { label: 'Pending',   dot: 'bg-amber-500',   bg: 'bg-amber-50',    text: 'text-amber-700' },
+  cancelled: { label: 'Cancelled',  dot: 'bg-gray-400',    bg: 'bg-gray-100',     text: 'text-gray-500' },
 }
 
 type Tab = 'my' | 'team' | 'types' | 'allocations'
 
-// ── Leave Warnings Component ──────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────
+// LEAVE WARNINGS
+// ────────────────────────────────────────────────────────────
+
 const DAY_MAP: Record<number, string> = {
   0: 'sun', 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat',
 }
 
 function LeaveWarnings({
-  startDate,
-  endDate,
-  workingDays,
-  maxConsecutive,
+  startDate, endDate, workingDays, maxConsecutive,
 }: {
-  startDate: string
-  endDate: string
-  workingDays: string[]
-  maxConsecutive?: number
+  startDate: string; endDate: string; workingDays: string[]; maxConsecutive?: number
 }) {
   const warnings: string[] = []
   if (!startDate || !endDate) return null
-
   const start = new Date(startDate + 'T00:00:00')
-  const end = new Date(endDate + 'T00:00:00')
-  const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
-
-  if (maxConsecutive && totalDays > maxConsecutive) {
-    warnings.push(`This range spans ${totalDays} days but the maximum allowed is ${maxConsecutive} consecutive days.`)
-  }
-
+  const end   = new Date(endDate   + 'T00:00:00')
+  const totalDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1
+  if (maxConsecutive && totalDays > maxConsecutive)
+    warnings.push(`Range spans ${totalDays} days; max allowed is ${maxConsecutive} consecutive days.`)
   const cur = new Date(start)
   const weekends: string[] = []
   while (cur <= end) {
-    const dow = DAY_MAP[cur.getDay()]!
-    if (!workingDays.includes(dow)) {
+    if (!workingDays.includes(DAY_MAP[cur.getDay()]!))
       weekends.push(cur.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
-    }
     cur.setDate(cur.getDate() + 1)
   }
-  if (weekends.length > 0) {
+  if (weekends.length > 0)
     warnings.push(`Selected range includes weekends: ${[...new Set(weekends)].join(', ')}.`)
-  }
-
   if (warnings.length === 0) return null
-
   return (
-    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 space-y-1.5">
+    <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 px-4 py-3 space-y-2">
       <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
         <Info size={14} className="shrink-0" />
         <span className="text-xs font-semibold">Review before submitting</span>
@@ -89,29 +109,98 @@ function LeaveWarnings({
   )
 }
 
+// ────────────────────────────────────────────────────────────
+// THREE-DOT ACTION MENU
+// ────────────────────────────────────────────────────────────
+
+function ActionMenu({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [open])
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-200 transition cursor-pointer bg-transparent border-0"
+      >
+        <MoreHorizontal size={16} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1 min-w-[140px]">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────
+// PAGINATION
+// ────────────────────────────────────────────────────────────
+
+function PaginationBar({ page, total, limit, onPage }: {
+  page: number; total: number; limit: number; onPage: (p: number) => void
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / limit))
+  if (totalPages <= 1) return null
+  const prev = Math.max(1, page - 1)
+  const next = Math.min(totalPages, page + 1)
+  return (
+    <div className="flex items-center justify-between px-5 py-3.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/50">
+      <span className="text-xs text-gray-400">
+        {total} result{total !== 1 ? 's' : ''}
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPage(prev)}
+          disabled={page <= 1}
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer border-0 bg-transparent"
+        >‹</button>
+        {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+          <button
+            key={p}
+            onClick={() => onPage(p)}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-medium transition cursor-pointer border-0 ${
+              p === page
+                ? 'text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+            style={p === page ? { backgroundColor: ACCENT } : {}}
+          >
+            {p}
+          </button>
+        ))}
+        <button
+          onClick={() => onPage(next)}
+          disabled={page >= totalPages}
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer border-0 bg-transparent"
+        >›</button>
+      </div>
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────
+// MAIN PAGE
+// ────────────────────────────────────────────────────────────
+
 export default function LeavesPage() {
-  const { t } = useTranslation()
-  const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
-  const isHRAdmin = Array.isArray(user.permissions) && (user.permissions.includes('leave.manage_all') || user.permissions.includes('users.edit_all'))
-  const isManager = Array.isArray(user.permissions) && (user.permissions.includes('leave.view_team') || isHRAdmin)
+  const user = typeof window !== 'undefined'
+    ? JSON.parse(localStorage.getItem('user') || '{}') : {}
+  const isHRAdmin = Array.isArray(user.permissions) && (
+    user.permissions.includes('leave.manage_all') || user.permissions.includes('users.edit_all'))
+  const isManager = Array.isArray(user.permissions) && (
+    user.permissions.includes('leave.view_team') || isHRAdmin)
 
   const { settings: companySettings } = useCompanySettings()
   const lv = companySettings?.leave
   const ws = companySettings?.working_schedule
+  const { timezone } = useDateSettings()
 
-  const { timezone, date_format } = useDateSettings();
-  const fmtDateCtx = (raw: string | null | undefined): string => {
-    if (!raw) return '';
-    const parts = String(raw).split('T')[0].split('-');
-    const [y, m, d] = parts.map(Number);
-    if (parts.length !== 3 || isNaN(y)) return String(raw);
-    const pattern = date_format || 'YYYY-MM-DD';
-    return pattern
-      .replace('YYYY', String(y)).replace('YY', String(y).slice(-2))
-      .replace('MM', String(m).padStart(2,'0')).replace('M', String(m))
-      .replace('DD', String(d).padStart(2,'0')).replace('D', String(d));
-  };
-  const fmtDate = fmtDateCtx;
   const [tab, setTab] = useState<Tab>('my')
   const [loading, setLoading] = useState(true)
 
@@ -125,12 +214,8 @@ export default function LeavesPage() {
   // Apply modal
   const [showApply, setShowApply] = useState(false)
   const [applyForm, setApplyForm] = useState({
-    leave_type_id: '',
-    start_date: '',
-    end_date: '',
-    reason: '',
-    half_day: false,
-    half_day_session: 'first_half',
+    leave_type_id: '', start_date: '', end_date: '', reason: '',
+    half_day: false, half_day_session: 'first_half',
   })
   const [applying, setApplying] = useState(false)
 
@@ -139,17 +224,20 @@ export default function LeavesPage() {
   const [rejectingId, setRejectingId] = useState<number | null>(null)
   const [rejectReason, setRejectReason] = useState('')
 
-  // Cancel confirmation modal
+  // Cancel modal
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancellingId, setCancellingId] = useState<number | null>(null)
 
-  // Reseed confirmation modal
+  // Reseed modal
   const [showReseedModal, setShowReseedModal] = useState(false)
 
   // Type modal
   const [showTypeModal, setShowTypeModal] = useState(false)
   const [editType, setEditType] = useState<any>(null)
-  const [typeForm, setTypeForm] = useState({ name: '', code: '', description: '', is_paid: true, default_days: '', max_allowed: '', status: 'active' })
+  const [typeForm, setTypeForm] = useState({
+    name: '', code: '', description: '', is_paid: true,
+    default_days: '', max_allowed: '', status: 'active',
+  })
   const [savingType, setSavingType] = useState(false)
 
   // Allocation modal
@@ -158,31 +246,29 @@ export default function LeavesPage() {
   const [allocForm, setAllocForm] = useState({ allocated_days: '', remark: '' })
   const [savingAlloc, setSavingAlloc] = useState(false)
 
-  // Request filter
+  // Filters
   const [reqFilter, setReqFilter] = useState<'pending' | 'approved' | 'rejected' | 'cancelled' | ''>('')
   const [teamSearch, setTeamSearch] = useState('')
   const [allocSearch, setAllocSearch] = useState('')
   const [allocDept, setAllocDept] = useState('')
   const [allocLeaveType, setAllocLeaveType] = useState('')
-  const [allocPage, setAllocPage] = useState(1)
-  const [allocTotal, setAllocTotal] = useState(0)
-  const ALLOC_LIMIT = 10
 
-  // Pagination: My Requests
+  // Pagination
   const [myReqPage, setMyReqPage] = useState(1)
   const [myReqTotal, setMyReqTotal] = useState(0)
-  const MY_LIMIT = 10
-
-  // Pagination: Team Requests
   const [teamReqPage, setTeamReqPage] = useState(1)
   const [teamReqTotal, setTeamReqTotal] = useState(0)
-  const [teamFilter, setTeamFilter] = useState<'pending' | 'approved' | 'rejected' | 'cancelled' | ''>('')
-  const TEAM_LIMIT = 10
-
-  // Pagination: Leave Types
   const [typesPage, setTypesPage] = useState(1)
   const [typesTotal, setTypesTotal] = useState(0)
+  const [allocPage, setAllocPage] = useState(1)
+  const [allocTotal, setAllocTotal] = useState(0)
+
+  const MY_LIMIT = 10
+  const TEAM_LIMIT = 10
   const TYPES_LIMIT = 10
+  const ALLOC_LIMIT = 10
+
+  // ── Data loading ──────────────────────────────────────────
 
   const loadAll = () => {
     setLoading(true)
@@ -197,21 +283,20 @@ export default function LeavesPage() {
   }
 
   const loadMyRequests = (page = 1) => {
-    const params = new URLSearchParams({ page: String(page), limit: String(MY_LIMIT) })
-    params.set('userId', String(user.id))
-    api.get(`/leaves?${params.toString()}`).then(d => {
+    const params = new URLSearchParams({ page: String(page), limit: String(MY_LIMIT), userId: String(user.id) })
+    api.get(`/leaves?${params}`).then(d => {
       setRequests(d.leaveRequests || [])
       setMyReqTotal(d.pagination?.total || 0)
       setMyReqPage(page)
     }).catch(() => {})
   }
 
-  const loadTeamRequests = (page = 1, filter = teamFilter) => {
+  const loadTeamRequests = (page = 1, filter = reqFilter) => {
     const params = new URLSearchParams({ page: String(page), limit: String(TEAM_LIMIT) })
     if (filter) params.set('status', filter)
     if (teamSearch) params.set('search', teamSearch)
     Promise.all([
-      api.get(`/leaves?${params.toString()}`),
+      api.get(`/leaves?${params}`),
       api.get('/departments'),
     ]).then(([d, deptsData]) => {
       setRequests(d.leaveRequests || [])
@@ -223,36 +308,38 @@ export default function LeavesPage() {
 
   const loadLeaveTypes = (page = 1) => {
     const params = new URLSearchParams({ page: String(page), limit: String(TYPES_LIMIT) })
-    api.get(`/leaves/types?${params.toString()}`).then(d => {
+    api.get(`/leaves/types?${params}`).then(d => {
       setLeaveTypes(d.leaveTypes || [])
       setTypesTotal(d.pagination?.total || 0)
       setTypesPage(page)
     }).catch(() => {})
   }
 
-  // Reload the current tab's data after a mutation
+  const fetchAllAllocs = (page = 1) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(ALLOC_LIMIT) })
+    if (allocSearch) params.set('search', allocSearch)
+    if (allocDept) params.set('departmentId', allocDept)
+    if (allocLeaveType) params.set('leaveTypeId', allocLeaveType)
+    api.get(`/leaves/allocations?${params}`).then(d => {
+      setAllAllocations(d.allocations || [])
+      setAllocTotal(d.pagination?.total || 0)
+    }).catch(() => {})
+  }
+
   const reloadCurrentTab = () => {
-    if (tab === 'my') {
-      loadMyRequests(myReqPage)
-    } else if (tab === 'team') {
-      loadTeamRequests(teamReqPage, teamFilter)
-    } else if (tab === 'types') {
-      loadLeaveTypes(typesPage)
-    } else if (tab === 'allocations') {
-      fetchAllAllocs(allocPage)
-    }
+    if (tab === 'my') loadMyRequests(myReqPage)
+    else if (tab === 'team') loadTeamRequests(teamReqPage, reqFilter)
+    else if (tab === 'types') loadLeaveTypes(typesPage)
+    else if (tab === 'allocations') fetchAllAllocs(allocPage)
     loadAll()
   }
 
-  useEffect(() => { loadAll() }, [tab])
+  useEffect(() => { loadAll() }, [])
 
   useEffect(() => {
-    if (tab === 'my') {
-      loadMyRequests(1)
-    } else if (tab === 'team') {
-      setTeamFilter('')
-      loadTeamRequests(1, '')
-    } else if (tab === 'types') {
+    if (tab === 'my') loadMyRequests(1)
+    else if (tab === 'team') { setReqFilter(''); loadTeamRequests(1, '') }
+    else if (tab === 'types') {
       loadLeaveTypes(1)
       api.get('/departments').then(d => setDepartments(d.departments || [])).catch(() => {})
     } else if (tab === 'allocations') {
@@ -268,52 +355,31 @@ export default function LeavesPage() {
   }, [tab])
 
   useEffect(() => {
-    if (tab === 'allocations') {
-      fetchAllAllocs(allocPage)
-    }
-  }, [tab, allocSearch, allocDept, allocLeaveType, allocPage])
+    if (tab === 'allocations') fetchAllAllocs(allocPage)
+  }, [allocSearch, allocDept, allocLeaveType, allocPage])
 
-  const fetchAllAllocs = (page = 1) => {
-    const params = new URLSearchParams({ page: String(page), limit: String(ALLOC_LIMIT) })
-    if (allocSearch) params.set('search', allocSearch)
-    if (allocDept) params.set('departmentId', allocDept)
-    if (allocLeaveType) params.set('leaveTypeId', allocLeaveType)
-    api.get(`/leaves/allocations?${params.toString()}`).then(d => {
-      setAllAllocations(d.allocations || [])
-      setAllocTotal(d.pagination?.total || 0)
-    }).catch(() => {})
-  }
+  // ── Leave apply ────────────────────────────────────────────
 
-  // ── Apply for leave ─────────────────────────────────────────
-  // ── Minimum selectable date based on company settings ──────
-  // Uses the company's configured timezone (from dateSettings), not the browser's.
-  // getTimezoneOffset() returns the browser's offset in minutes; we convert to ms.
-  // offsetMs is already in ms (getTimezoneOffset * 60 * 1000), so use directly
-  // without multiplying by 60000 again.
   const getMinDate = (): string => {
     const tz = timezone || 'UTC'
     const now = new Date()
-    // getTimezoneOffset returns minutes; * 60 * 1000 converts to ms
-    const offsetMs = tz === 'UTC' ? 0 : now.getTimezoneOffset() * 60 * 1000
+    const offsetMs = tz === 'UTC' ? 0 : now.getTimezoneOffset() * 60000
     const localNow = new Date(now.getTime() - offsetMs)
     if (lv?.allow_backdated_leave) {
       localNow.setDate(localNow.getDate() - 365)
       return localNow.toISOString().split('T')[0]
     }
-    const minDays = Number(lv?.minimum_leave_notice_days) || 0
-    localNow.setDate(localNow.getDate() + minDays)
+    localNow.setDate(localNow.getDate() + (Number(lv?.minimum_leave_notice_days) || 0))
     return localNow.toISOString().split('T')[0]
   }
 
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!applyForm.leave_type_id || !applyForm.start_date || !applyForm.end_date) {
-      toast.error('Please fill in all required fields')
-      return
+      toast.error('Please fill in all required fields'); return
     }
     if (applyForm.half_day && applyForm.start_date !== applyForm.end_date) {
-      toast.error('Half-day leave must have the same start and end date.')
-      return
+      toast.error('Half-day leave must have the same start and end date.'); return
     }
     setApplying(true)
     try {
@@ -328,16 +394,13 @@ export default function LeavesPage() {
       toast.success(res.message || 'Leave request submitted')
       setShowApply(false)
       setApplyForm({ leave_type_id: '', start_date: '', end_date: '', reason: '', half_day: false, half_day_session: 'first_half' })
-      loadAll()
-      loadMyRequests(1)
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to submit')
-    } finally {
-      setApplying(false)
-    }
+      loadAll(); loadMyRequests(1)
+    } catch (err: any) { toast.error(err.message || 'Failed to submit') }
+    finally { setApplying(false) }
   }
 
-  // ── Leave type management ───────────────────────────────────
+  // ── Leave type management ──────────────────────────────────
+
   const openAddType = () => {
     setEditType(null)
     setTypeForm({ name: '', code: '', description: '', is_paid: true, default_days: '', max_allowed: '', status: 'active' })
@@ -347,8 +410,10 @@ export default function LeavesPage() {
     setEditType(lt)
     setTypeForm({
       name: lt.name || '', code: lt.code || '', description: lt.description || '',
-      is_paid: Boolean(lt.is_paid), default_days: String(lt.default_days || ''),
-      max_allowed: String(lt.max_allowed || ''), status: lt.status || 'active',
+      is_paid: Boolean(lt.is_paid),
+      default_days: String(lt.default_days || ''),
+      max_allowed: String(lt.max_allowed || ''),
+      status: lt.status || 'active',
     })
     setShowTypeModal(true)
   }
@@ -358,13 +423,10 @@ export default function LeavesPage() {
     setSavingType(true)
     try {
       const payload = {
-        name: typeForm.name,
-        code: typeForm.code || null,
-        description: typeForm.description || null,
-        is_paid: typeForm.is_paid,
+        name: typeForm.name, code: typeForm.code || null,
+        description: typeForm.description || null, is_paid: typeForm.is_paid,
         default_days: parseInt(typeForm.default_days) || 0,
-        max_allowed: parseInt(typeForm.max_allowed) || 0,
-        status: typeForm.status,
+        max_allowed: parseInt(typeForm.max_allowed) || 0, status: typeForm.status,
       }
       if (editType) {
         await api.put(`/leaves/types/${editType.id}`, payload)
@@ -373,34 +435,18 @@ export default function LeavesPage() {
         await api.post('/leaves/types', payload)
         toast.success('Leave type created')
       }
-      setShowTypeModal(false)
-      loadAll()
+      setShowTypeModal(false); loadAll()
     } catch (err: any) { toast.error(err.message || 'Failed') }
     finally { setSavingType(false) }
   }
   const handleDeleteType = async (id: number) => {
     if (!confirm('Delete this leave type?')) return
-    try {
-      await api.delete(`/leaves/types/${id}`)
-      toast.success('Deleted')
-      loadAll()
-    } catch (err: any) { toast.error(err.message || 'Failed') }
-  }
-  const handleSeedAll = () => {
-    setShowReseedModal(true)
+    try { await api.delete(`/leaves/types/${id}`); toast.success('Deleted'); loadAll() }
+    catch (err: any) { toast.error(err.message || 'Failed') }
   }
 
-  const confirmReseed = async () => {
-    setShowReseedModal(false)
-    try {
-      const res = await api.post('/leaves/allocations/seed', {})
-      toast.success(res.message || 'Seeded')
-      loadAll()
-      if (tab === 'allocations') fetchAllAllocs()
-    } catch (err: any) { toast.error(err.message || 'Failed') }
-  }
+  // ── Allocation management ──────────────────────────────────
 
-  // ── Allocation management ───────────────────────────────────
   const openAllocModal = (alloc: any) => {
     setEditAlloc(alloc)
     setAllocForm({ allocated_days: String(alloc.allocated_days), remark: alloc.remark || '' })
@@ -416,82 +462,68 @@ export default function LeavesPage() {
         remark: allocForm.remark || null,
       })
       toast.success('Allocation updated')
-      setShowAllocModal(false)
-      fetchAllAllocs(allocPage)
-      loadAll()
+      setShowAllocModal(false); fetchAllAllocs(allocPage); loadAll()
     } catch (err: any) { toast.error(err.message || 'Failed') }
     finally { setSavingAlloc(false) }
   }
 
-  // ── Request actions ──────────────────────────────────────────
+  // ── Request actions ────────────────────────────────────────
+
   const handleApprove = async (id: number, action: 'approved' | 'rejected') => {
-    if (action === 'rejected') {
-      setRejectingId(id)
-      setRejectReason('')
-      setShowRejectModal(true)
-      return
-    }
+    if (action === 'rejected') { setRejectingId(id); setRejectReason(''); setShowRejectModal(true); return }
     try {
       await api.put(`/leaves/${id}/approve`, { action })
-      toast.success(`Leave request ${action}`)
-      loadAll()
-      reloadCurrentTab()
+      toast.success(`Leave request ${action}`); loadAll(); reloadCurrentTab()
     } catch (err: any) { toast.error(err.message || 'Failed') }
   }
-
   const handleRejectConfirm = async () => {
     if (rejectingId === null) return
     try {
       await api.put(`/leaves/${rejectingId}/approve`, { action: 'rejected', rejection_reason: rejectReason })
       toast.success('Leave request rejected')
-      setShowRejectModal(false)
-      setRejectingId(null)
-      setRejectReason('')
-      loadAll()
-      reloadCurrentTab()
+      setShowRejectModal(false); setRejectingId(null); setRejectReason('')
+      loadAll(); reloadCurrentTab()
     } catch (err: any) { toast.error(err.message || 'Failed') }
   }
-
-  // Confirm cancel from modal
+  const handleCancel = async (id: number) => {
+    try {
+      await api.put(`/leaves/${id}/cancel`, {})
+      toast.success('Request cancelled'); loadAll(); reloadCurrentTab()
+    } catch (err: any) { toast.error(err.message || 'Failed') }
+  }
   const confirmCancel = async () => {
     if (cancellingId === null) return
     try {
       await api.put(`/leaves/${cancellingId}/cancel`, {})
       toast.success('Request cancelled')
-      setShowCancelModal(false)
-      setCancellingId(null)
-      loadAll()
-      reloadCurrentTab()
+      setShowCancelModal(false); setCancellingId(null); loadAll(); reloadCurrentTab()
     } catch (err: any) { toast.error(err.message || 'Failed') }
   }
 
-  const handleCancel = async (id: number) => {
-    // Confirmation is handled by the cancel modal
+  const confirmReseed = async () => {
+    setShowReseedModal(false)
     try {
-      await api.put(`/leaves/${id}/cancel`, {})
-      toast.success('Request cancelled')
-      loadAll()
-      reloadCurrentTab()
+      const res = await api.post('/leaves/allocations/seed', {})
+      toast.success(res.message || 'Seeded'); loadAll()
+      if (tab === 'allocations') fetchAllAllocs()
     } catch (err: any) { toast.error(err.message || 'Failed') }
   }
+
+  // ── Helpers ────────────────────────────────────────────────
 
   const statusBadge = (s: string) => {
-    const map: Record<string, string> = {
-      approved: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700',
-      rejected: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700',
-      pending: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700',
-      cancelled: 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:border-gray-600',
-    }
+    const m = STATUS_META[s] || STATUS_META.pending
     return (
-      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${map[s] || map.pending}`}>
-        {s.charAt(0).toUpperCase() + s.slice(1)}
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${m.bg} ${m.text}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${m.dot}`} />
+        {m.label}
       </span>
     )
   }
 
-  const filteredRequests = requests.filter(r => !reqFilter || r.status === reqFilter)
+  const filteredRequests = reqFilter ? requests.filter(r => r.status === reqFilter) : requests
+  const myRequests = filteredRequests.filter(r => r.user_id === user.id)
 
-  // Tabs
   const tabs: { key: Tab; label: string }[] = [
     { key: 'my', label: 'My Leave' },
     ...(isManager ? [{ key: 'team' as Tab, label: 'Team Requests' }] : []),
@@ -501,831 +533,1019 @@ export default function LeavesPage() {
     ] : []),
   ]
 
-  const activeTab = tabs.find(x => x.key === tab) ? tab : 'my'
+  // ──────────────────────────────────────────────────────────
+  // RENDER
+  // ──────────────────────────────────────────────────────────
 
-  
-  // ── Unified Pagination Bar ──────────────────────────────────
-  const PaginationBar = ({ page, total, limit, onPage }: { page: number; total: number; limit: number; onPage: (p: number) => void }) => {
-    const totalPages = Math.ceil(total / limit) || 1
-    const start = Math.min((page - 1) * limit + 1, total)
-    const end = Math.min(page * limit, total)
-    const pages = Array.from({ length: totalPages }, (_, i) => i + 1)
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-gray-900">
 
-    return (
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-100 dark:bg-gray-700/50 rounded-b-xl">
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          Showing {start}–{end} of {total}
-        </p>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => onPage(page - 1)}
-            disabled={page <= 1}
-            className="flex items-center justify-center w-7 h-7 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-xs"
-          >
-            ‹
-          </button>
-          {pages.map(p => (
+      {/* ── PAGE WRAPPER ──────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+        {/* ── PAGE HEADER ─────────────────────────────────── */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+              Leave Management
+            </h1>
+            <p className="text-sm text-gray-500 mt-0.5">Manage leave requests, types, and allocations</p>
+          </div>
+          <div className="flex items-center gap-2.5">
+            {isHRAdmin && (
+              <button
+                onClick={() => setShowReseedModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl border border-gray-200 dark:border-gray-700 transition cursor-pointer"
+              >
+                <Sparkles size={14} /> Re-seed Allocations
+              </button>
+            )}
             <button
-              key={p}
-              onClick={() => onPage(p)}
-              className={`flex items-center justify-center w-7 h-7 rounded-lg text-xs font-semibold cursor-pointer border ${
-                p === page
-                  ? 'bg-indigo-600 text-white border-indigo-600'
-                  : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
-              }`}
+              onClick={() => setShowApply(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-xl transition cursor-pointer border-0"
+              style={{ backgroundColor: ACCENT }}
             >
-              {p}
+              <Plus size={14} /> Apply for Leave
             </button>
-          ))}
-          <button
-            onClick={() => onPage(page + 1)}
-            disabled={page >= totalPages}
-            className="flex items-center justify-center w-7 h-7 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-xs"
-          >
-            ›
-          </button>
+          </div>
         </div>
-      </div>
-    )
-  }
 
-return (
-    <div className="w-full px-4 py-6 space-y-5 animate-fade-in-up">
+        {/* ── TABS ─────────────────────────────────────────── */}
+        <Tabs
+          active={tab}
+          onChange={k => setTab(k as Tab)}
+          tabs={tabs}
+          className="!bg-white dark:!bg-gray-800"
+        />
 
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Leave Management</h1>
-        <div className="flex items-center gap-2">
-          {isHRAdmin && (
-            <button onClick={handleSeedAll}
-              className="px-4 py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-xl transition cursor-pointer border border-gray-200 dark:border-gray-600">
-              🔄 Re-seed All Allocations
-            </button>
-          )}
-          <button onClick={() => setShowApply(true)}
-            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition cursor-pointer border-none flex items-center gap-2">
-            <Plus size={14} /> Apply for Leave
-          </button>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <Tabs
-        active={activeTab}
-        onChange={k => setTab(k as Tab)}
-        tabs={tabs}
-      />
-
-      {/* ── MY LEAVE TAB ─────────────────────────────────────── */}
-      {tab === 'my' && (
-        <>
-          {/* Balance cards */}
-          {loading ? <PageLoader /> : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {allocations.length === 0 && (
-                <div className="col-span-full bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center text-gray-400 dark:text-gray-500">
-                  No leave allocations found. Contact HR.
-                </div>
-              )}
-              {allocations.map((a: any) => (
-                <div key={a.id}
-                  className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 hover:shadow-md transition">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="text-2xl">{BALANCE_ICONS[a.leave_type_name] || '📋'}</div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.is_paid ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
-                      {a.is_paid ? 'Paid' : 'Unpaid'}
-                    </span>
-                  </div>
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">{a.leave_type_name}</h3>
-                  {a.leave_type_code && <p className="text-xs text-gray-400 mb-4">{a.leave_type_code}</p>}
-
-                  {/* 3-column stat */}
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    <div className="text-center bg-gray-50 dark:bg-gray-700/50 rounded-lg py-2">
-                      <div className="text-lg font-bold text-gray-900 dark:text-white">{a.allocated_days}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">Allocated</div>
-                    </div>
-                    <div className="text-center bg-red-50 dark:bg-red-900/20 rounded-lg py-2">
-                      <div className="text-lg font-bold text-red-600 dark:text-red-400">{a.used}</div>
-                      <div className="text-xs text-red-500 dark:text-red-400">Used</div>
-                    </div>
-                    <div className="text-center bg-emerald-50 dark:bg-emerald-900/20 rounded-lg py-2">
-                      <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{a.available}</div>
-                      <div className="text-xs text-emerald-600 dark:text-emerald-400">Available</div>
-                    </div>
-                  </div>
-
-                  {a.max_allowed > 0 && (
-                    <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 mt-2">
-                      <div className="h-full rounded-full bg-indigo-500"
-                        style={{ width: `${Math.min(100, (a.used / a.allocated_days) * 100)}%` }} />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* My requests */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white">My Leave Requests</h2>
-            </div>
-            {filteredRequests.filter(r => r.user_id === user.id).length === 0 ? (
-              <div className="p-10 text-center text-gray-400 dark:text-gray-500 text-sm">No leave requests yet.</div>
+        {/* ═══════════════════════════════════════════════════ */}
+        {/* ── MY LEAVE TAB ─────────────────────────────────── */}
+        {/* ═══════════════════════════════════════════════════ */}
+        {tab === 'my' && (
+          <>
+            {/* ── BALANCE CARDS ─────────────────────────────── */}
+            {loading ? (
+              <div className="flex items-center justify-center py-20"><PageLoader /></div>
+            ) : allocations.length === 0 ? (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-12 text-center">
+                <div className="text-4xl mb-3">📋</div>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">No leave allocations found. Contact HR.</p>
+              </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 dark:bg-gray-700/50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Type</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Period</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Days</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Applied</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {filteredRequests.filter(r => r.user_id === user.id).map((r: any) => {
-                      const days = r.days
-                      return (
-                        <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                          <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{r.leave_type_name}</td>
-                          <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{fmtDate(r.start_date)} → {fmtDate(r.end_date)}</td>
-                          <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{days}d</td>
-                          <td className="px-4 py-3">{statusBadge(r.status)}</td>
-                          <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs">{fmtDate(r.created_at)}</td>
-                          <td className="px-4 py-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {allocations.map((a: any) => {
+                  const meta = BALANCE_META[a.leave_type_name] || { icon: '📋', color: 'text-gray-600', bg: 'bg-gray-50' }
+                  const usagePct = a.allocated_days > 0
+                    ? Math.min(100, Math.round((a.used / a.allocated_days) * 100))
+                    : 0
+                  const isPaid = a.is_paid
+                  return (
+                    <div key={a.id}
+                      className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 hover:shadow-md transition-shadow"
+                    >
+                      {/* Card header */}
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="text-2xl">{meta.icon}</div>
+                          <div>
+                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{a.leave_type_name}</h3>
+                            {a.leave_type_code && (
+                              <p className="text-xs text-gray-400 mt-0.5">{a.leave_type_code}</p>
+                            )}
+                          </div>
+                        </div>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          isPaid
+                            ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                            : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                        }`}>
+                          {isPaid ? 'Paid' : 'Unpaid'}
+                        </span>
+                      </div>
+
+                      {/* Stats grid */}
+                      <div className="grid grid-cols-3 gap-2 mb-4">
+                        {[
+                          { label: 'Allocated', value: a.allocated_days, color: 'text-gray-900 dark:text-white', bg: 'bg-gray-50 dark:bg-gray-700/50' },
+                          { label: 'Used',      value: a.used,           color: 'text-red-600 dark:text-red-400',   bg: 'bg-red-50 dark:bg-red-900/20' },
+                          { label: 'Available', value: a.available,     color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+                        ].map(({ label, value, color, bg }) => (
+                          <div key={label} className={`rounded-xl px-3 py-2.5 text-center ${bg}`}>
+                            <div className={`text-lg font-bold ${color}`}>{value}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Progress bar */}
+                      {a.allocated_days > 0 && (
+                        <div>
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-xs text-gray-500">Usage</span>
+                            <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">{usagePct}%</span>
+                          </div>
+                          <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${usagePct}%`,
+                                backgroundColor: usagePct > 80 ? '#ef4444' : usagePct > 50 ? '#f59e0b' : ACCENT,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* ── MY REQUESTS TABLE ─────────────────────────── */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              {/* Table header */}
+              <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-900 dark:text-white">My Leave Requests</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {myReqTotal > 0 ? `${myReqTotal} total request${myReqTotal !== 1 ? 's' : ''}` : 'No requests'}
+                  </p>
+                </div>
+                {/* Status filter */}
+                <div className="relative">
+                  <select
+                    value={reqFilter}
+                    onChange={e => { setReqFilter(e.target.value as any); setMyReqPage(1) }}
+                    className="appearance-none pl-3 pr-8 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition"
+                    style={{ colorScheme: 'normal' }}
+                  >
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                  <ChevronDown size={12}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Table */}
+              {myRequests.length === 0 ? (
+                <div className="px-5 py-14 text-center">
+                  <div className="text-3xl mb-2">📭</div>
+                  <p className="text-sm text-gray-400 dark:text-gray-500">No leave requests found</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-700">
+                        {['Type', 'Period', 'Days', 'Status', 'Applied On', ''].map(h => (
+                          <th key={h}
+                            className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap first:pl-5 last:pr-5">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-700/60">
+                      {myRequests.map((r: any) => (
+                        <tr key={r.id} className="hover:bg-slate-50/70 dark:hover:bg-gray-700/30 transition-colors">
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm font-medium text-gray-900 dark:text-white">{r.leave_type_name}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                              {fmtDateDefault(r.start_date)} → {fmtDateDefault(r.end_date)}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm font-semibold" style={{ color: ACCENT }}>{r.days}d</span>
+                          </td>
+                          <td className="px-5 py-3.5">{statusBadge(r.status)}</td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-xs text-gray-400">{fmtDateDefault(r.created_at)}</span>
+                          </td>
+                          <td className="px-5 py-3.5 text-right">
                             {r.status === 'pending' && (
-                              <button onClick={() => { setCancellingId(r.id); setShowCancelModal(true) }}
-                                className="text-xs text-red-500 hover:text-red-700 font-medium bg-transparent border-0 cursor-pointer">
-                                Cancel
-                              </button>
+                              <ActionMenu>
+                                <button
+                                  onClick={() => { setCancellingId(r.id); setShowCancelModal(true) }}
+                                  className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition cursor-pointer bg-transparent border-0"
+                                >
+                                  Cancel Request
+                                </button>
+                              </ActionMenu>
                             )}
                             {r.status === 'cancelled' && (
-                              <span className="text-xs text-gray-400 font-medium border border-dashed border-gray-300 px-2 py-0.5 rounded">
-                                Cancelled
-                              </span>
+                              <span className="text-xs text-gray-400">—</span>
                             )}
                             {(r.status === 'approved' || r.status === 'rejected') && (
-                              <span className="text-xs text-gray-400 font-medium border border-dashed border-gray-300 px-2 py-0.5 rounded">
-                                —
-                              </span>
+                              <span className="text-xs text-gray-400">—</span>
                             )}
                           </td>
                         </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
               <PaginationBar
                 page={myReqPage}
                 total={myReqTotal}
                 limit={MY_LIMIT}
-                onPage={(p) => loadMyRequests(p)}
+                onPage={p => { setMyReqPage(p); loadMyRequests(p) }}
               />
-          </div>
-        </>
-      )}
+            </div>
+          </>
+        )}
 
-      {/* ── TEAM REQUESTS TAB ─────────────────────────────────── */}
-      {tab === 'team' && (
-        <>
-          {/* Search + Filters Card */}
-          <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-gray-800 dark:to-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800/30 p-4 mb-4">
-            {/* Search Row */}
-            <div className="flex items-center gap-3 mb-3">
-              <div className="relative flex-1">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                  <Search size={16} />
-                </div>
+        {/* ═══════════════════════════════════════════════════ */}
+        {/* ── TEAM REQUESTS TAB ─────────────────────────────── */}
+        {/* ═══════════════════════════════════════════════════ */}
+        {tab === 'team' && (
+          <>
+            {/* Search + Filter bar */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-5 py-4 flex flex-wrap gap-3 items-center">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search by name or email..."
                   value={teamSearch}
                   onChange={e => { setTeamSearch(e.target.value); setTeamReqPage(1) }}
-                  onKeyDown={e => e.key === 'Enter' && loadTeamRequests(1, teamFilter)}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-300 shadow-sm"
+                  onKeyDown={e => e.key === 'Enter' && loadTeamRequests(1, reqFilter)}
+                  className="w-full pl-9 pr-4 py-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition placeholder-gray-400"
+                  style={{ '--tw-ring-color': ACCENT } as any}
                 />
               </div>
+              {/* Status pills */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {['', 'pending', 'approved', 'rejected', 'cancelled'].map(s => (
+                  <button key={s}
+                    onClick={() => { setReqFilter(s as any); loadTeamRequests(1, s as any) }}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border-0 ${
+                      reqFilter === s
+                        ? 'text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                    style={reqFilter === s ? { backgroundColor: ACCENT } : {}}
+                  >
+                    {s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All'}
+                  </button>
+                ))}
+              </div>
               <button
-                onClick={() => loadTeamRequests(1, teamFilter)}
-                className="px-5 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition cursor-pointer border-none shadow-sm whitespace-nowrap"
+                onClick={() => loadTeamRequests(1, reqFilter)}
+                className="px-4 py-2 text-xs font-semibold text-white rounded-xl transition cursor-pointer border-0"
+                style={{ backgroundColor: ACCENT }}
               >
                 Search
               </button>
             </div>
-            {/* Filter Tabs */}
-            <div className="flex flex-wrap gap-2">
-              {['', 'pending', 'approved', 'rejected', 'cancelled'].map(s => (
-                <button key={s} onClick={() => { setTeamFilter(s as any); loadTeamRequests(1, s as any) }}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border ${
-                    teamFilter === s
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                      : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30'
-                  }`}>
-                  {s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All'}
-                </button>
-              ))}
-            </div>
-          </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-700/50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Employee</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Period</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Days</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Reason</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {filteredRequests.map((r: any) => {
-                    const days = r.days
-                    const isOwn = r.user_id === user.id
-                    return (
-                      <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-gray-900 dark:text-white">{r.first_name} {r.last_name}</div>
-                          <div className="text-xs text-gray-400">{r.email}</div>
-                        </td>
-                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{r.leave_type_name}</td>
-                        <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{fmtDate(r.start_date)} → {fmtDate(r.end_date)}</td>
-                        <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{days}d</td>
-                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400 max-w-[200px] truncate">{r.reason || '—'}</td>
-                        <td className="px-4 py-3">{statusBadge(r.status)}</td>
-                        <td className="px-4 py-3">
-                          {r.status === 'pending' && (
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => handleApprove(r.id, 'approved')}
-                                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition cursor-pointer border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700">
-                                <ThumbsUp size={11} /> Approve
-                              </button>
-                              <button onClick={() => handleApprove(r.id, 'rejected')}
-                                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-700 rounded-lg transition cursor-pointer border border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700">
-                                <ThumbsDown size={11} /> Reject
-                              </button>
-                              {!isOwn && (
-                                <button onClick={() => { setCancellingId(r.id); setShowCancelModal(true) }}
-                                  className="text-xs text-gray-500 hover:text-red-600 font-medium bg-transparent border-0 cursor-pointer ml-1">
-                                  Cancel
-                                </button>
-                              )}
-                            </div>
-                          )}
-                          {r.status === 'cancelled' && (
-                            <span className="text-xs text-gray-400 font-medium border border-dashed border-gray-300 px-2 py-0.5 rounded">
-                              Cancelled
-                            </span>
-                          )}
-                          {r.status === 'approved' && !isOwn && (
-                            <button onClick={() => { setCancellingId(r.id); setShowCancelModal(true) }}
-                              className="text-xs text-red-500 hover:text-red-700 font-medium bg-transparent border-0 cursor-pointer">
-                              Cancel
-                            </button>
-                          )}
-                          {(r.status === 'approved' && isOwn) || r.status === 'rejected' ? (
-                            <span className="text-xs text-gray-400 font-medium border border-dashed border-gray-300 px-2 py-0.5 rounded">
-                              —
-                            </span>
-                          ) : null}
-                        </td>
+            {/* Table */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              {filteredRequests.length === 0 ? (
+                <div className="px-5 py-14 text-center">
+                  <div className="text-3xl mb-2">🔍</div>
+                  <p className="text-sm text-gray-400 dark:text-gray-500">No requests found</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-700">
+                        {['Employee', 'Type', 'Period', 'Days', 'Reason', 'Status', ''].map(h => (
+                          <th key={h}
+                            className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap first:pl-5 last:pr-5">
+                            {h}
+                          </th>
+                        ))}
                       </tr>
-                    )
-                  })}
-                  {filteredRequests.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500">No requests found.</td></tr>
-                  )}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-700/60">
+                      {filteredRequests.map((r: any) => {
+                        const isOwn = r.user_id === user.id
+                        return (
+                          <tr key={r.id} className="hover:bg-slate-50/70 dark:hover:bg-gray-700/30 transition-colors">
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
+                                  <User size={14} className="text-indigo-500" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900 dark:text-white">{r.first_name} {r.last_name}</div>
+                                  <div className="text-xs text-gray-400">{r.email}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{r.leave_type_name}</span>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                                {fmtDateDefault(r.start_date)} → {fmtDateDefault(r.end_date)}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className="text-sm font-semibold" style={{ color: ACCENT }}>{r.days}d</span>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className="text-sm text-gray-500 dark:text-gray-400 max-w-[160px] truncate block">
+                                {r.reason || '—'}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5">{statusBadge(r.status)}</td>
+                            <td className="px-5 py-3.5 text-right">
+                              {r.status === 'pending' && (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => handleApprove(r.id, 'approved')}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white rounded-lg transition cursor-pointer border-0"
+                                    style={{ backgroundColor: '#16a34a' }}
+                                  >
+                                    <ThumbsUp size={11} /> Approve
+                                  </button>
+                                  <button
+                                    onClick={() => handleApprove(r.id, 'rejected')}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white rounded-lg transition cursor-pointer border-0"
+                                    style={{ backgroundColor: '#dc2626' }}
+                                  >
+                                    <ThumbsDown size={11} /> Reject
+                                  </button>
+                                </div>
+                              )}
+                              {r.status === 'cancelled' && (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
+                              {(r.status === 'approved' || r.status === 'rejected') && (
+                                !isOwn ? (
+                                  <ActionMenu>
+                                    <button
+                                      onClick={() => { setCancellingId(r.id); setShowCancelModal(true) }}
+                                      className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition cursor-pointer bg-transparent border-0"
+                                    >
+                                      Cancel Request
+                                    </button>
+                                  </ActionMenu>
+                                ) : <span className="text-xs text-gray-400">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               <PaginationBar
                 page={teamReqPage}
                 total={teamReqTotal}
                 limit={TEAM_LIMIT}
-                onPage={(p) => loadTeamRequests(p, teamFilter)}
+                onPage={p => { setTeamReqPage(p); loadTeamRequests(p, reqFilter) }}
               />
             </div>
-          </div>
-        </>
-      )}
+          </>
+        )}
 
-      {/* ── LEAVE TYPES TAB (HR Admin) ──────────────────────── */}
-      {tab === 'types' && isHRAdmin && (
-        <>
-          <div className="flex justify-end">
-            <button onClick={openAddType}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition cursor-pointer border-none flex items-center gap-2">
-              <Plus size={14} /> Add Leave Type
-            </button>
-          </div>
+        {/* ═══════════════════════════════════════════════════ */}
+        {/* ── LEAVE TYPES TAB ───────────────────────────────── */}
+        {/* ═══════════════════════════════════════════════════ */}
+        {tab === 'types' && isHRAdmin && (
+          <>
+            <div className="flex justify-end">
+              <button
+                onClick={openAddType}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-xl transition cursor-pointer border-0"
+                style={{ backgroundColor: ACCENT }}
+              >
+                <Plus size={14} /> Add Leave Type
+              </button>
+            </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-700/50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Default Days</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Max Allowed</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Description</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {leaveTypes.map((lt: any) => (
-                    <tr key={lt.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                      <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{lt.name}</td>
-                      <td className="px-4 py-3 font-mono text-gray-600 dark:text-gray-400">{lt.code || '—'}</td>
-                      <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{lt.default_days}</td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{lt.max_allowed || '—'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${lt.is_paid ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
-                          {lt.is_paid ? 'Paid' : 'Unpaid'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${lt.status === 'active' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
-                          {lt.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 max-w-[200px] truncate">{lt.description || '—'}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => openEditType(lt)}
-                            className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition cursor-pointer bg-transparent border-0">
-                            <Settings size={14} />
-                          </button>
-                          <button onClick={() => handleDeleteType(lt.id)}
-                            className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition cursor-pointer bg-transparent border-0">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {leaveTypes.length === 0 && (
-                    <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500">No leave types defined.</td></tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              {leaveTypes.length === 0 ? (
+                <div className="px-5 py-14 text-center">
+                  <div className="text-3xl mb-2">🏷️</div>
+                  <p className="text-sm text-gray-400 dark:text-gray-500">No leave types defined</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-700">
+                        {['Name', 'Code', 'Default Days', 'Max Allowed', 'Type', 'Status', 'Description', ''].map(h => (
+                          <th key={h}
+                            className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide first:pl-5 last:pr-5">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-700/60">
+                      {leaveTypes.map((lt: any) => (
+                        <tr key={lt.id} className="hover:bg-slate-50/70 dark:hover:bg-gray-700/30 transition-colors">
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm font-semibold text-gray-900 dark:text-white">{lt.name}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <code className="text-xs text-gray-500 font-mono">{lt.code || '—'}</code>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm font-semibold" style={{ color: ACCENT }}>{lt.default_days}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm text-gray-600 dark:text-gray-400">{lt.max_allowed || '—'}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              lt.is_paid
+                                ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                            }`}>
+                              {lt.is_paid ? 'Paid' : 'Unpaid'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                              lt.status === 'active'
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${lt.status === 'active' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+                              {lt.status === 'active' ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm text-gray-500 dark:text-gray-400 max-w-[180px] truncate block">
+                              {lt.description || '—'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => openEditType(lt)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition cursor-pointer bg-transparent border-0"
+                              >
+                                <Settings size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteType(lt.id)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition cursor-pointer bg-transparent border-0"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               <PaginationBar
                 page={typesPage}
                 total={typesTotal}
                 limit={TYPES_LIMIT}
-                onPage={(p) => loadLeaveTypes(p)}
+                onPage={p => { setTypesPage(p); loadLeaveTypes(p) }}
               />
             </div>
-          </div>
-        </>
-      )}
+          </>
+        )}
 
-      {/* ── ALLOCATIONS TAB (HR Admin) ────────────────────────── */}
-      {tab === 'allocations' && isHRAdmin && (
-        <>
-          {/* Filters */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex flex-wrap gap-3">
-            <div className="relative flex-1 min-w-[200px]">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Search size={14} /></div>
-              <input type="text" placeholder="Search employee..."
-                value={allocSearch} onChange={e => { setAllocSearch(e.target.value); setAllocPage(1) }}
-                className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        {/* ═══════════════════════════════════════════════════ */}
+        {/* ── ALLOCATIONS TAB ───────────────────────────────── */}
+        {/* ═══════════════════════════════════════════════════ */}
+        {tab === 'allocations' && isHRAdmin && (
+          <>
+            {/* Filters */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-5 py-4 flex flex-wrap gap-3 items-end">
+              <div className="flex-1 min-w-[180px]">
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Search</label>
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text" placeholder="Employee name..."
+                    value={allocSearch}
+                    onChange={e => { setAllocSearch(e.target.value); setAllocPage(1) }}
+                    className="w-full pl-8 pr-3 py-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition placeholder-gray-400"
+                    style={{ '--tw-ring-color': ACCENT } as any}
+                  />
+                </div>
+              </div>
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Department</label>
+                <select value={allocDept}
+                  onChange={e => { setAllocDept(e.target.value); setAllocPage(1) }}
+                  className="w-full px-3 py-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition">
+                  <option value="">All Departments</option>
+                  {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+              <div className="min-w-[150px]">
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Leave Type</label>
+                <select value={allocLeaveType}
+                  onChange={e => { setAllocLeaveType(e.target.value); setAllocPage(1) }}
+                  className="w-full px-3 py-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition">
+                  <option value="">All Leave Types</option>
+                  {leaveTypes.map((lt: any) => <option key={lt.id} value={lt.id}>{lt.name}</option>)}
+                </select>
+              </div>
             </div>
-            <select value={allocDept} onChange={e => { setAllocDept(e.target.value); setAllocPage(1) }}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
-              <option value="">All Departments</option>
-              {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-            <select value={allocLeaveType} onChange={e => { setAllocLeaveType(e.target.value); setAllocPage(1) }}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
-              <option value="">All Leave Types</option>
-              {leaveTypes.map((lt: any) => <option key={lt.id} value={lt.id}>{lt.name}</option>)}
-            </select>
-          </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-700/50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Employee</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Department</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Leave Type</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Allocated</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Used</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Available</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Remark</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {allAllocations.map((a: any) => (
-                    <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900 dark:text-white">{a.first_name} {a.last_name}</div>
-                        <div className="text-xs text-gray-400">{a.email}</div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{a.department_name || '—'}</td>
-                      <td className="px-4 py-3">
-                        <span className="font-medium text-gray-900 dark:text-white">{a.leave_type_name}</span>
-                        {a.leave_type_code && <span className="ml-1 text-xs text-gray-400">{a.leave_type_code}</span>}
-                      </td>
-                      <td className="px-4 py-3 text-center font-semibold text-indigo-600 dark:text-indigo-400">{a.allocated_days}</td>
-                      <td className="px-4 py-3 text-center font-semibold text-red-500 dark:text-red-400">{a.used}</td>
-                      <td className="px-4 py-3 text-center font-semibold text-emerald-600 dark:text-emerald-400">{a.available}</td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs max-w-[150px] truncate">{a.remark || '—'}</td>
-                      <td className="px-4 py-3 text-right">
-                        <button onClick={() => openAllocModal(a)}
-                          className="px-3 py-1 text-xs font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50 rounded-lg transition cursor-pointer border border-indigo-200 dark:border-indigo-700">
-                          Edit
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {allAllocations.length === 0 && (
-                    <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500">No allocations found.</td></tr>
-                  )}
-                </tbody>
-              </table>
+            {/* Table */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+              {allAllocations.length === 0 ? (
+                <div className="px-5 py-14 text-center">
+                  <div className="text-3xl mb-2">📋</div>
+                  <p className="text-sm text-gray-400 dark:text-gray-500">No allocations found</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-700">
+                        {['Employee', 'Department', 'Leave Type', 'Allocated', 'Used', 'Available', 'Remark', ''].map(h => (
+                          <th key={h}
+                            className={`px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide first:pl-5 last:pr-5 ${
+                              ['Allocated','Used','Available'].includes(h) ? 'text-center' : ''
+                            }`}>
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-700/60">
+                      {allAllocations.map((a: any) => (
+                        <tr key={a.id} className="hover:bg-slate-50/70 dark:hover:bg-gray-700/30 transition-colors">
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
+                                <User size={14} className="text-indigo-500" />
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900 dark:text-white">{a.first_name} {a.last_name}</div>
+                                <div className="text-xs text-gray-400">{a.email}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm text-gray-600 dark:text-gray-400">{a.department_name || '—'}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{a.leave_type_name}</span>
+                            {a.leave_type_code && <span className="ml-1 text-xs text-gray-400">{a.leave_type_code}</span>}
+                          </td>
+                          <td className="px-5 py-3.5 text-center">
+                            <span className="text-sm font-semibold text-gray-900 dark:text-white">{a.allocated_days}</span>
+                          </td>
+                          <td className="px-5 py-3.5 text-center">
+                            <span className="text-sm font-semibold text-red-600 dark:text-red-400">{a.used}</span>
+                          </td>
+                          <td className="px-5 py-3.5 text-center">
+                            <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{a.available}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <span className="text-xs text-gray-500 dark:text-gray-400 max-w-[140px] truncate block">
+                              {a.remark || '—'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 text-right">
+                            <button
+                              onClick={() => openAllocModal(a)}
+                              className="px-3.5 py-1.5 text-xs font-semibold text-white rounded-lg transition cursor-pointer border-0"
+                              style={{ backgroundColor: ACCENT }}
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               <PaginationBar
                 page={allocPage}
                 total={allocTotal}
                 limit={ALLOC_LIMIT}
-                onPage={(p) => { setAllocPage(p); fetchAllAllocs(p) }}
+                onPage={p => { setAllocPage(p); fetchAllAllocs(p) }}
               />
             </div>
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
 
-      {/* ── APPLY FOR LEAVE MODAL ──────────────────────────────── */}
+      {/* ═══════════════════════════════════════════════════════ */}
+      {/* MODALS                                                   */}
+      {/* ═══════════════════════════════════════════════════════ */}
+
+      {/* ── APPLY FOR LEAVE MODAL ──────────────────────────── */}
       {showApply && (
         <PortalModal>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-                      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
-                        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
-                          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Apply for Leave</h2>
-                          <button onClick={() => setShowApply(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
-                        </div>
-                        <form onSubmit={handleApply} className="p-6 space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Leave Type <span className="text-red-500">*</span></label>
-                            <select value={applyForm.leave_type_id} onChange={e => setApplyForm({ ...applyForm, leave_type_id: e.target.value })}
-                              required
-                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
-                              <option value="">— Select leave type —</option>
-                              {allocations.map((a: any) => (
-                                <option key={a.leave_type_id} value={a.leave_type_id}
-                                  disabled={a.available <= 0}>
-                                  {a.leave_type_name} ({a.available} days available)
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date <span className="text-red-500">*</span></label>
-                              <input
-                                type="date"
-                                value={applyForm.start_date}
-                                onChange={e => setApplyForm(prev => ({ ...prev, start_date: e.target.value, half_day: false }))}
-                                min={getMinDate()}
-                                required
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date <span className="text-red-500">*</span></label>
-                              <input
-                                type="date"
-                                value={applyForm.end_date}
-                                onChange={e => setApplyForm(prev => ({ ...prev, end_date: e.target.value, half_day: false }))}
-                                min={applyForm.start_date || getMinDate()}
-                                required
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                              />
-                            </div>
-                          </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white">Apply for Leave</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Submit a new leave request</p>
+                </div>
+                <button onClick={() => setShowApply(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent border-0">
+                  <X size={16} />
+                </button>
+              </div>
 
-                          {/* Half-day leave — only shown when company setting allows it */}
-                          {lv?.allow_half_day_leave && (
-                            <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4 space-y-3 border border-indigo-100 dark:border-indigo-800/30">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Half-Day Leave</p>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                    {lv?.half_day_session === 'first_half'
-                                      ? 'Leave for the first half (morning)'
-                                      : 'Leave for the second half (afternoon)'}
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const next = !applyForm.half_day
-                                    setApplyForm(prev => ({
-                                      ...prev,
-                                      half_day: next,
-                                      end_date: next ? prev.start_date : prev.end_date,
-                                    }))
-                                  }}
-                                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors cursor-pointer border-2 ${
-                                    applyForm.half_day
-                                      ? 'bg-indigo-600 border-indigo-600'
-                                      : 'bg-gray-300 dark:bg-gray-600 border-gray-200 dark:border-gray-600'
-                                  }`}
-                                >
-                                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                                    applyForm.half_day ? 'translate-x-6' : 'translate-x-1'
-                                  }`} />
-                                </button>
-                              </div>
-                              {applyForm.half_day && (
-                                <div className="flex gap-2">
-                                  {(['first_half', 'second_half'] as const).map(session => (
-                                    <button
-                                      key={session}
-                                      type="button"
-                                      onClick={() => setApplyForm(prev => ({ ...prev, half_day_session: session }))}
-                                      className={`flex-1 py-2 rounded-lg text-xs font-semibold border-2 transition cursor-pointer ${
-                                        applyForm.half_day_session === session
-                                          ? 'bg-indigo-600 border-indigo-600 text-white'
-                                          : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-indigo-300'
-                                      }`}
-                                    >
-                                      {session === 'first_half' ? '🌅 First Half (AM)' : '🌆 Second Half (PM)'}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
+              {/* Form */}
+              <form onSubmit={handleApply} className="p-6 space-y-4">
+                {/* Leave type */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">
+                    Leave Type <span className="text-red-500">*</span>
+                  </label>
+                  <select value={applyForm.leave_type_id}
+                    onChange={e => setApplyForm(p => ({ ...p, leave_type_id: e.target.value }))}
+                    required
+                    className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition cursor-pointer">
+                    <option value="">— Select leave type —</option>
+                    {allocations.map((a: any) => (
+                      <option key={a.leave_type_id} value={a.leave_type_id} disabled={a.available <= 0}>
+                        {a.leave_type_name} ({a.available} day{a.available !== 1 ? 's' : ''} available)
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                          {/* Contextual warnings for weekends / max consecutive */}
-                          {applyForm.start_date && applyForm.end_date && (
-                            <LeaveWarnings
-                              startDate={applyForm.start_date}
-                              endDate={applyForm.end_date}
-                              workingDays={ws?.working_days || ['mon', 'tue', 'wed', 'thu', 'fri']}
-                              maxConsecutive={lv?.max_consecutive_leave_days}
-                            />
-                          )}
+                {/* Date range */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">
+                      Start Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={applyForm.start_date}
+                      onChange={e => setApplyForm(p => ({ ...p, start_date: e.target.value, half_day: false }))}
+                      min={getMinDate()}
+                      required
+                      className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">
+                      End Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={applyForm.end_date}
+                      onChange={e => setApplyForm(p => ({ ...p, end_date: e.target.value, half_day: false }))}
+                      min={getMinDate()}
+                      required
+                      className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition"
+                    />
+                  </div>
+                </div>
 
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
-                            <textarea value={applyForm.reason} onChange={e => setApplyForm({ ...applyForm, reason: e.target.value })} rows={3}
-                              placeholder="Brief reason for leave..."
-                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                          </div>
-                          <div className="flex justify-end gap-3 pt-2">
-                            <button type="button" onClick={() => setShowApply(false)}
-                              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
-                              Cancel
-                            </button>
-                            <button type="submit" disabled={applying}
-                              className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
-                              {applying ? 'Submitting...' : 'Submit Request'}
-                            </button>
-                          </div>
-                        </form>
+                {/* Half-day toggle */}
+                {lv?.allow_half_day_leave && (
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Half-Day Leave</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {applyForm.half_day_session === 'first_half' ? 'Morning (AM)' : 'Afternoon (PM)'}
+                        </p>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setApplyForm(p => ({
+                          ...p,
+                          half_day: !p.half_day,
+                          end_date: !p.half_day ? p.start_date : p.end_date,
+                        }))}
+                        className={`relative inline-flex h-7 w-12 items-center rounded-full transition cursor-pointer border-2 ${
+                          applyForm.half_day ? 'border-indigo-600' : 'border-gray-300 dark:border-gray-600'
+                        }`}
+                        style={applyForm.half_day ? { backgroundColor: ACCENT } : {}}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                          applyForm.half_day ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
+                      </button>
                     </div>
+                    {applyForm.half_day && (
+                      <div className="flex gap-2">
+                        {(['first_half', 'second_half'] as const).map(session => (
+                          <button
+                            key={session}
+                            type="button"
+                            onClick={() => setApplyForm(p => ({ ...p, half_day_session: session }))}
+                            className={`flex-1 py-2 rounded-lg text-xs font-semibold border-2 transition cursor-pointer ${
+                              applyForm.half_day_session === session
+                                ? 'border-indigo-600 text-white'
+                                : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 bg-transparent hover:border-indigo-300'
+                            }`}
+                            style={applyForm.half_day_session === session ? { backgroundColor: ACCENT, borderColor: ACCENT } : {}}
+                          >
+                            {session === 'first_half' ? '🌅 Morning' : '🌆 Afternoon'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Warnings */}
+                {applyForm.start_date && applyForm.end_date && (
+                  <LeaveWarnings
+                    startDate={applyForm.start_date}
+                    endDate={applyForm.end_date}
+                    workingDays={ws?.working_days || ['mon', 'tue', 'wed', 'thu', 'fri']}
+                    maxConsecutive={lv?.max_consecutive_leave_days}
+                  />
+                )}
+
+                {/* Reason */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Reason</label>
+                  <textarea
+                    value={applyForm.reason}
+                    onChange={e => setApplyForm(p => ({ ...p, reason: e.target.value }))}
+                    rows={3}
+                    placeholder="Brief reason for leave..."
+                    className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition placeholder-gray-400 resize-none"
+                  />
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end gap-2.5 pt-2">
+                  <button type="button" onClick={() => setShowApply(false)}
+                    className="px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={applying}
+                    className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition disabled:opacity-50 cursor-pointer border-0"
+                    style={{ backgroundColor: ACCENT }}>
+                    {applying ? 'Submitting...' : 'Submit Request'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </PortalModal>
       )}
 
-
-      {/* ── REJECT LEAVE MODAL ─────────────────────────────── */}
+      {/* ── REJECT MODAL ───────────────────────────────────── */}
       {showRejectModal && (
         <PortalModal>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-                      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
-                        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
-                          <h2 className="text-lg font-bold text-red-600 dark:text-red-400">Reject Leave Request</h2>
-                          <button onClick={() => setShowRejectModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                              Reason <span className="text-gray-400 font-normal">(optional)</span>
-                            </label>
-                            <textarea
-                              value={rejectReason}
-                              onChange={e => setRejectReason(e.target.value)}
-                              rows={3}
-                              placeholder="Why is this leave request being rejected?"
-                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex justify-end gap-3 px-6 pb-6">
-                          <button onClick={() => setShowRejectModal(false)}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
-                            Cancel
-                          </button>
-                          <button onClick={handleRejectConfirm}
-                            className="px-5 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg transition cursor-pointer border-0">
-                            Confirm Rejection
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-red-50 dark:bg-red-900/30 flex items-center justify-center">
+                    <X size={14} className="text-red-500" />
+                  </div>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white">Reject Leave Request</h2>
+                </div>
+                <button onClick={() => setShowRejectModal(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent border-0">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">
+                    Reason <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <textarea value={rejectReason}
+                    onChange={e => setRejectReason(e.target.value)}
+                    rows={3}
+                    placeholder="Why is this request being rejected?"
+                    className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition resize-none" />
+                </div>
+                <div className="flex justify-end gap-2.5">
+                  <button onClick={() => setShowRejectModal(false)}
+                    className="px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer">
+                    Cancel
+                  </button>
+                  <button onClick={handleRejectConfirm}
+                    className="px-5 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition cursor-pointer border-0">
+                    Confirm Rejection
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </PortalModal>
       )}
 
-      {/* ── RESEED CONFIRMATION MODAL ───────────────────────── */}
-      {showReseedModal && (
-        <PortalModal>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-                      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
-                        <div className="p-6 text-center">
-                          <div className="w-14 h-14 mx-auto mb-4 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
-                            <span className="text-2xl">🔄</span>
-                          </div>
-                          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Re-seed All Allocations?</h2>
-                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                            This will reset <strong>all custom allocations</strong> for every employee based on their leave type default days. This action cannot be undone.
-                          </p>
-                          <div className="flex items-center justify-center gap-3">
-                            <button
-                              onClick={() => setShowReseedModal(false)}
-                              className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={confirmReseed}
-                              className="px-5 py-2 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition cursor-pointer border-0 shadow-sm"
-                            >
-                              Yes, Re-seed
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-        </PortalModal>
-      )}
-
-      {/* ── CANCEL CONFIRMATION MODAL ───────────────────────── */}
+      {/* ── CANCEL CONFIRM MODAL ───────────────────────────── */}
       {showCancelModal && (
         <PortalModal>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-                      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full">
-                        <div className="p-6 text-center">
-                          <div className="w-14 h-14 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
-                            <span className="text-2xl">⚠️</span>
-                          </div>
-                          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Cancel Leave Request?</h2>
-                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                            Are you sure you want to cancel this leave request? This action cannot be undone.
-                          </p>
-                          <div className="flex items-center justify-center gap-3">
-                            <button
-                              onClick={() => { setShowCancelModal(false); setCancellingId(null) }}
-                              className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent"
-                            >
-                              Keep It
-                            </button>
-                            <button
-                              onClick={confirmCancel}
-                              className="px-5 py-2 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white rounded-xl transition cursor-pointer border-0 shadow-sm"
-                            >
-                              Yes, Cancel It
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full p-6">
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-full bg-red-50 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
+                  <X size={22} className="text-red-500" />
+                </div>
+                <h2 className="text-base font-bold text-gray-900 dark:text-white mb-2">Cancel this request?</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                  This action cannot be undone. The leave request will be marked as cancelled.
+                </p>
+                <div className="flex gap-2.5">
+                  <button onClick={() => setShowCancelModal(false)}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer">
+                    Keep It
+                  </button>
+                  <button onClick={confirmCancel}
+                    className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition cursor-pointer border-0">
+                    Yes, Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </PortalModal>
       )}
 
-      {/* ── LEAVE TYPE MODAL ───────────────────────────────────── */}
+      {/* ── RE-SEED MODAL ──────────────────────────────────── */}
+      {showReseedModal && (
+        <PortalModal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full p-6">
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center mx-auto mb-4">
+                  <Sparkles size={22} style={{ color: ACCENT }} />
+                </div>
+                <h2 className="text-base font-bold text-gray-900 dark:text-white mb-2">Re-seed All Allocations</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                  This will reset leave allocations for all active employees based on their assigned leave types. Existing approved leaves will not be affected.
+                </p>
+                <div className="flex gap-2.5">
+                  <button onClick={() => setShowReseedModal(false)}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer">
+                    Cancel
+                  </button>
+                  <button onClick={confirmReseed}
+                    className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition cursor-pointer border-0"
+                    style={{ backgroundColor: ACCENT }}>
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </PortalModal>
+      )}
+
+      {/* ── LEAVE TYPE MODAL ───────────────────────────────── */}
       {showTypeModal && (
         <PortalModal>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-                      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-                        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
-                          <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                            {editType ? 'Edit Leave Type' : 'Add Leave Type'}
-                          </h2>
-                          <button onClick={() => setShowTypeModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
-                        </div>
-                        <form onSubmit={handleTypeSave} className="p-6 space-y-4">
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="col-span-2">
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name <span className="text-red-500">*</span></label>
-                              <input value={typeForm.name} onChange={e => setTypeForm({ ...typeForm, name: e.target.value })} required
-                                placeholder="e.g. Annual Leave"
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Code</label>
-                              <input value={typeForm.code} onChange={e => setTypeForm({ ...typeForm, code: e.target.value })}
-                                placeholder="e.g. AL"
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-                              <select value={typeForm.status} onChange={e => setTypeForm({ ...typeForm, status: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Days</label>
-                              <input type="number" min="0" value={typeForm.default_days} onChange={e => setTypeForm({ ...typeForm, default_days: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Max Allowed</label>
-                              <input type="number" min="0" value={typeForm.max_allowed} onChange={e => setTypeForm({ ...typeForm, max_allowed: e.target.value })}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                            </div>
-                            <div className="col-span-2">
-                              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-                                <input type="checkbox" checked={typeForm.is_paid} onChange={e => setTypeForm({ ...typeForm, is_paid: e.target.checked })}
-                                  className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                                Paid Leave
-                              </label>
-                            </div>
-                            <div className="col-span-2">
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-                              <textarea value={typeForm.description} onChange={e => setTypeForm({ ...typeForm, description: e.target.value })} rows={2}
-                                placeholder="Optional description..."
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                            </div>
-                          </div>
-                          <div className="flex justify-end gap-3 pt-2">
-                            <button type="button" onClick={() => setShowTypeModal(false)}
-                              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
-                              Cancel
-                            </button>
-                            <button type="submit" disabled={savingType}
-                              className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
-                              {savingType ? 'Saving...' : 'Save'}
-                            </button>
-                          </div>
-                        </form>
-                      </div>
-                    </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+                <h2 className="text-base font-bold text-gray-900 dark:text-white">
+                  {editType ? 'Edit Leave Type' : 'Add Leave Type'}
+                </h2>
+                <button onClick={() => setShowTypeModal(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent border-0">
+                  <X size={16} />
+                </button>
+              </div>
+              <form onSubmit={handleTypeSave} className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Name <span className="text-red-500">*</span></label>
+                    <input value={typeForm.name}
+                      onChange={e => setTypeForm(p => ({ ...p, name: e.target.value }))}
+                      required placeholder="e.g. Annual Leave"
+                      className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Code</label>
+                    <input value={typeForm.code}
+                      onChange={e => setTypeForm(p => ({ ...p, code: e.target.value }))}
+                      placeholder="e.g. AL"
+                      className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Default Days</label>
+                    <input type="number" min="0" value={typeForm.default_days}
+                      onChange={e => setTypeForm(p => ({ ...p, default_days: e.target.value }))}
+                      className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Max Allowed</label>
+                    <input type="number" min="0" value={typeForm.max_allowed}
+                      onChange={e => setTypeForm(p => ({ ...p, max_allowed: e.target.value }))}
+                      className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition" />
+                  </div>
+                </div>
+                {/* Paid toggle */}
+                <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Paid Leave</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Employee receives pay during this leave</p>
+                  </div>
+                  <button type="button"
+                    onClick={() => setTypeForm(p => ({ ...p, is_paid: !p.is_paid }))}
+                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition cursor-pointer border-2 ${
+                      typeForm.is_paid ? 'border-indigo-600' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                    style={typeForm.is_paid ? { backgroundColor: ACCENT } : {}}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                      typeForm.is_paid ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Description</label>
+                  <textarea value={typeForm.description}
+                    onChange={e => setTypeForm(p => ({ ...p, description: e.target.value }))}
+                    rows={2} placeholder="Optional description..."
+                    className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition resize-none" />
+                </div>
+                <div className="flex justify-end gap-2.5 pt-2">
+                  <button type="button" onClick={() => setShowTypeModal(false)}
+                    className="px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={savingType}
+                    className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition disabled:opacity-50 cursor-pointer border-0"
+                    style={{ backgroundColor: ACCENT }}>
+                    {savingType ? 'Saving...' : editType ? 'Save Changes' : 'Create Type'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </PortalModal>
       )}
 
-      {/* ── ALLOCATION EDIT MODAL ──────────────────────────────── */}
+      {/* ── ALLOCATION EDIT MODAL ──────────────────────────── */}
       {showAllocModal && editAlloc && (
         <PortalModal>
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-                      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full">
-                        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
-                          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Edit Allocation</h2>
-                          <button onClick={() => setShowAllocModal(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl leading-none bg-transparent border-0 cursor-pointer">×</button>
-                        </div>
-                        <form onSubmit={handleAllocSave} className="p-6 space-y-4">
-                          <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3 mb-2">
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white">{editAlloc.first_name} {editAlloc.last_name}</p>
-                            <p className="text-xs text-gray-500">{editAlloc.leave_type_name}</p>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                              Allocated Days <span className="text-red-500">*</span>
-                            </label>
-                            <input type="number" min="0" step="0.5" value={allocForm.allocated_days}
-                              onChange={e => setAllocForm({ ...allocForm, allocated_days: e.target.value })} required
-                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                              Remarks <span className="text-gray-400 font-normal">(optional)</span>
-                            </label>
-                            <textarea value={allocForm.remark} onChange={e => setAllocForm({ ...allocForm, remark: e.target.value })} rows={2}
-                              placeholder="e.g. Prorated from mid-year hire"
-                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                          </div>
-                          <div className="flex justify-end gap-3 pt-2">
-                            <button type="button" onClick={() => setShowAllocModal(false)}
-                              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
-                              Cancel
-                            </button>
-                            <button type="submit" disabled={savingAlloc}
-                              className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
-                              {savingAlloc ? 'Saving...' : 'Save Changes'}
-                            </button>
-                          </div>
-                        </form>
-                      </div>
-                    </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full">
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+                <h2 className="text-base font-bold text-gray-900 dark:text-white">Edit Allocation</h2>
+                <button onClick={() => setShowAllocModal(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent border-0">
+                  <X size={16} />
+                </button>
+              </div>
+              <form onSubmit={handleAllocSave} className="p-6 space-y-4">
+                {/* Employee banner */}
+                <div className="flex items-center gap-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 px-4 py-3">
+                  <div className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center shrink-0">
+                    <User size={16} className="text-indigo-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{editAlloc.first_name} {editAlloc.last_name}</p>
+                    <p className="text-xs text-gray-500">{editAlloc.leave_type_name}</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">
+                    Allocated Days <span className="text-red-500">*</span>
+                  </label>
+                  <input type="number" min="0" step="0.5"
+                    value={allocForm.allocated_days}
+                    onChange={e => setAllocForm(p => ({ ...p, allocated_days: e.target.value }))}
+                    required
+                    className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Remarks</label>
+                  <textarea value={allocForm.remark}
+                    onChange={e => setAllocForm(p => ({ ...p, remark: e.target.value }))}
+                    rows={2} placeholder="e.g. Prorated from mid-year hire"
+                    className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition resize-none" />
+                </div>
+                <div className="flex justify-end gap-2.5 pt-2">
+                  <button type="button" onClick={() => setShowAllocModal(false)}
+                    className="px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={savingAlloc}
+                    className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition disabled:opacity-50 cursor-pointer border-0"
+                    style={{ backgroundColor: ACCENT }}>
+                    {savingAlloc ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </PortalModal>
       )}
+
     </div>
   )
 }
