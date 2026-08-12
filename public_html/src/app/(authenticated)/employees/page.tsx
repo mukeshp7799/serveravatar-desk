@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import PageLoader from '@/components/PageLoader'
+import PortalModal from '@/components/PortalModal'
 import {
   Search, X, ChevronUp, ChevronDown, ChevronsUpDown,
   User, Plus, MoreHorizontal, RefreshCw, Pencil, Trash2, Eye, UserCheck, Ban, LayoutGrid, List,
@@ -331,123 +332,132 @@ export default function EmployeesPage() {
 
       {/* ── Filter bar ── */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-5 py-4">
-        {/* Row 1: Search + quick filters */}
         <div className="flex flex-wrap gap-3 items-center">
 
-          {/* Search */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          {/* Search — wider, aligned with filter fields */}
+          <div className="relative h-9 min-w-[160px] flex-1">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search by name, email, designation, or ID..."
+              placeholder="Search..."
               value={searchInput}
               onChange={e => { setSearchInput(e.target.value); debouncedSearch(e.target.value) }}
-              className="w-full pl-9 pr-8 py-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition placeholder-gray-400"
-              style={{ '--tw-ring-color': ACCENT } as any}
+              className="h-full w-full pl-9 pr-8 text-xs text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition placeholder-gray-400"
             />
-            {searchInput && (
+            {searchInput ? (
               <button
                 onClick={() => { debouncedSearch.cancel(); setSearch(''); setSearchInput('') }}
-                className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer bg-transparent border-0 p-0"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer bg-transparent border-0 p-0.5"
               >
-                <X size={13} />
+                <X size={12} />
+              </button>
+            ) : null}
+          </div>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-gray-200 dark:bg-gray-600 hidden sm:block" />
+
+          {/* Filter group — compact, consistent height */}
+          <div className="flex flex-wrap gap-2 items-center">
+
+            {/* Department */}
+            <select
+              value={filterDept}
+              onChange={e => setFilterDept(e.target.value)}
+              className="h-9 px-3 text-xs font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+            >
+              <option value="">All Departments</option>
+              {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+
+            {/* Status */}
+            <select
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value)}
+              className="h-9 px-3 text-xs font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+            >
+              <option value="">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+
+            {/* Role */}
+            <select
+              value={filterRole}
+              onChange={e => setFilterRole(e.target.value)}
+              className="h-9 px-3 text-xs font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+            >
+              <option value="">All Roles</option>
+              {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+
+            {/* Employment Type */}
+            <select
+              value={filterEmpType}
+              onChange={e => setFilterEmpType(e.target.value)}
+              className="h-9 px-3 text-xs font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+            >
+              <option value="">All Types</option>
+              <option value="full-time">Full Time</option>
+              <option value="part-time">Part Time</option>
+              <option value="contract">Contract</option>
+              <option value="intern">Intern</option>
+              <option value="freelance">Freelance</option>
+            </select>
+          </div>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-gray-200 dark:bg-gray-600 hidden sm:block" />
+
+          {/* Action group */}
+          <div className="flex items-center gap-2">
+
+            {/* Clear Filters */}
+            {hasFilters && (
+              <button
+                onClick={clearFilters}
+                className="h-9 px-3 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl transition cursor-pointer"
+              >
+                Clear
               </button>
             )}
+
+            {/* Refresh */}
+            <button
+              onClick={() => fetchEmployees(pagination.page)}
+              className="h-9 w-9 flex items-center justify-center text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl transition cursor-pointer"
+              title="Refresh"
+            >
+              <RefreshCw size={13} className={`transition-transform ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+
+            {/* View Toggle */}
+            <div className="flex items-center border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden h-9">
+              <button
+                onClick={() => handleViewChange('table')}
+                className={`px-2.5 h-full flex items-center justify-center transition cursor-pointer border-0 ${view === 'table' ? 'text-white' : 'text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600'}`}
+                style={view === 'table' ? { backgroundColor: ACCENT } : {}}
+                title="Table View"
+              >
+                <LayoutGrid size={13} />
+              </button>
+              <div className="w-px h-3.5 bg-gray-200 dark:bg-gray-600" />
+              <button
+                onClick={() => handleViewChange('grid')}
+                className={`px-2.5 h-full flex items-center justify-center transition cursor-pointer border-0 ${view === 'grid' ? 'text-white' : 'text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600'}`}
+                style={view === 'grid' ? { backgroundColor: ACCENT } : {}}
+                title="Grid View"
+              >
+                <List size={13} />
+              </button>
+            </div>
           </div>
 
-          {/* Department */}
-          <select
-            value={filterDept}
-            onChange={e => setFilterDept(e.target.value)}
-            className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition"
-            style={{ '--tw-ring-color': ACCENT } as any}
-          >
-            <option value="">All Departments</option>
-            {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-
-          {/* Status */}
-          <select
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-            className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition"
-            style={{ '--tw-ring-color': ACCENT } as any}
-          >
-            <option value="">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-
-          {/* Role */}
-          <select
-            value={filterRole}
-            onChange={e => setFilterRole(e.target.value)}
-            className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition"
-            style={{ '--tw-ring-color': ACCENT } as any}
-          >
-            <option value="">All Roles</option>
-            {roles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-          </select>
-
-          {/* Employment Type */}
-          <select
-            value={filterEmpType}
-            onChange={e => setFilterEmpType(e.target.value)}
-            className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition"
-            style={{ '--tw-ring-color': ACCENT } as any}
-          >
-            <option value="">All Types</option>
-            <option value="full-time">Full Time</option>
-            <option value="part-time">Part Time</option>
-            <option value="contract">Contract</option>
-            <option value="intern">Intern</option>
-            <option value="freelance">Freelance</option>
-          </select>
-
-          {/* Clear Filters */}
-          {hasFilters && (
-            <button
-              onClick={clearFilters}
-              className="px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl transition cursor-pointer"
-            >
-              Clear Filters
-            </button>
-          )}
-
-          {/* Refresh */}
-          <button
-            onClick={() => fetchEmployees(pagination.page)}
-            className="px-3 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl transition cursor-pointer"
-            title="Refresh"
-          >
-            <RefreshCw size={14} className={`transition-transform ${isRefreshing ? 'animate-spin' : ''}`} />
-          </button>
-
-          {/* View Toggle */}
-          <div className="flex items-center border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden">
-            <button
-              onClick={() => handleViewChange('table')}
-              className={`px-2.5 py-2 transition cursor-pointer border-0 ${view === 'table' ? 'text-white' : 'text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600'}`}
-              style={view === 'table' ? { backgroundColor: ACCENT } : {}}
-              title="Table View"
-            >
-              <LayoutGrid size={14} />
-            </button>
-            <div className="w-px h-5 bg-gray-200 dark:bg-gray-600" />
-            <button
-              onClick={() => handleViewChange('grid')}
-              className={`px-2.5 py-2 transition cursor-pointer border-0 ${view === 'grid' ? 'text-white' : 'text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600'}`}
-              style={view === 'grid' ? { backgroundColor: ACCENT } : {}}
-              title="Grid View"
-            >
-              <List size={14} />
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* ── Table ── */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+      {/* ── Table / Grid ── */}
+      <div className={`rounded-2xl overflow-hidden ${view === 'table' ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700' : ''}`}>
         {loading ? (
           <div className="flex justify-center py-20"><PageLoader /></div>
         ) : employees.length === 0 ? (
@@ -686,74 +696,79 @@ export default function EmployeesPage() {
 
       {/* ── Delete Confirmation Modal ─────────────────────── */}
       {showDeleteModal && deletingEmployee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full p-6">
-            <div className="text-center">
-              <div className="w-14 h-14 rounded-full bg-red-50 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
-                <Trash2 size={22} className="text-red-500" />
-              </div>
-              <h2 className="text-base font-bold text-gray-900 dark:text-white mb-2">Delete employee?</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                Are you sure you want to delete <strong>{deletingEmployee.first_name} {deletingEmployee.last_name}</strong>? This action cannot be undone.
-              </p>
-              <div className="flex gap-2.5">
-                <button
-                  onClick={() => { setShowDeleteModal(false); setDeletingEmployee(null) }}
-                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmDelete}
-                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition cursor-pointer border-0"
-                >
-                  Yes, Delete
-                </button>
+        <PortalModal>
+          <div className="fixed inset-0 top-0 left-0 right-0 bottom-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full p-6">
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-full bg-red-50 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
+                  <Trash2 size={22} className="text-red-500" />
+                </div>
+                <h2 className="text-base font-bold text-gray-900 dark:text-white mb-2">Delete employee?</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                  Are you sure you want to delete <strong>{deletingEmployee.first_name} {deletingEmployee.last_name}</strong>? This action cannot be undone.
+                </p>
+                <div className="flex gap-2.5">
+                  <button
+                    onClick={() => { setShowDeleteModal(false); setDeletingEmployee(null) }}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition cursor-pointer border-0"
+                  >
+                    Yes, Delete
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </PortalModal>
       )}
 
       {/* ── Status Toggle Confirmation Modal ─────────────── */}
       {showStatusModal && statusEmployee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full p-6">
-            <div className="text-center">
-              <div
-                className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
-                style={{ backgroundColor: statusEmployee.status === 'active' ? '#fef3c7' : '#dcfce7' }}
-              >
-                {statusEmployee.status === 'active'
-                  ? <Ban size={22} className="text-amber-500" />
-                  : <UserCheck size={22} className="text-green-500" />
-                }
-              </div>
-              <h2 className="text-base font-bold text-gray-900 dark:text-white mb-2">
-                {statusEmployee.status === 'active' ? 'Deactivate' : 'Activate'} employee?
-              </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                Are you sure you want to {statusEmployee.status === 'active' ? 'deactivate' : 'activate'}{' '}
-                <strong>{statusEmployee.first_name} {statusEmployee.last_name}</strong>?
-              </p>
-              <div className="flex gap-2.5">
-                <button
-                  onClick={() => { setShowStatusModal(false); setStatusEmployee(null) }}
-                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer"
+        <PortalModal>
+          <div className="fixed inset-0 top-0 left-0 right-0 bottom-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full p-6">
+              <div className="text-center">
+                <div
+                  className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
+                  style={{ backgroundColor: statusEmployee.status === 'active' ? '#fef3c7' : '#dcfce7' }}
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmToggleStatus}
-                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition cursor-pointer border-0"
-                  style={{ backgroundColor: statusEmployee.status === 'active' ? '#d97706' : '#16a34a' }}
-                >
-                  {statusEmployee.status === 'active' ? 'Yes, Deactivate' : 'Yes, Activate'}
-                </button>
+                  {statusEmployee.status === 'active'
+                    ? <Ban size={22} className="text-amber-500" />
+                    : <UserCheck size={22} className="text-green-500" />
+                  }
+                </div>
+                <h2 className="text-base font-bold text-gray-900 dark:text-white mb-2">
+                  {statusEmployee.status === 'active' ? 'Deactivate' : 'Activate'} employee?
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                  Are you sure you want to {statusEmployee.status === 'active' ? 'deactivate' : 'activate'}{
+                  ' '}
+                  <strong>{statusEmployee.first_name} {statusEmployee.last_name}</strong>?
+                </p>
+                <div className="flex gap-2.5">
+                  <button
+                    onClick={() => { setShowStatusModal(false); setStatusEmployee(null) }}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmToggleStatus}
+                    className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition cursor-pointer border-0"
+                    style={{ backgroundColor: statusEmployee.status === 'active' ? '#d97706' : '#16a34a' }}
+                  >
+                    {statusEmployee.status === 'active' ? 'Yes, Deactivate' : 'Yes, Activate'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </PortalModal>
       )}
 
     </div>

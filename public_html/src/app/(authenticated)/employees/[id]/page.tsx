@@ -24,6 +24,7 @@ const Edit2 = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" v
 const Folder = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
 const CheckSquare = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
 const ActivityIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+const RefreshCw = ({ className }: { className?: string }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
 const Users = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
 const Upload = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
 
@@ -100,6 +101,7 @@ export default function EmployeeProfilePage() {
   const [tasks, setTasks] = useState<any[]>([])
   const [activity, setActivity] = useState<any[]>([])
   const [activityPagination, setActivityPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 })
+  const [activityRefreshing, setActivityRefreshing] = useState(false)
   const [directReports, setDirectReports] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('overview')
@@ -130,7 +132,7 @@ export default function EmployeeProfilePage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await api.get(`/employees/${id}/profile?activity_page=1&activity_limit=10`)
+        const data = await api.get(`/employees/${id}/profile?activity_page=1&activity_limit=${activityPagination.limit}`)
         setActivity(data.activity || [])
         if (data.activity_pagination) setActivityPagination(data.activity_pagination)
         setEmployee(data.employee)
@@ -163,12 +165,23 @@ export default function EmployeeProfilePage() {
     }
   }, [editing, isAdmin])
 
-  const fetchActivityPage = async (page: number) => {
+  const fetchActivityPage = async (page: number, limit?: number) => {
+    setActivityRefreshing(true)
     try {
-      const data = await api.get(`/employees/${id}/profile?activity_page=${page}&activity_limit=10`)
+      const activeLimit = limit ?? activityPagination.limit
+      const data = await api.get(`/employees/${id}/profile?activity_page=${page}&activity_limit=${activeLimit}`)
       setActivity(data.activity || [])
-      if (data.activity_pagination) setActivityPagination(data.activity_pagination)
+      if (data.activity_pagination) {
+        setActivityPagination(prev => ({
+          ...prev,
+          page: data.activity_pagination.page,
+          limit: prev.limit,
+          total: data.activity_pagination.total,
+          totalPages: data.activity_pagination.totalPages,
+        }))
+      }
     } catch { toast.error('Failed to load more activity') }
+    finally { setActivityRefreshing(false) }
   }
 
   const handleSave = async () => {
@@ -589,79 +602,153 @@ export default function EmployeeProfilePage() {
       {/* Tab: Activity */}
       {activeTab === 'activity' && (
         <div className="space-y-3">
-          {activity.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 py-14 px-6 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center mx-auto mb-4 text-gray-400"><ActivityIcon /></div>
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">No Activity Yet</h3>
-              <p className="text-xs text-gray-400 dark:text-gray-500">No activity has been recorded for this employee.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="relative">
-                <div className="absolute left-4 top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700" />
-                {activity.map((item: any) => (
-                  <div key={`${item.source}-${item.id}`} className="relative pl-10 pb-6 last:pb-0">
-                    <div className="absolute left-2.5 top-1 w-3 h-3 rounded-full bg-indigo-600 border-2 border-white dark:border-gray-800" />
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-                      <p className="text-sm text-gray-900 dark:text-white">
-                        <span className="font-semibold">{item.first_name} {item.last_name}</span>{' '}
-                        <span className="text-gray-600 dark:text-gray-400">{activityLabel(item)}</span>
-                      </p>
-                      {item.project_name && (
-                        <Link href={`/projects/${item.project_id}`}
-                          className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 no-underline mt-0.5 inline-block">
-                          {item.project_name}
-                        </Link>
+
+          {/* Header — outside the table card */}
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Activity</h2>
+            <button
+              onClick={() => fetchActivityPage(activityPagination.page)}
+              disabled={activityRefreshing}
+              className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-200 dark:hover:border-indigo-600 transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${activityRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          {/* Table card */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            {activity.length === 0 ? (
+              <div className="py-14 px-6 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center mx-auto mb-4 text-gray-400"><ActivityIcon /></div>
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">No Activity Yet</h3>
+                <p className="text-xs text-gray-400 dark:text-gray-500">No activity has been recorded for this employee.</p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto pt-1">
+                  <table className="w-full min-w-[600px]">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-700">
+                        <th className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">Date &amp; Time</th>
+                        <th className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">Activity</th>
+                        <th className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">Project</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 dark:divide-gray-700/60">
+                      {activity.map((item: any) => (
+                        <tr key={`${item.source}-${item.id}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
+                          <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{fmtDateTime(item.created_at)}</td>
+                          <td className="px-5 py-3.5 text-sm text-gray-900 dark:text-white">
+                            <span className="font-medium">{item.first_name} {item.last_name}</span>{' '}
+                            <span className="text-gray-500 dark:text-gray-400">{activityLabel(item)}</span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            {item.project_name ? (
+                              <Link href={`/projects/${item.project_id}`}
+                                className="text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 no-underline">
+                                {item.project_name}
+                              </Link>
+                            ) : (
+                              <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {activity.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-t border-gray-100 dark:border-gray-700">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Showing{' '}
+                      <span className="font-semibold text-gray-700 dark:text-gray-200">
+                        {Math.min((activityPagination.page - 1) * activityPagination.limit + 1, activityPagination.total)}
+                      </span>{' '}
+                      to{' '}
+                      <span className="font-semibold text-gray-700 dark:text-gray-200">
+                        {Math.min(activityPagination.page * activityPagination.limit, activityPagination.total)}
+                      </span>{' '}
+                      of{' '}
+                      <span className="font-semibold text-gray-700 dark:text-gray-200">
+                        {activityPagination.total}
+                      </span>{' '}
+                      results
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Per page:</span>
+                        <div className="relative">
+                          <select
+                            value={activityPagination.limit}
+                            onChange={e => {
+                              const newLimit = Number(e.target.value)
+                              setActivityPagination(prev => ({ ...prev, limit: newLimit, page: 1 }))
+                              fetchActivityPage(1, newLimit)
+                            }}
+                            className="appearance-none pl-2 pr-6 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer focus:outline-none focus:ring-2 transition"
+                            style={{ '--tw-ring-color': ACCENT, colorScheme: 'normal' } as any}
+                          >
+                            {[10, 20, 30, 50].map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                          <span className="pointer-events-none absolute inset-y-0 right-1 flex items-center text-gray-400">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </span>
+                        </div>
+                      </div>
+                      {activityPagination.totalPages > 1 && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => fetchActivityPage(activityPagination.page - 1)}
+                            disabled={activityPagination.page <= 1}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                          </button>
+                          {Array.from({ length: activityPagination.totalPages }, (_, i) => i + 1)
+                            .filter(p => p === 1 || p === activityPagination.totalPages || Math.abs(p - activityPagination.page) <= 1)
+                            .reduce<(number | string)[]>((acc, p, idx, arr) => {
+                              if (idx > 0 && Number(p) - Number(arr[idx - 1]) > 1) acc.push('...')
+                              acc.push(p)
+                              return acc
+                            }, [])
+                            .map((p, i) =>
+                              p === '...' ? (
+                                <span key={`e-${i}`} className="w-8 h-8 flex items-center justify-center text-xs text-gray-400">…</span>
+                              ) : (
+                                <button key={p} onClick={() => fetchActivityPage(Number(p))}
+                                  className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-semibold transition cursor-pointer border ${
+                                    p === activityPagination.page
+                                      ? 'text-white border-transparent'
+                                      : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                  }`}
+                                  style={p === activityPagination.page ? { backgroundColor: ACCENT } : {}}
+                                >{p}</button>
+                              )
+                            )}
+                          <button
+                            onClick={() => fetchActivityPage(activityPagination.page + 1)}
+                            disabled={activityPagination.page >= activityPagination.totalPages}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        </div>
                       )}
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{fmtDateTime(item.created_at)}</p>
                     </div>
                   </div>
-                ))}
-              </div>
-              {activityPagination.totalPages > 1 && (
-                <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
-                    {activityPagination.total} total
-                  </p>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => fetchActivityPage(activityPagination.page - 1)}
-                      disabled={activityPagination.page <= 1}
-                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent text-xs"
-                    >
-                      <span>‹</span>
-                    </button>
-                    {Array.from({ length: activityPagination.totalPages }, (_, i) => i + 1)
-                      .filter(p => p === 1 || p === activityPagination.totalPages || Math.abs(p - activityPagination.page) <= 1)
-                      .reduce<(number | string)[]>((acc, p, idx, arr) => {
-                        if (idx > 0 && Number(p) - Number(arr[idx - 1]) > 1) acc.push('...')
-                        acc.push(p)
-                        return acc
-                      }, [])
-                      .map((p, i) =>
-                        p === '...'
-                          ? <span key={`e-${i}`} className="w-7 h-7 flex items-center justify-center text-xs text-gray-400">…</span>
-                          : <button key={p} onClick={() => fetchActivityPage(Number(p))}
-                              className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-medium transition cursor-pointer border-0 ${
-                                p === activityPagination.page
-                                  ? 'text-white'
-                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                              }`}
-                              style={p === activityPagination.page ? { backgroundColor: ACCENT } : {}}
-                            >{p}</button>
-                      )}
-                    <button
-                      onClick={() => fetchActivityPage(activityPagination.page + 1)}
-                      disabled={activityPagination.page >= activityPagination.totalPages}
-                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent text-xs"
-                    >
-                      <span>›</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
 
