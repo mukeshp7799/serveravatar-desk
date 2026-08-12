@@ -30,8 +30,18 @@ const auth = async (req, res, next) => {
       [decoded.userId],
     );
 
-    if (users.length === 0 || users[0].status !== "active") {
+    if (users.length === 0) {
       return res.status(401).json({ error: t(req.lang, "errors.invalidOrInactiveUser") });
+    }
+
+    if (users[0].status === "inactive") {
+      return res.status(401).json({ error: t(req.lang, "errors.accountInactive") });
+    }
+
+    // 'pending' users are allowed through — they can use the app but need to verify email
+    // Attach isPending flag so route handlers can restrict features if needed
+    if (users[0].status === "pending") {
+      users[0].isPending = true;
     }
 
     req.user = users[0];

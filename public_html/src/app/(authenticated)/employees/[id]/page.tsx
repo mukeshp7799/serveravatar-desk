@@ -8,6 +8,7 @@ import api from '@/lib/api'
 import { useDateSettings } from '@/contexts/CompanySettingsContext'
 import PageLoader from '@/components/PageLoader'
 import toast from 'react-hot-toast'
+import { ChevronDown } from 'lucide-react'
 
 const ArrowLeft = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
 const Mail = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
@@ -25,6 +26,8 @@ const CheckSquare = () => <svg className="w-4 h-4" fill="none" stroke="currentCo
 const ActivityIcon = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
 const Users = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
 const Upload = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+
+const ACCENT = '#4F46E5'
 
 function fmtDateShort(raw: string | null | undefined): string {
   if (!raw) return '—'
@@ -96,6 +99,7 @@ export default function EmployeeProfilePage() {
   const [projects, setProjects] = useState<any[]>([])
   const [tasks, setTasks] = useState<any[]>([])
   const [activity, setActivity] = useState<any[]>([])
+  const [activityPagination, setActivityPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 })
   const [directReports, setDirectReports] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('overview')
@@ -106,6 +110,18 @@ export default function EmployeeProfilePage() {
   const [managers, setManagers] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [mgrOpen, setMgrOpen] = useState(false)
+  const [mgrSearch, setMgrSearch] = useState('')
+
+  const filteredManagers = managers.filter((m: any) =>
+    m.id !== parseInt(id) && (
+      `${m.first_name} ${m.last_name}`.toLowerCase().includes(mgrSearch.toLowerCase()) ||
+      (m.designation || '').toLowerCase().includes(mgrSearch.toLowerCase()) ||
+      (m.department_name || '').toLowerCase().includes(mgrSearch.toLowerCase())
+    )
+  )
 
   const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
   const isSelf = user.id === parseInt(id)
@@ -114,7 +130,9 @@ export default function EmployeeProfilePage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await api.get(`/employees/${id}/profile`)
+        const data = await api.get(`/employees/${id}/profile?activity_page=1&activity_limit=10`)
+        setActivity(data.activity || [])
+        if (data.activity_pagination) setActivityPagination(data.activity_pagination)
         setEmployee(data.employee)
         setProjects(data.projects || [])
         setTasks(data.tasks || [])
@@ -145,13 +163,24 @@ export default function EmployeeProfilePage() {
     }
   }, [editing, isAdmin])
 
+  const fetchActivityPage = async (page: number) => {
+    try {
+      const data = await api.get(`/employees/${id}/profile?activity_page=${page}&activity_limit=10`)
+      setActivity(data.activity || [])
+      if (data.activity_pagination) setActivityPagination(data.activity_pagination)
+    } catch { toast.error('Failed to load more activity') }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
-      await api.put(`/employees/${id}`, form)
+      const payload: any = { ...form }
+      if (newPassword) payload.password = newPassword
+      await api.put(`/employees/${id}`, payload)
       const updated = await api.get(`/employees/${id}/profile`)
       setEmployee(updated.employee)
       setForm(updated.employee)
+      setNewPassword('')
       setEditing(false)
       toast.success('Profile updated successfully')
     } catch (e: any) {
@@ -188,7 +217,13 @@ export default function EmployeeProfilePage() {
 
   const statusColors: Record<string, string> = {
     active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
     inactive: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+  }
+  const statusLabels: Record<string, string> = {
+    active: 'Active',
+    pending: 'Pending',
+    inactive: 'Inactive',
   }
   const empTypeLabels: Record<string, string> = {
     'full-time': 'Full Time', 'part-time': 'Part Time', 'contract': 'Contract',
@@ -254,7 +289,7 @@ export default function EmployeeProfilePage() {
                   {employee.first_name} {employee.last_name}
                 </h1>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${statusColors[employee.status] || statusColors.inactive}`}>
-                  {employee.status === 'active' ? 'Active' : 'Inactive'}
+                  {statusLabels[employee.status] || 'Inactive'}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -561,26 +596,70 @@ export default function EmployeeProfilePage() {
               <p className="text-xs text-gray-400 dark:text-gray-500">No activity has been recorded for this employee.</p>
             </div>
           ) : (
-            <div className="relative">
-              <div className="absolute left-4 top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700" />
-              {activity.map((item: any, idx: number) => (
-                <div key={`${item.source}-${item.id}`} className="relative pl-10 pb-6 last:pb-0">
-                  <div className="absolute left-2.5 top-1 w-3 h-3 rounded-full bg-indigo-600 border-2 border-white dark:border-gray-800" />
-                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-                    <p className="text-sm text-gray-900 dark:text-white">
-                      <span className="font-semibold">{item.first_name} {item.last_name}</span>{' '}
-                      <span className="text-gray-600 dark:text-gray-400">{activityLabel(item)}</span>
-                    </p>
-                    {item.project_name && (
-                      <Link href={`/projects/${item.project_id}`}
-                        className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 no-underline mt-0.5 inline-block">
-                        {item.project_name}
-                      </Link>
-                    )}
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{fmtDateTime(item.created_at)}</p>
+            <div className="space-y-4">
+              <div className="relative">
+                <div className="absolute left-4 top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-700" />
+                {activity.map((item: any) => (
+                  <div key={`${item.source}-${item.id}`} className="relative pl-10 pb-6 last:pb-0">
+                    <div className="absolute left-2.5 top-1 w-3 h-3 rounded-full bg-indigo-600 border-2 border-white dark:border-gray-800" />
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+                      <p className="text-sm text-gray-900 dark:text-white">
+                        <span className="font-semibold">{item.first_name} {item.last_name}</span>{' '}
+                        <span className="text-gray-600 dark:text-gray-400">{activityLabel(item)}</span>
+                      </p>
+                      {item.project_name && (
+                        <Link href={`/projects/${item.project_id}`}
+                          className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 no-underline mt-0.5 inline-block">
+                          {item.project_name}
+                        </Link>
+                      )}
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{fmtDateTime(item.created_at)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {activityPagination.totalPages > 1 && (
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    {activityPagination.total} total
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => fetchActivityPage(activityPagination.page - 1)}
+                      disabled={activityPagination.page <= 1}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent text-xs"
+                    >
+                      <span>‹</span>
+                    </button>
+                    {Array.from({ length: activityPagination.totalPages }, (_, i) => i + 1)
+                      .filter(p => p === 1 || p === activityPagination.totalPages || Math.abs(p - activityPagination.page) <= 1)
+                      .reduce<(number | string)[]>((acc, p, idx, arr) => {
+                        if (idx > 0 && Number(p) - Number(arr[idx - 1]) > 1) acc.push('...')
+                        acc.push(p)
+                        return acc
+                      }, [])
+                      .map((p, i) =>
+                        p === '...'
+                          ? <span key={`e-${i}`} className="w-7 h-7 flex items-center justify-center text-xs text-gray-400">…</span>
+                          : <button key={p} onClick={() => fetchActivityPage(Number(p))}
+                              className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-medium transition cursor-pointer border-0 ${
+                                p === activityPagination.page
+                                  ? 'text-white'
+                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                              }`}
+                              style={p === activityPagination.page ? { backgroundColor: ACCENT } : {}}
+                            >{p}</button>
+                      )}
+                    <button
+                      onClick={() => fetchActivityPage(activityPagination.page + 1)}
+                      disabled={activityPagination.page >= activityPagination.totalPages}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent text-xs"
+                    >
+                      <span>›</span>
+                    </button>
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
@@ -642,17 +721,65 @@ export default function EmployeeProfilePage() {
                           <option value="freelance">Freelance</option>
                         </select>
                       </div>
-                      <div>
+                      <div className="relative">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Reporting Manager</label>
-                        <select value={form.reporting_manager_id || ''} onChange={e => setForm({ ...form, reporting_manager_id: e.target.value ? parseInt(e.target.value) : null })}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                          <option value="">— No Manager —</option>
-                          {managers.filter((m: any) => m.id !== parseInt(id)).map((m: any) => (
-                            <option key={m.id} value={m.id}>
-                              {m.first_name} {m.last_name}{m.designation ? ` — ${m.designation}` : ''}{m.department_name ? ` (${m.department_name})` : ''}
-                            </option>
-                          ))}
-                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setMgrOpen(v => !v)}
+                          className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm text-left focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center justify-between cursor-pointer"
+                        >
+                          <span className={form.reporting_manager_id ? 'text-gray-900 dark:text-white' : 'text-gray-400'}>
+                            {form.reporting_manager_id
+                              ? (() => {
+                                  const m = managers.find((m: any) => m.id === form.reporting_manager_id)
+                                  return m ? `${m.first_name} ${m.last_name}${m.designation ? ` — ${m.designation}` : ''}${m.department_name ? ` (${m.department_name})` : ''}` : '— No Manager —'
+                                })()
+                              : '— No Manager —'}
+                          </span>
+                          <ChevronDown size={14} className={`text-gray-400 shrink-0 transition-transform ${mgrOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        {mgrOpen && (
+                          <div className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg overflow-hidden">
+                            <div className="p-2 border-b border-gray-100 dark:border-gray-600">
+                              <input
+                                autoFocus
+                                placeholder="Search employee..."
+                                value={mgrSearch}
+                                onChange={e => setMgrSearch(e.target.value)}
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              />
+                            </div>
+                            <ul className="max-h-48 overflow-y-auto">
+                              <li>
+                                <button
+                                  type="button"
+                                  onClick={() => { setForm({ ...form, reporting_manager_id: null }); setMgrOpen(false); setMgrSearch('') }}
+                                  className={`w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer border-0 bg-transparent ${!form.reporting_manager_id ? 'text-indigo-600 dark:text-indigo-400 font-medium' : 'text-gray-600 dark:text-gray-300'}`}
+                                >
+                                  — No Manager —
+                                </button>
+                              </li>
+                              {filteredManagers.length === 0 ? (
+                                <li className="px-3 py-2 text-xs text-gray-400">No results</li>
+                              ) : (
+                                filteredManagers.map((m: any) => (
+                                  <li key={m.id}>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setForm({ ...form, reporting_manager_id: m.id }); setMgrOpen(false); setMgrSearch('') }}
+                                      className={`w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20 cursor-pointer border-0 bg-transparent ${form.reporting_manager_id === m.id ? 'text-indigo-600 dark:text-indigo-400 font-medium' : 'text-gray-600 dark:text-gray-300'}`}
+                                    >
+                                      {m.first_name} {m.last_name}
+                                      {m.designation ? <span className="text-gray-400 text-xs ml-1">— {m.designation}</span> : ''}
+                                      {m.department_name ? <span className="text-gray-400 text-xs ml-1">({m.department_name})</span> : ''}
+                                    </button>
+                                  </li>
+                                ))
+                              )}
+                            </ul>
+                          </div>
+                        )}
+                        {mgrOpen && <div className="fixed inset-0 z-10" onClick={() => setMgrOpen(false)} />}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Role</label>
@@ -667,8 +794,25 @@ export default function EmployeeProfilePage() {
                         <select value={form.status || 'active'} onChange={e => setForm({ ...form, status: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                           <option value="active">Active</option>
+                          <option value="pending">Pending</option>
                           <option value="inactive">Inactive</option>
                         </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email Verified</label>
+                        <label className="flex items-center gap-2.5 mt-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={!!form.email_verified_at}
+                            onChange={e => setForm({
+                              ...form,
+                              email_verified_at: e.target.checked ? true : null,
+                              status: e.target.checked ? 'active' : form.status,
+                            })}
+                            className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          />
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Verified</span>
+                        </label>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Joining Date</label>
@@ -679,6 +823,35 @@ export default function EmployeeProfilePage() {
                   </div>
                 </>
               )}
+
+              {/* Section: Security */}
+              <div>
+                <h3 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide mb-3">Security</h3>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Change Password</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      placeholder="Leave blank to keep current password"
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(v => !v)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 cursor-pointer border-0 bg-transparent"
+                    >
+                      {showPassword ? (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.543 7-1.275 4.057-5.065 7-9.543 7-4.477 0-8.268-2.943-9.543-7z" /></svg>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Leave blank to keep the current password unchanged.</p>
+                </div>
+              </div>
 
               {/* Section: Personal */}
               <div>

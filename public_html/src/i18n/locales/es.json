@@ -125,7 +125,8 @@
       "featureLeaves": "Permisos",
       "featureTasks": "Tareas",
       "featureDiscussions": "Discusiones",
-      "signin": "Iniciar sesión"
+      "signin": "Iniciar sesión",
+      "verifyEmailFirst": "Por favor, verifique su correo electrónico para activar su cuenta."
     },
     "register": {
       "title": "Crea tu cuenta",

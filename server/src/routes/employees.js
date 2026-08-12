@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { t } = require('../i18n');
@@ -115,6 +116,11 @@ router.get('/:id/profile', auth, async (req, res, next) => {
     const isSelf = targetId === req.user.id;
     const perms = req.user.permissions || [];
 
+    // Activity pagination params
+    const actPage = Math.max(1, parseInt(req.query.activity_page, 10) || 1);
+    const actLimit = Math.min(50, Math.max(5, parseInt(req.query.activity_limit, 10) || 10));
+    const actOffset = (actPage - 1) * actLimit;
+
     if (!isSelf && !perms.includes('users.view_all')) {
       return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
     }
@@ -170,7 +176,7 @@ router.get('/:id/profile', auth, async (req, res, next) => {
     `, [targetId]);
 
     // Build rich activity timeline from tb_activity AND project_activities
-    // 1. tb_activity entries where this user is the actor
+    // Fetch up to 200 from each to cover deep paginated history
     const [ownActivity] = await pool.query(`
       SELECT 'own' as source, ah.id, ah.action, ah.task_id,
         u.first_name, u.last_name, u.avatar_url,
@@ -183,10 +189,9 @@ router.get('/:id/profile', auth, async (req, res, next) => {
       LEFT JOIN projects p ON t.project_id = p.id
       WHERE ah.user_id = ?
       ORDER BY ah.created_at DESC
-      LIMIT 20
+      LIMIT 200
     `, [targetId]);
 
-    // 2. project_activities entries where this user is the actor
     const [projActivity] = await pool.query(`
       SELECT 'project' as source, pa.id, pa.action, pa.feature, pa.target_type,
         pa.target_id, pa.target_label, pa.created_at, pa.meta,
@@ -197,7 +202,7 @@ router.get('/:id/profile', auth, async (req, res, next) => {
       LEFT JOIN projects p ON pa.project_id = p.id
       WHERE pa.actor_id = ?
       ORDER BY pa.created_at DESC
-      LIMIT 20
+      LIMIT 200
     `, [targetId]);
 
     // Merge and sort by timestamp descending
@@ -233,7 +238,10 @@ router.get('/:id/profile', auth, async (req, res, next) => {
         meta: row.meta,
         source: 'project',
       })),
-    ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 20);
+    ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    const totalActivity = allActivity.length;
+    const paginatedActivity = allActivity.slice(actOffset, actOffset + actLimit);
 
     // Get direct reports (people who report to this employee)
     const [directReports] = await pool.query(`
@@ -253,7 +261,13 @@ router.get('/:id/profile', auth, async (req, res, next) => {
       employee: profile,
       projects: enrichedProjects,
       tasks,
-      activity: allActivity,
+      activity: paginatedActivity,
+      activity_pagination: {
+        page: actPage,
+        limit: actLimit,
+        total: totalActivity,
+        totalPages: Math.ceil(totalActivity / actLimit),
+      },
       directReports,
     });
   } catch (err) { next(err); }
@@ -295,6 +309,25 @@ router.put('/:id', auth, async (req, res, next) => {
     }
 
     const dateFields = ['hire_date', 'date_of_birth'];
+
+    // Special handling: password must be hashed before storing
+    if (isAdmin && req.body.password) {
+      const hashed = await bcrypt.hash(req.body.password, 10);
+      updates.push('password_hash = ?');
+      params.push(hashed);
+    }
+
+    // Special handling: email_verified_at (boolean from frontend → NOW() or NULL)
+    // When admin marks email as verified, also set status to 'active'
+    if (isAdmin && req.body.email_verified_at !== undefined) {
+      updates.push('email_verified_at = ?');
+      params.push(req.body.email_verified_at ? new Date() : null);
+      if (req.body.email_verified_at) {
+        updates.push('status = ?');
+        params.push('active');
+      }
+    }
+
     for (const field of allFields) {
       if (req.body[field] === undefined) continue;
       let value = req.body[field];

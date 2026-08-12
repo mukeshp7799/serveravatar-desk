@@ -125,7 +125,8 @@
       "featureLeaves": "چھٹیاں",
       "featureTasks": "کام",
       "featureDiscussions": "بحث",
-      "signin": "سائن ان کریں"
+      "signin": "سائن ان کریں",
+      "verifyEmailFirst": "براہ کرم اپنا ای میل تصدیق کریں۔"
     },
     "register": {
       "title": "اپنا اکاؤنٹ بنائیں",

@@ -13,6 +13,8 @@ const translations = {
   en: {
     errors: {
       invalidCredentials: 'Invalid credentials',
+      accountInactive: 'Account is inactive. Please contact your administrator.',
+      accountPending: 'Please verify your email to activate your account.',
       emailPasswordRequired: 'Email and password are required',
       emailPasswordNameRequired: 'Email, password, firstName, lastName are required',
       emailAlreadyRegistered: 'Email already registered',
@@ -171,6 +173,8 @@ const translations = {
   hi: {
     errors: {
       invalidCredentials: 'गलत ईमेल या पासवर्ड',
+      accountInactive: 'खाता निष्क्रिय है। कृपया अपने प्रशासक से संपर्क करें।',
+      accountPending: 'कृपया अपना ईमेल सत्यापित करें।',
       emailPasswordRequired: 'ईमेल और पासवर्ड आवश्यक हैं',
       emailPasswordNameRequired: 'ईमेल, पासवर्ड, पहला नाम, अंतिम नाम आवश्यक हैं',
       emailAlreadyRegistered: 'ईमेल पहले से पंजीकृत है',
@@ -313,6 +317,8 @@ const translations = {
   gu: {
     errors: {
       invalidCredentials: 'ઈમેલ અથવા પાસવર્ડ ખોટો છે',
+      accountInactive: 'એકાઉન્ટ નિષ્ક્રિય છે. કૃપા કરીને તમારા સંચાલકનો સંપર્ક કરો।',
+      accountPending: 'કૃપા કરીને તમારો ઈમેલ ચકાસો.',
       emailPasswordRequired: 'ઈમેલ અને પાસવર્ડ જરૂરી છે',
       emailPasswordNameRequired: 'ઈમેલ, પાસવર્ડ, પ્રથમ નામ, છેલ્લું નામ જરૂરી છે',
       emailAlreadyRegistered: 'ઈમેલ પહેલેથી નોંધાયેલ છે',
@@ -455,6 +461,8 @@ const translations = {
   mr: {
     errors: {
       invalidCredentials: 'चुकीचा ईमेल किंवा पासवर्ड',
+      accountInactive: 'खाते निष्क्रिय आहे. कृपया आपल्या प्रशासकाशी संपर्क साधा।',
+      accountPending: 'कृपया आपला ईमेल सत्यापित करा.',
       emailPasswordRequired: 'ईमेल आणि पासवर्ड आवश्यक आहे',
       emailPasswordNameRequired: 'ईमेल, पासवर्ड, पहिले नाव, आडनाव आवश्यक आहे',
       emailAlreadyRegistered: 'ईमेल आधीच नोंदणीकृत आहे',
@@ -593,6 +601,8 @@ const translations = {
     // RTL language - same structure, Urdu values
     errors: {
       invalidCredentials: 'غلط ای میل یا پاس ورڈ',
+      accountInactive: 'اکاؤنٹ غیر فعال ہے۔ براہ کرم اپنے منتظم سے رابطہ کریں۔',
+      accountPending: 'براہ کرم اپنا ای میل تصدیق کریں۔',
       emailPasswordRequired: 'ای میل اور پاس ورڈ ضروری ہیں',
       emailPasswordNameRequired: 'ای میل، پاس ورڈ، پہلا نام، آخری نام ضروری ہیں',
       emailAlreadyRegistered: 'ای میل پہلے سے رجسٹرڈ ہے',
@@ -730,6 +740,8 @@ const translations = {
   es: {
     errors: {
       invalidCredentials: 'Credenciales inválidas',
+      accountInactive: 'La cuenta está inactiva. Por favor, contacte a su administrador.',
+      accountPending: 'Por favor, verifique su correo electrónico para activar su cuenta.',
       emailPasswordRequired: 'Email y contraseña son obligatorios',
       emailPasswordNameRequired: 'Email, contraseña, nombre y apellido son obligatorios',
       emailAlreadyRegistered: 'El email ya está registrado',
@@ -867,6 +879,8 @@ const translations = {
   zh: {
     errors: {
       invalidCredentials: '邮箱或密码错误',
+      accountInactive: '账户已停用。请联系您的管理员。',
+      accountPending: '请验证您的电子邮件以激活账户。',
       emailPasswordRequired: '邮箱和密码必填',
       emailPasswordNameRequired: '邮箱、密码、名字和姓氏必填',
       emailAlreadyRegistered: '邮箱已被注册',

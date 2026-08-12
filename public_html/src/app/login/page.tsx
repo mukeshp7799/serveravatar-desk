@@ -40,6 +40,12 @@ function LoginForm() {
       const result = await api.post("/auth/login", data);
       api.setToken(result.token);
       localStorage.setItem("user", JSON.stringify(result.user));
+
+      // Show warning if email is not yet verified (pending status)
+      if (result.user?.isPending) {
+        toast.error(t("auth.login.verifyEmailFirst") || "Please verify your email to activate your account.");
+      }
+
       const nextUrl = searchParams.get('next');
       const pendingToken = localStorage.getItem('pending_invitation_token');
       localStorage.removeItem('pending_invitation_token');

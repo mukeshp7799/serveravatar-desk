@@ -128,7 +128,8 @@
       "featureLeaves": "Leaves",
       "featureTasks": "Tasks",
       "featureDiscussions": "Discussions",
-      "signin": "Sign in"
+      "signin": "Sign in",
+      "verifyEmailFirst": "Please verify your email to activate your account."
     },
     "register": {
       "title": "Create your account",

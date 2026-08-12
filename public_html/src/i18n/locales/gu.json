@@ -125,7 +125,8 @@
       "featureLeaves": "રજાઓ",
       "featureTasks": "કાર્યો",
       "featureDiscussions": "ચર્ચાઓ",
-      "signin": "સાઇન ઇન કરો"
+      "signin": "સાઇન ઇન કરો",
+      "verifyEmailFirst": "કૃપા કરીને તમારો ઈમેલ ચકાસો."
     },
     "register": {
       "title": "તમારું એકાઉન્ટ બનાવો",

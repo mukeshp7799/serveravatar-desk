@@ -103,6 +103,8 @@ function shapeUser(user, permissions, emailVerified) {
     roleName: user.role_name,
     avatarUrl: user.avatar_url,
     emailVerified: !!emailVerified,
+    status: user.status,
+    isPending: user.status === 'pending' || undefined,
     permissions,
   };
 }
@@ -117,16 +119,21 @@ router.post('/login', async (req, res, next) => {
       return res.status(400).json({ error: t(req.lang, 'errors.emailPasswordRequired') });
     }
 
-    const [users] = await pool.query(
-      `SELECT u.*, r.name as role_name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.email = ? AND u.status = 'active'`,
+    // First check if user exists (without status filter)
+    const [byEmail] = await pool.query(
+      `SELECT u.*, r.name as role_name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.email = ?`,
       [email]
     );
 
-    if (users.length === 0) {
+    if (byEmail.length === 0) {
       return res.status(401).json({ error: t(req.lang, 'errors.invalidCredentials') });
     }
 
-    const user = users[0];
+    if (byEmail[0].status === 'inactive') {
+      return res.status(401).json({ error: t(req.lang, 'errors.accountInactive') });
+    }
+
+    const user = byEmail[0];
     const validPassword = await bcrypt.compare(password, user.password_hash);
 
     if (!validPassword) {
@@ -193,9 +200,9 @@ router.post('/register', async (req, res, next) => {
       `INSERT INTO users
          (email, password_hash, first_name, last_name,
           role_id, department_id, designation, reporting_manager_id,
-          hire_date, employee_id,
+          hire_date, employee_id, status,
           email_verified_at, email_verification_token, email_verification_expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?)`,
       [
         email, passwordHash, firstName, lastName,
         roleId,
@@ -286,7 +293,8 @@ router.post('/verify-email', async (req, res, next) => {
       `UPDATE users
          SET email_verified_at = NOW(),
              email_verification_token = NULL,
-             email_verification_expires_at = NULL
+             email_verification_expires_at = NULL,
+             status = 'active'
          WHERE id = ?`,
       [user.id]
     );

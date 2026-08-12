@@ -125,7 +125,8 @@
       "featureLeaves": "रजा",
       "featureTasks": "कार्ये",
       "featureDiscussions": "चर्चा",
-      "signin": "साइन इन करा"
+      "signin": "साइन इन करा",
+      "verifyEmailFirst": "कृपया आपला ईमेल सत्यापित करा."
     },
     "register": {
       "title": "आपले खाते तयार करा",

@@ -125,7 +125,8 @@
       "featureLeaves": "请假",
       "featureTasks": "任务",
       "featureDiscussions": "讨论",
-      "signin": "登录"
+      "signin": "登录",
+      "verifyEmailFirst": "请验证您的电子邮件以激活您的账户。"
     },
     "register": {
       "title": "创建您的账户",
