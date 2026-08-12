@@ -99,7 +99,7 @@ export default function ActivityLogsPage() {
   const [logs, setLogs] = useState<ActivityLog[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [limit] = useState(20)
+  const [limit, setLimit] = useState(10)
   const [totalPages, setTotalPages] = useState(1)
 const [employees, setEmployees] = useState<any[]>([])
   const [modules, setModules] = useState<string[]>([])
@@ -227,79 +227,86 @@ const [employees, setEmployees] = useState<any[]>([])
 
       {/* ── Filter Panel — always visible ───────────────────────────────── */}
       {hasViewAll && (
-        <div className="rounded-2xl border border-gray-200 bg-white dark:bg-gray-900 dark:border-gray-700 shadow-sm p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Filter Activities</h3>
-            {hasActiveFilters && (
-              <button onClick={clearFilters} className="flex items-center gap-1 text-xs text-rose-600 hover:text-rose-700 font-medium cursor-pointer bg-transparent border-none">
-                <X size={12} /> Clear all
-              </button>
-            )}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* User filter */}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">User</label>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-4 py-3.5 w-full">
+          <div className="flex flex-wrap gap-3 items-center w-full">
+            {/* Group 1: User */}
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">User</span>
               <select
                 value={filters.filter_user_id}
                 onChange={e => handleFilterChange('filter_user_id', e.target.value)}
-                className="w-full h-9 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="h-9 pl-3 pr-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none"
               >
-                <option value="">All Users</option>
+                <option value="">All</option>
                 {employees.map((emp: any) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.first_name} {emp.last_name}
-                  </option>
+                  <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>
                 ))}
               </select>
             </div>
 
-            {/* Module filter */}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Module</label>
+            <div className="h-5 w-px bg-gray-200 dark:bg-gray-700 hidden sm:block" />
+
+            {/* Group 2: Module */}
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">Module</span>
               <select
                 value={filters.module}
                 onChange={e => handleFilterChange('module', e.target.value)}
-                className="w-full h-9 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="h-9 pl-3 pr-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none"
               >
-                <option value="">All Modules</option>
+                <option value="">All</option>
                 {modules.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
 
-            {/* Action filter */}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Action</label>
+            {/* Group 3: Action */}
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">Action</span>
               <select
                 value={filters.action}
                 onChange={e => handleFilterChange('action', e.target.value)}
-                className="w-full h-9 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="h-9 pl-3 pr-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none"
               >
-                <option value="">All Actions</option>
+                <option value="">All</option>
                 {actions.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
 
-            {/* Date range */}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">From</label>
+            <div className="h-5 w-px bg-gray-200 dark:bg-gray-700 hidden sm:block" />
+
+            {/* Group 4: Date range */}
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">From</span>
               <input
                 type="date"
                 value={filters.date_from}
                 onChange={e => handleFilterChange('date_from', e.target.value)}
-                className="w-full h-9 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">To</label>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">To</span>
               <input
                 type="date"
                 value={filters.date_to}
                 onChange={e => handleFilterChange('date_to', e.target.value)}
-                className="w-full h-9 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
+
+            {/* Divider + Clear */}
+            {hasActiveFilters && (
+              <>
+                <div className="h-5 w-px bg-gray-200 dark:bg-gray-700 hidden sm:block" />
+                <button
+                  onClick={clearFilters}
+                  className="h-9 px-3 rounded-lg text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition cursor-pointer border border-rose-200 dark:border-rose-800 bg-transparent"
+                >
+                  Clear
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -395,50 +402,72 @@ const [employees, setEmployees] = useState<any[]>([])
 
       {/* ── Pagination ────────────────────────────────────────────────────── */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Showing page {page} of {totalPages} ({total.toLocaleString()} total)
+        <div className="flex flex-wrap items-start sm:items-center justify-between gap-x-6 gap-y-2 px-4 sm:px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-b-2xl">
+          <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap leading-7">
+            Showing <span className="font-medium text-gray-700 dark:text-gray-200">{Math.min((page - 1) * limit + 1, total)}</span> to{' '}
+            <span className="font-medium text-gray-700 dark:text-gray-200">{Math.min(page * limit, total)}</span> of{' '}
+            <span className="font-medium text-gray-700 dark:text-gray-200">{total.toLocaleString()}</span> results
           </p>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              let pageNum: number
-              if (totalPages <= 5) {
-                pageNum = i + 1
-              } else if (page <= 3) {
-                pageNum = i + 1
-              } else if (page >= totalPages - 2) {
-                pageNum = totalPages - 4 + i
-              } else {
-                pageNum = page - 2 + i
-              }
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => setPage(pageNum)}
-                  className={`w-9 h-9 flex items-center justify-center rounded-xl text-sm font-medium transition cursor-pointer ${
-                    page === pageNum
-                      ? 'bg-indigo-600 text-white shadow'
-                      : 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400 whitespace-nowrap leading-7">Per page:</span>
+              <div className="relative">
+                <select
+                  value={limit}
+                  onChange={e => { const newLimit = Number(e.target.value); setLimit(newLimit); setPage(1); fetchLogs() }}
+                  className="appearance-none pl-2 pr-6 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer focus:outline-none focus:ring-2 transition"
+                  style={{ '--tw-ring-color': '#4F46E5', colorScheme: 'normal' } as any}
                 >
-                  {pageNum}
-                </button>
-              )
-            })}
-            <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="w-9 h-9 flex items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
-            >
-              <ChevronRight size={16} />
-            </button>
+                  {[10, 20, 30, 50].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <span className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-gray-400">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+                .reduce<(number | string)[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && Number(p) - Number(arr[idx - 1]) > 1) acc.push('...')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((p, i) =>
+                  p === '...' ? (
+                    <span key={`e-${i}`} className="w-8 h-8 flex items-center justify-center text-xs text-gray-400">…</span>
+                  ) : (
+                    <button key={p} onClick={() => setPage(Number(p))}
+                      className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-semibold transition cursor-pointer border ${
+                        page === p
+                          ? 'text-white border-transparent'
+                          : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }`}
+                      style={page === p ? { backgroundColor: '#4F46E5' } : {}}
+                    >{p}</button>
+                  )
+                )}
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       )}
