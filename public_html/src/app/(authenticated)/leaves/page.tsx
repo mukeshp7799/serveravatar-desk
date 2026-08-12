@@ -1,6 +1,7 @@
 'use client'
 import PortalModal from '@/components/PortalModal';
 import { useEffect, useState } from 'react'
+import { useDebouncedCallback } from 'use-debounce'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import api from '@/lib/api'
@@ -8,9 +9,9 @@ import { useDateSettings, useCompanySettings } from '@/contexts/CompanySettingsC
 import Tabs from '@/components/Tabs'
 import PageLoader from '@/components/PageLoader'
 import {
-  Calendar, Check, CheckSquare, Clock, Info, Plus, Search, Settings,
+  Calendar, Check, CheckSquare, Clock, Info, Pencil, Plus, Search, Settings,
   ThumbsDown, ThumbsUp, Trash2, X, MoreHorizontal, ChevronDown,
-  User, Users, Briefcase, Sparkles
+  User, Users, Briefcase, Sparkles, RefreshCw
 } from 'lucide-react'
 
 // ────────────────────────────────────────────────────────────
@@ -177,18 +178,19 @@ function PaginationBar({ page, total, limit, onPage, onLimitChange }: {
   const next  = Math.min(totalPages, page + 1)
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+    <div className="flex flex-wrap items-start sm:items-center justify-between gap-x-6 gap-y-2 px-4 sm:px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
       {/* Left: results summary */}
-      <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+      <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap leading-7">
         Showing <span className="font-medium text-gray-700 dark:text-gray-200">{start}</span> to{" "}
         <span className="font-medium text-gray-700 dark:text-gray-200">{end}</span> of{" "}
         <span className="font-medium text-gray-700 dark:text-gray-200">{total}</span> results
       </p>
 
-      <div className="flex items-center gap-3">
+      {/* Right: per-page + page nav — wraps cleanly on small screens */}
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         {/* Per-page selector */}
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-gray-400 whitespace-nowrap">Per page:</span>
+          <span className="text-xs text-gray-400 whitespace-nowrap leading-7">Per page:</span>
           <div className="relative">
             <select
               value={limit}
@@ -289,6 +291,10 @@ export default function LeavesPage() {
 
   // Cancel modal
   const [showCancelModal, setShowCancelModal] = useState(false)
+  const [showDeleteTypeModal, setShowDeleteTypeModal] = useState(false)
+  const [deletingTypeId, setDeletingTypeId] = useState<number | null>(null)
+  const [showRequestModal, setShowRequestModal] = useState(false)
+  const [selectedRequest, setSelectedRequest] = useState<any>(null)
   const [cancellingId, setCancellingId] = useState<number | null>(null)
 
   // Reseed modal
@@ -354,11 +360,12 @@ export default function LeavesPage() {
     }).catch(() => {})
   }
 
-  const loadTeamRequests = (page = 1, filter = reqFilter, limitOverride?: number) => {
-    const limit = limitOverride ?? teamReqLimit
+  const loadTeamRequests = (page = 1, filter = reqFilter, searchOverride?: string) => {
+    const limit = teamReqLimit
     const params = new URLSearchParams({ page: String(page), limit: String(limit) })
     if (filter) params.set('status', filter)
-    if (teamSearch) params.set('search', teamSearch)
+    const search = searchOverride !== undefined ? searchOverride : teamSearch
+    if (search) params.set('search', search)
     Promise.all([
       api.get(`/leaves?${params}`),
       api.get('/departments'),
@@ -370,6 +377,12 @@ export default function LeavesPage() {
     }).catch(() => {})
   }
 
+  // Debounced search — fires 400ms after user stops typing
+  const debouncedLoadTeamRequests = useDebouncedCallback(
+    () => { loadTeamRequests(1, reqFilter, teamSearch) },
+    400
+  )
+
   const loadLeaveTypes = (page = 1, limitOverride?: number) => {
     const limit = limitOverride ?? typesLimit
     const params = new URLSearchParams({ page: String(page), limit: String(limit) })
@@ -380,10 +393,10 @@ export default function LeavesPage() {
     }).catch(() => {})
   }
 
-  const fetchAllAllocs = (page = 1, limitOverride?: number) => {
-    const limit = limitOverride ?? allocLimit
-    const params = new URLSearchParams({ page: String(page), limit: String(limit) })
-    if (allocSearch) params.set('search', allocSearch)
+  const fetchAllAllocs = (page = 1, searchOverride?: string) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(allocLimit) })
+    const search = searchOverride !== undefined ? searchOverride : allocSearch
+    if (search) params.set('search', search)
     if (allocDept) params.set('departmentId', allocDept)
     if (allocLeaveType) params.set('leaveTypeId', allocLeaveType)
     api.get(`/leaves/allocations?${params}`).then(d => {
@@ -391,6 +404,12 @@ export default function LeavesPage() {
       setAllocTotal(d.pagination?.total || 0)
     }).catch(() => {})
   }
+
+  // Debounced search for allocations
+  const debouncedFetchAllocs = useDebouncedCallback(
+    () => { fetchAllAllocs(1, allocSearch) },
+    400
+  )
 
   const reloadCurrentTab = () => {
     if (tab === 'my') loadMyRequests(myReqPage)
@@ -506,9 +525,18 @@ export default function LeavesPage() {
     finally { setSavingType(false) }
   }
   const handleDeleteType = async (id: number) => {
-    if (!confirm('Delete this leave type?')) return
-    try { await api.delete(`/leaves/types/${id}`); toast.success('Deleted'); loadAll() }
-    catch (err: any) { toast.error(err.message || 'Failed') }
+    setDeletingTypeId(id)
+    setShowDeleteTypeModal(true)
+  }
+
+  const confirmDeleteType = async () => {
+    if (!deletingTypeId) return
+    try {
+      await api.delete(`/leaves/types/${deletingTypeId}`)
+      toast.success('Leave type deleted')
+      loadAll()
+    } catch (err: any) { toast.error(err.message || 'Failed to delete') }
+    finally { setShowDeleteTypeModal(false); setDeletingTypeId(null) }
   }
 
   // ── Allocation management ──────────────────────────────────
@@ -534,6 +562,8 @@ export default function LeavesPage() {
   }
 
   // ── Request actions ────────────────────────────────────────
+
+  const openRequestModal = (r: any) => { setSelectedRequest(r); setShowRequestModal(true) }
 
   const handleApprove = async (id: number, action: 'approved' | 'rejected') => {
     if (action === 'rejected') { setRejectingId(id); setRejectReason(''); setShowRejectModal(true); return }
@@ -763,8 +793,8 @@ export default function LeavesPage() {
                   <p className="text-sm text-gray-400 dark:text-gray-500">No leave requests found</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <div className="overflow-x-auto scrollbar-hide">
+                  <table className="w-full min-w-[600px]">
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
                         {['Type', 'Period', 'Days', 'Status', 'Applied On', ''].map(h => (
@@ -842,34 +872,39 @@ export default function LeavesPage() {
                   type="text"
                   placeholder="Search by name or email..."
                   value={teamSearch}
-                  onChange={e => { setTeamSearch(e.target.value); setTeamReqPage(1) }}
-                  onKeyDown={e => e.key === 'Enter' && loadTeamRequests(1, reqFilter)}
-                  className="w-full pl-9 pr-4 py-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition placeholder-gray-400"
+                  onChange={e => { setTeamSearch(e.target.value); debouncedLoadTeamRequests() }}
+                  className="w-full pl-9 pr-8 py-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition placeholder-gray-400"
                   style={{ '--tw-ring-color': ACCENT } as any}
                 />
-              </div>
-              {/* Status pills */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {['', 'pending', 'approved', 'rejected', 'cancelled'].map(s => (
-                  <button key={s}
-                    onClick={() => { setReqFilter(s as any); loadTeamRequests(1, s as any) }}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border-0 ${
-                      reqFilter === s
-                        ? 'text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                    style={reqFilter === s ? { backgroundColor: ACCENT } : {}}
+                {teamSearch && (
+                  <button
+                    onClick={() => { debouncedLoadTeamRequests.cancel(); setTeamSearch(''); setTeamReqPage(1); loadTeamRequests(1, reqFilter, '') }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer bg-transparent border-0 p-0"
                   >
-                    {s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All'}
+                    <X size={13} />
                   </button>
-                ))}
+                )}
               </div>
-              <button
-                onClick={() => loadTeamRequests(1, reqFilter)}
-                className="px-4 py-2 text-xs font-semibold text-white rounded-xl transition cursor-pointer border-0"
-                style={{ backgroundColor: ACCENT }}
+              {/* Status dropdown */}
+              <select
+                value={reqFilter}
+                onChange={e => { setReqFilter(e.target.value as any); setTeamReqPage(1); loadTeamRequests(1, e.target.value as any, teamSearch) }}
+                className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition"
+                style={{ '--tw-ring-color': ACCENT } as any}
               >
-                Search
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              {/* Refresh button */}
+              <button
+                onClick={() => { setTeamReqPage(1); loadTeamRequests(1, reqFilter, teamSearch) }}
+                className="px-3 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl transition cursor-pointer"
+                title="Refresh"
+              >
+                <RefreshCw size={14} />
               </button>
             </div>
 
@@ -881,11 +916,11 @@ export default function LeavesPage() {
                   <p className="text-sm text-gray-400 dark:text-gray-500">No requests found</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <div className="overflow-x-auto scrollbar-hide">
+                  <table className="w-full min-w-[700px]">
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
-                        {['Employee', 'Type', 'Period', 'Days', 'Reason', 'Status', ''].map(h => (
+                        {['Employee', 'Type', 'Period', 'Days', 'Reason', 'Status', 'Actions'].map(h => (
                           <th key={h}
                             className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap first:pl-5 last:pr-5">
                             {h}
@@ -897,7 +932,10 @@ export default function LeavesPage() {
                       {filteredRequests.map((r: any) => {
                         const isOwn = r.user_id === user.id
                         return (
-                          <tr key={r.id} className="hover:bg-slate-50/70 dark:hover:bg-gray-700/30 transition-colors">
+                          <tr key={r.id}
+                            className="hover:bg-slate-50/70 dark:hover:bg-gray-700/30 transition-colors cursor-pointer"
+                            onClick={() => openRequestModal(r)}
+                          >
                             <td className="px-5 py-3.5">
                               <div className="flex items-center gap-2.5">
                                 <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
@@ -926,40 +964,42 @@ export default function LeavesPage() {
                               </span>
                             </td>
                             <td className="px-5 py-3.5">{statusBadge(r.status)}</td>
-                            <td className="px-5 py-3.5 text-right">
-                              {r.status === 'pending' && (
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <button
-                                    onClick={() => handleApprove(r.id, 'approved')}
-                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white rounded-lg transition cursor-pointer border-0"
-                                    style={{ backgroundColor: '#16a34a' }}
-                                  >
-                                    <ThumbsUp size={11} /> Approve
-                                  </button>
-                                  <button
-                                    onClick={() => handleApprove(r.id, 'rejected')}
-                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white rounded-lg transition cursor-pointer border-0"
-                                    style={{ backgroundColor: '#dc2626' }}
-                                  >
-                                    <ThumbsDown size={11} /> Reject
-                                  </button>
-                                </div>
-                              )}
-                              {r.status === 'cancelled' && (
-                                <span className="text-xs text-gray-400">—</span>
-                              )}
-                              {(r.status === 'approved' || r.status === 'rejected') && (
-                                !isOwn ? (
-                                  <ActionMenu>
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center justify-start gap-1">
+                                {r.status === 'pending' && (
+                                  <>
                                     <button
-                                      onClick={() => { setCancellingId(r.id); setShowCancelModal(true) }}
-                                      className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition cursor-pointer bg-transparent border-0"
+                                      onClick={e => { e.stopPropagation(); handleApprove(r.id, 'approved') }}
+                                      className="p-2 rounded-lg text-white transition cursor-pointer border-0"
+                                      style={{ backgroundColor: '#16a34a' }}
+                                      title="Approve"
                                     >
-                                      Cancel Request
+                                      <Check size={13} />
                                     </button>
-                                  </ActionMenu>
-                                ) : <span className="text-xs text-gray-400">—</span>
-                              )}
+                                    <button
+                                      onClick={e => { e.stopPropagation(); handleApprove(r.id, 'rejected') }}
+                                      className="p-2 rounded-lg text-white transition cursor-pointer border-0"
+                                      style={{ backgroundColor: '#dc2626' }}
+                                      title="Reject"
+                                    >
+                                      <X size={13} />
+                                    </button>
+                                  </>
+                                )}
+                                {(r.status === 'approved' || r.status === 'rejected') && !isOwn && (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setCancellingId(r.id); setShowCancelModal(true) }}
+                                    className="p-2 rounded-lg text-white transition cursor-pointer border-0"
+                                    style={{ backgroundColor: '#dc2626' }}
+                                    title="Cancel Request"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                )}
+                                {(r.status === 'cancelled' || (r.status !== 'pending' && isOwn)) && (
+                                  <span className="text-xs text-gray-400 px-2">—</span>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         )
@@ -973,7 +1013,7 @@ export default function LeavesPage() {
                 total={teamReqTotal}
                 limit={teamReqLimit}
                 onPage={p => { setTeamReqPage(p); loadTeamRequests(p, reqFilter) }}
-                onLimitChange={l => { setTeamReqLimit(l); setTeamReqPage(1); loadTeamRequests(1, reqFilter, l) }}
+                onLimitChange={l => { setTeamReqLimit(l); setTeamReqPage(1); loadTeamRequests(1, reqFilter, teamSearch) }}
               />
             </div>
           </>
@@ -1001,11 +1041,11 @@ export default function LeavesPage() {
                   <p className="text-sm text-gray-400 dark:text-gray-500">No leave types defined</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <div className="overflow-x-auto scrollbar-hide">
+                  <table className="w-full min-w-[800px]">
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
-                        {['Name', 'Code', 'Default Days', 'Max Allowed', 'Type', 'Status', 'Description', ''].map(h => (
+                        {['Name', 'Code', 'Default Days', 'Max Allowed', 'Type', 'Status', 'Description', 'Actions'].map(h => (
                           <th key={h}
                             className="px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide first:pl-5 last:pr-5">
                             {h}
@@ -1053,18 +1093,22 @@ export default function LeavesPage() {
                             </span>
                           </td>
                           <td className="px-5 py-3.5">
-                            <div className="flex items-center justify-end gap-1">
+                            <div className="flex items-center justify-start gap-1">
                               <button
                                 onClick={() => openEditType(lt)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition cursor-pointer bg-transparent border-0"
+                                className="p-2 rounded-lg text-white transition cursor-pointer border-0"
+                                style={{ backgroundColor: ACCENT }}
+                                title="Edit"
                               >
-                                <Settings size={14} />
+                                <Pencil size={13} />
                               </button>
                               <button
                                 onClick={() => handleDeleteType(lt.id)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition cursor-pointer bg-transparent border-0"
+                                className="p-2 rounded-lg text-white transition cursor-pointer border-0"
+                                style={{ backgroundColor: '#dc2626' }}
+                                title="Delete"
                               >
-                                <Trash2 size={14} />
+                                <Trash2 size={13} />
                               </button>
                             </div>
                           </td>
@@ -1091,38 +1135,56 @@ export default function LeavesPage() {
         {tab === 'allocations' && isHRAdmin && (
           <>
             {/* Filters */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-5 py-4 flex flex-wrap gap-3 items-end">
-              <div className="flex-1 min-w-[180px]">
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Search</label>
-                <div className="relative">
-                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                  <input
-                    type="text" placeholder="Employee name..."
-                    value={allocSearch}
-                    onChange={e => { setAllocSearch(e.target.value); setAllocPage(1) }}
-                    className="w-full pl-8 pr-3 py-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition placeholder-gray-400"
-                    style={{ '--tw-ring-color': ACCENT } as any}
-                  />
-                </div>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-5 py-4 flex flex-wrap gap-3 items-center">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  type="text" placeholder="Employee name..."
+                  value={allocSearch}
+                  onChange={e => { setAllocSearch(e.target.value); debouncedFetchAllocs() }}
+                  className="w-full pl-9 pr-8 py-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition placeholder-gray-400"
+                  style={{ '--tw-ring-color': ACCENT } as any}
+                />
+                {allocSearch && (
+                  <button
+                    onClick={() => { debouncedFetchAllocs.cancel(); setAllocSearch(''); setAllocPage(1); fetchAllAllocs(1, '') }}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer bg-transparent border-0 p-0"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
-              <div className="min-w-[150px]">
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Department</label>
-                <select value={allocDept}
-                  onChange={e => { setAllocDept(e.target.value); setAllocPage(1) }}
-                  className="w-full px-3 py-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition">
-                  <option value="">All Departments</option>
-                  {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </div>
-              <div className="min-w-[150px]">
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Leave Type</label>
-                <select value={allocLeaveType}
-                  onChange={e => { setAllocLeaveType(e.target.value); setAllocPage(1) }}
-                  className="w-full px-3 py-2 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition">
-                  <option value="">All Leave Types</option>
-                  {leaveTypes.map((lt: any) => <option key={lt.id} value={lt.id}>{lt.name}</option>)}
-                </select>
-              </div>
+              <select value={allocDept}
+                onChange={e => { setAllocDept(e.target.value); setAllocPage(1); fetchAllAllocs(1) }}
+                className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition"
+                style={{ '--tw-ring-color': ACCENT } as any}
+              >
+                <option value="">All Departments</option>
+                {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+              <select value={allocLeaveType}
+                onChange={e => { setAllocLeaveType(e.target.value); setAllocPage(1); fetchAllAllocs(1) }}
+                className="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition"
+                style={{ '--tw-ring-color': ACCENT } as any}
+              >
+                <option value="">All Leave Types</option>
+                {leaveTypes.map((lt: any) => <option key={lt.id} value={lt.id}>{lt.name}</option>)}
+              </select>
+              {/* Reset button */}
+              <button
+                onClick={() => { setAllocSearch(''); setAllocDept(''); setAllocLeaveType(''); setAllocPage(1); fetchAllAllocs(1, '') }}
+                className="px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl transition cursor-pointer"
+              >
+                Reset
+              </button>
+              {/* Refresh button */}
+              <button
+                onClick={() => { setAllocPage(1); fetchAllAllocs(1, allocSearch) }}
+                className="px-3 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl transition cursor-pointer"
+                title="Refresh"
+              >
+                <RefreshCw size={14} />
+              </button>
             </div>
 
             {/* Table */}
@@ -1133,11 +1195,11 @@ export default function LeavesPage() {
                   <p className="text-sm text-gray-400 dark:text-gray-500">No allocations found</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <div className="overflow-x-auto scrollbar-hide">
+                  <table className="w-full min-w-[850px]">
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
-                        {['Employee', 'Department', 'Leave Type', 'Allocated', 'Used', 'Available', 'Remark', ''].map(h => (
+                        {['Employee', 'Department', 'Leave Type', 'Allocated', 'Used', 'Available', 'Remark', 'Actions'].map(h => (
                           <th key={h}
                             className={`px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide first:pl-5 last:pr-5 ${
                               ['Allocated','Used','Available'].includes(h) ? 'text-center' : ''
@@ -1182,14 +1244,17 @@ export default function LeavesPage() {
                               {a.remark || '—'}
                             </span>
                           </td>
-                          <td className="px-5 py-3.5 text-right">
-                            <button
-                              onClick={() => openAllocModal(a)}
-                              className="px-3.5 py-1.5 text-xs font-semibold text-white rounded-lg transition cursor-pointer border-0"
-                              style={{ backgroundColor: ACCENT }}
-                            >
-                              Edit
-                            </button>
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center justify-start gap-1">
+                              <button
+                                onClick={() => openAllocModal(a)}
+                                className="p-2 rounded-lg text-white transition cursor-pointer border-0"
+                                style={{ backgroundColor: ACCENT }}
+                                title="Edit"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1202,7 +1267,7 @@ export default function LeavesPage() {
                 total={allocTotal}
                 limit={allocLimit}
                 onPage={p => { setAllocPage(p); fetchAllAllocs(p) }}
-                onLimitChange={l => { setAllocLimit(l); setAllocPage(1); fetchAllAllocs(1, l) }}
+                onLimitChange={l => { setAllocLimit(l); setAllocPage(1); fetchAllAllocs(1, allocSearch) }}
               />
             </div>
           </>
@@ -1437,6 +1502,132 @@ export default function LeavesPage() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </PortalModal>
+      )}
+
+      {/* ── DELETE LEAVE TYPE MODAL ────────────────────────── */}
+      {showDeleteTypeModal && (
+        <PortalModal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full p-6">
+              <div className="text-center">
+                <div className="w-14 h-14 rounded-full bg-red-50 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
+                  <Trash2 size={22} className="text-red-500" />
+                </div>
+                <h2 className="text-base font-bold text-gray-900 dark:text-white mb-2">Delete this leave type?</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                  This action cannot be undone. Any allocations using this leave type will also be affected.
+                </p>
+                <div className="flex gap-2.5">
+                  <button onClick={() => { setShowDeleteTypeModal(false); setDeletingTypeId(null) }}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer">
+                    Cancel
+                  </button>
+                  <button onClick={confirmDeleteType}
+                    className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition cursor-pointer border-0">
+                    Yes, Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </PortalModal>
+      )}
+
+      {/* ── REQUEST DETAIL MODAL ──────────────────────────── */}
+      {showRequestModal && selectedRequest && (
+        <PortalModal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-lg w-full p-6">
+              {/* Header */}
+              <div className="flex items-start justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center">
+                    <User size={18} className="text-indigo-500" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900 dark:text-white">
+                      {selectedRequest.first_name} {selectedRequest.last_name}
+                    </h2>
+                    <p className="text-xs text-gray-400">{selectedRequest.email}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowRequestModal(false)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent border-0"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Status badge */}
+              <div className="mb-5">{statusBadge(selectedRequest.status)}</div>
+
+              {/* Details grid */}
+              <div className="grid grid-cols-2 gap-4 mb-5">
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3.5">
+                  <p className="text-xs text-gray-400 mb-1">Leave Type</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{selectedRequest.leave_type_name}</p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3.5">
+                  <p className="text-xs text-gray-400 mb-1">Total Days</p>
+                  <p className="text-sm font-semibold" style={{ color: ACCENT }}>{selectedRequest.days}d</p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3.5 col-span-2">
+                  <p className="text-xs text-gray-400 mb-1">Period</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {fmtDateDefault(selectedRequest.start_date)} → {fmtDateDefault(selectedRequest.end_date)}
+                  </p>
+                </div>
+                {selectedRequest.reason && (
+                  <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3.5 col-span-2">
+                    <p className="text-xs text-gray-400 mb-1">Reason</p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">{selectedRequest.reason}</p>
+                  </div>
+                )}
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3.5">
+                  <p className="text-xs text-gray-400 mb-1">Applied On</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {fmtDateDefault(selectedRequest.created_at?.split('T')[0])}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              {selectedRequest.status === 'pending' && (
+                <div className="flex gap-2.5">
+                  <button
+                    onClick={e => { e.stopPropagation(); handleApprove(selectedRequest.id, 'approved'); setShowRequestModal(false) }}
+                    className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition cursor-pointer border-0"
+                    style={{ backgroundColor: '#16a34a' }}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); handleApprove(selectedRequest.id, 'rejected'); setShowRequestModal(false) }}
+                    className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition cursor-pointer border-0"
+                    style={{ backgroundColor: '#dc2626' }}
+                  >
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => setShowRequestModal(false)}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
+              {selectedRequest.status !== 'pending' && (
+                <button
+                  onClick={() => setShowRequestModal(false)}
+                  className="w-full px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer"
+                >
+                  Close
+                </button>
+              )}
             </div>
           </div>
         </PortalModal>

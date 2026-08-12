@@ -37,13 +37,30 @@ function fmtTime(raw: string | null | undefined): string {
   } catch { return String(raw) }
 }
 
-// Format "HH:MM" 24-hour string to "1:30 PM" 12-hour with AM/PM
-function fmtHHMM(raw: string | null | undefined): string {
+// Format a UTC ISO datetime string to company-local "1:30 PM" using Intl.DateTimeFormat.
+// Handles: "2026-08-03T07:34:27.000Z", "2026-08-03 07:34:27", "07:34:27", "07:34".
+function fmtHHMM(raw: string | null | undefined, companyTz: string = 'UTC'): string {
   if (!raw) return '—'
-  const parts = String(raw).split(':')
+  const s = String(raw).trim()
+  // Try to parse as UTC ISO string (with Z suffix or T separator)
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s)) {
+    try {
+      const d = new Date(s.endsWith('Z') || /\+\d{2}:?\d{2}$/.test(s) ? s : s + 'Z')
+      if (!isNaN(d.getTime())) {
+        return new Intl.DateTimeFormat('en-US', {
+          timeZone: companyTz,
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }).format(d)
+      }
+    } catch { /* fall through */ }
+  }
+  // Fallback: plain HH:MM or HH:MM:SS
+  const parts = s.split(':')
   const h = parseInt(parts[0], 10)
   const m = parseInt(parts[1], 10)
-  if (isNaN(h) || isNaN(m)) return String(raw)
+  if (isNaN(h) || isNaN(m)) return s
   const ampm = h < 12 ? 'AM' : 'PM'
   const h12 = h % 12 || 12
   const mm = String(m).padStart(2, '0')
@@ -430,6 +447,7 @@ export default function AttendancePage() {
   const isHRAdmin = perms.includes('attendance.manage_all')
   const canViewTeam = perms.includes('attendance.view_team') || isHRAdmin
   const canClock = perms.includes('attendance.clock_in_out')
+  const { timezone: companyTz } = useDateSettings()
 
   // -- Top-level tabs ---------------------------------------------------------
   const [tab, setTab] = useState<TopTab>('today')
@@ -1181,8 +1199,8 @@ export default function AttendancePage() {
                           {r.status_label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.clock_in_time ? fmtHHMM(r.clock_in_time) : '—'}</td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.clock_out_time ? fmtHHMM(r.clock_out_time) : '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.clock_in_time ? fmtHHMM(r.clock_in_time, companyTz) : '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.clock_out_time ? fmtHHMM(r.clock_out_time, companyTz) : '—'}</td>
                       <td className="px-4 py-3 font-semibold text-amber-600 dark:text-amber-400">{fmtBreak(r.total_break_minutes)}</td>
                       <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{fmtHours(r.working_hours)}</td>
                       <td className="px-4 py-3 text-red-500">{r.is_late ? `${r.late_minutes}m` : '—'}</td>
