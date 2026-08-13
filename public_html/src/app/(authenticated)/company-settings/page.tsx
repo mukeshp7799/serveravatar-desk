@@ -41,7 +41,6 @@ type CompanySettings = {
   }
   leave: {
     allow_half_day_leave: boolean
-    half_day_session: 'first_half' | 'second_half'
     minimum_leave_notice_days: number
     allow_backdated_leave: boolean
     max_consecutive_leave_days: number
@@ -227,7 +226,6 @@ export default function CompanySettingsPage() {
     },
     leave: {
       allow_half_day_leave: true,
-      half_day_session: 'first_half',
       minimum_leave_notice_days: 1,
       allow_backdated_leave: false,
       max_consecutive_leave_days: 10,
@@ -269,7 +267,6 @@ export default function CompanySettingsPage() {
         },
         leave: {
           allow_half_day_leave: Boolean(s.leave?.allow_half_day_leave),
-          half_day_session: s.leave?.half_day_session || 'first_half',
           minimum_leave_notice_days: Number(s.leave?.minimum_leave_notice_days) || 1,
           allow_backdated_leave: Boolean(s.leave?.allow_backdated_leave),
           max_consecutive_leave_days: Number(s.leave?.max_consecutive_leave_days) || 10,
@@ -337,10 +334,10 @@ export default function CompanySettingsPage() {
         active={activeTab}
         onChange={(k) => setActiveTab(k as typeof activeTab)}
         tabs={[
-          { key: 'general',           label: <span className="inline-flex items-center gap-1.5"><Building2 size={14} strokeWidth={2.25} />{t('companySettings.general')}</span> },
-          { key: 'working_schedule',  label: <span className="inline-flex items-center gap-1.5"><Clock size={14} strokeWidth={2.25} />{t('companySettings.workingSchedule')}</span> },
-          { key: 'attendance',        label: <span className="inline-flex items-center gap-1.5"><Fingerprint size={14} strokeWidth={2.25} />{t('companySettings.attendanceSettings')}</span> },
-          { key: 'leave',             label: <span className="inline-flex items-center gap-1.5"><Palmtree size={14} strokeWidth={2.25} />{t('companySettings.leaveSettings')}</span> },
+          { key: 'general',           label: <span className="inline-flex whitespace-nowrap items-center gap-1.5"><Building2 size={14} strokeWidth={2.25} />{t('companySettings.general')}</span> },
+          { key: 'working_schedule',  label: <span className="inline-flex whitespace-nowrap items-center gap-1.5"><Clock size={14} strokeWidth={2.25} />{t('companySettings.workingSchedule')}</span> },
+          { key: 'attendance',        label: <span className="inline-flex whitespace-nowrap items-center gap-1.5"><Fingerprint size={14} strokeWidth={2.25} />{t('companySettings.attendanceSettings')}</span> },
+          { key: 'leave',             label: <span className="inline-flex whitespace-nowrap items-center gap-1.5"><Palmtree size={14} strokeWidth={2.25} />{t('companySettings.leaveSettings')}</span> },
         ]}
       />
 
@@ -592,17 +589,6 @@ export default function CompanySettingsPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label className={labelCls}>{t('companySettings.halfDaySession')}</label>
-                <select
-                  value={lv.half_day_session}
-                  onChange={e => update('leave', 'half_day_session', e.target.value as 'first_half' | 'second_half')}
-                  className={selectCls}
-                >
-                  <option value="first_half">{t('companySettings.firstHalf')}</option>
-                  <option value="second_half">{t('companySettings.secondHalf')}</option>
-                </select>
-              </div>
-              <div>
                 <label className={labelCls}>{t('companySettings.minimumLeaveNotice')}</label>
                 <div className="relative">
                   <input
@@ -672,8 +658,8 @@ export default function CompanySettingsPage() {
         </div>
       )}
 
-      {/* Sticky Save Button */}
-      <div className="sticky bottom-4 z-10 flex justify-end">
+      {/* Bottom Action Section */}
+      <div className="flex justify-end mt-2">
         <button
           type="button"
           onClick={handleSave}

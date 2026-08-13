@@ -1065,3 +1065,23 @@ html { scroll-behavior: smooth; }
   background-color: #374151;
 }
 
+
+/* Scrollbar hide utility — keeps scrolling, hides scrollbar */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide number input spin buttons — keeps functionality via keyboard, removes visual clutter */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
