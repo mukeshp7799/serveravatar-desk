@@ -34,7 +34,7 @@ export default function Tabs({
           <button
             key={tab.key}
             onClick={() => onChange(tab.key)}
-            className={`flex-1 min-w-[140px] px-4 py-2.5 text-sm font-bold rounded-xl transition cursor-pointer border-none ${
+            className={`flex-1  px-4 py-2.5 text-sm font-bold rounded-xl whitespace-nowrap transition cursor-pointer border-none ${
               isActive
                 ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow'
                 : 'bg-transparent text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
