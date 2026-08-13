@@ -8,11 +8,41 @@ import api from '@/lib/api'
 import { useDateSettings, useCompanySettings } from '@/contexts/CompanySettingsContext'
 import Tabs from '@/components/Tabs'
 import PageLoader from '@/components/PageLoader'
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import {
   Calendar, Check, CheckSquare, Clock, Info, Pencil, Plus, Search, Settings,
   ThumbsDown, ThumbsUp, Trash2, X, MoreHorizontal, ChevronDown,
   User, Users, Briefcase, Sparkles, RefreshCw
 } from 'lucide-react'
+
+// ────────────────────────────────────────────────────────────
+// LEAVE FORM SCHEMA
+// ────────────────────────────────────────────────────────────
+const leaveSchema = z.object({
+  leave_type_id: z.string().min(1, 'Leave type is required'),
+  start_date:    z.string().min(1, 'Start date is required'),
+  end_date:      z.string().min(1, 'End date is required'),
+  half_day:      z.boolean().optional(),
+  half_day_session: z.enum(['first_half', 'second_half']).optional(),
+  reason:        z.string().optional(),
+})
+type LeaveFormData = z.infer<typeof leaveSchema>
+
+// ────────────────────────────────────────────────────────────
+// LEAVE TYPE FORM SCHEMA
+// ────────────────────────────────────────────────────────────
+const leaveTypeSchema = z.object({
+  name:        z.string().min(1, 'Name is required'),
+  code:        z.string().optional(),
+  default_days: z.string().optional(),
+  max_allowed:  z.string().optional(),
+  is_paid:     z.boolean().optional(),
+  description: z.string().optional(),
+  status:      z.enum(['active', 'inactive']).optional(),
+})
+type LeaveTypeFormData = z.infer<typeof leaveTypeSchema>
 
 // ────────────────────────────────────────────────────────────
 // HELPERS
@@ -195,7 +225,7 @@ function PaginationBar({ page, total, limit, onPage, onLimitChange }: {
             <select
               value={limit}
               onChange={e => onLimitChange(Number(e.target.value))}
-              className="appearance-none pl-2 pr-6 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+              className="pl-2 pr-6 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 dark:focus:ring-indigo-800 transition"
               style={{ colorScheme: 'normal' }}
             >
               {PER_PAGE_OPTIONS.map(o => (
@@ -217,7 +247,7 @@ function PaginationBar({ page, total, limit, onPage, onLimitChange }: {
             <button
               onClick={() => onPage(prev)}
               disabled={page <= 1}
-              className="min-w-[32px] h-8 px-2 flex items-center justify-center rounded-lg text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer border-0 bg-transparent"
+              className="min-w-[32px] h-8 px-2 flex items-center justify-center rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700"
             >‹</button>
             {pages.map((p, i) =>
               p === '...' ? (
@@ -226,12 +256,12 @@ function PaginationBar({ page, total, limit, onPage, onLimitChange }: {
                 <button
                   key={p}
                   onClick={() => onPage(p)}
-                  className={`min-w-[32px] h-8 px-1 flex items-center justify-center rounded-lg text-xs font-medium transition cursor-pointer border-0 ${
+                  className={`min-w-[32px] h-8 px-1 flex items-center justify-center rounded-lg text-xs font-medium transition cursor-pointer border ${
                     p === page
-                      ? 'text-white'
-                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      ? 'text-white border-indigo-500'
+                      : 'text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:border-indigo-300 dark:hover:border-indigo-600 hover:text-indigo-600 dark:hover:text-indigo-400 bg-white dark:bg-gray-700'
                   }`}
-                  style={p === page ? { backgroundColor: ACCENT } : {}}
+                  style={p === page ? { backgroundColor: ACCENT, borderColor: ACCENT } : {}}
                 >
                   {p}
                 </button>
@@ -240,7 +270,7 @@ function PaginationBar({ page, total, limit, onPage, onLimitChange }: {
             <button
               onClick={() => onPage(next)}
               disabled={page >= totalPages}
-              className="min-w-[32px] h-8 px-2 flex items-center justify-center rounded-lg text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer border-0 bg-transparent"
+              className="min-w-[32px] h-8 px-2 flex items-center justify-center rounded-lg text-sm text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700"
             >›</button>
           </div>
         )}
@@ -278,11 +308,14 @@ export default function LeavesPage() {
 
   // Apply modal
   const [showApply, setShowApply] = useState(false)
-  const [applyForm, setApplyForm] = useState({
-    leave_type_id: '', start_date: '', end_date: '', reason: '',
-    half_day: false, half_day_session: 'first_half',
+  const applyForm = useForm<LeaveFormData>({
+    resolver: zodResolver(leaveSchema),
+    mode: 'onBlur',
+    defaultValues: {
+      leave_type_id: '', start_date: '', end_date: '', reason: '',
+      half_day: false, half_day_session: 'first_half' as const,
+    },
   })
-  const [applying, setApplying] = useState(false)
 
   // Reject modal
   const [showRejectModal, setShowRejectModal] = useState(false)
@@ -303,11 +336,14 @@ export default function LeavesPage() {
   // Type modal
   const [showTypeModal, setShowTypeModal] = useState(false)
   const [editType, setEditType] = useState<any>(null)
-  const [typeForm, setTypeForm] = useState({
-    name: '', code: '', description: '', is_paid: true,
-    default_days: '', max_allowed: '', status: 'active',
+  const typeForm = useForm<LeaveTypeFormData>({
+    resolver: zodResolver(leaveTypeSchema),
+    mode: 'onBlur',
+    defaultValues: {
+      name: '', code: '', description: '', is_paid: true,
+      default_days: '', max_allowed: '', status: 'active' as const,
+    },
   })
-  const [savingType, setSavingType] = useState(false)
 
   // Allocation modal
   const [showAllocModal, setShowAllocModal] = useState(false)
@@ -326,6 +362,7 @@ export default function LeavesPage() {
   const [myReqPage, setMyReqPage] = useState(1)
   const [myReqTotal, setMyReqTotal] = useState(0)
   const [myReqLimit, setMyReqLimit] = useState(10)
+  const [myReqLoading, setMyReqLoading] = useState(false)
   const [teamReqPage, setTeamReqPage] = useState(1)
   const [teamReqTotal, setTeamReqTotal] = useState(0)
   const [teamReqLimit, setTeamReqLimit] = useState(10)
@@ -333,9 +370,11 @@ export default function LeavesPage() {
   const [typesPage, setTypesPage] = useState(1)
   const [typesTotal, setTypesTotal] = useState(0)
   const [typesLimit, setTypesLimit] = useState(10)
+  const [typesLoading, setTypesLoading] = useState(false)
   const [allocPage, setAllocPage] = useState(1)
   const [allocTotal, setAllocTotal] = useState(0)
   const [allocLimit, setAllocLimit] = useState(10)
+  const [allocLoading, setAllocLoading] = useState(false)
 
   // ── Data loading ──────────────────────────────────────────
 
@@ -352,18 +391,19 @@ export default function LeavesPage() {
   }
 
   const loadMyRequests = (page = 1, limitOverride?: number) => {
+    setMyReqLoading(true)
     const limit = limitOverride ?? myReqLimit
     const params = new URLSearchParams({ page: String(page), limit: String(limit), userId: String(user.id) })
     api.get(`/leaves?${params}`).then(d => {
       setRequests(d.leaveRequests || [])
       setMyReqTotal(d.pagination?.total || 0)
       setMyReqPage(page)
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => setMyReqLoading(false))
   }
 
-  const loadTeamRequests = (page = 1, filter = reqFilter, searchOverride?: string) => {
+  const loadTeamRequests = (page = 1, filter = reqFilter, searchOverride?: string, limitOverride?: number) => {
     setTeamReqLoading(true)
-    const limit = teamReqLimit
+    const limit = limitOverride ?? teamReqLimit
     const params = new URLSearchParams({ page: String(page), limit: String(limit) })
     if (filter) params.set('status', filter)
     const search = searchOverride !== undefined ? searchOverride : teamSearch
@@ -386,17 +426,20 @@ export default function LeavesPage() {
   )
 
   const loadLeaveTypes = (page = 1, limitOverride?: number) => {
+    setTypesLoading(true)
     const limit = limitOverride ?? typesLimit
     const params = new URLSearchParams({ page: String(page), limit: String(limit) })
     api.get(`/leaves/types?${params}`).then(d => {
       setLeaveTypes(d.leaveTypes || [])
       setTypesTotal(d.pagination?.total || 0)
       setTypesPage(page)
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => setTypesLoading(false))
   }
 
-  const fetchAllAllocs = (page = 1, searchOverride?: string) => {
-    const params = new URLSearchParams({ page: String(page), limit: String(allocLimit) })
+  const fetchAllAllocs = (page = 1, searchOverride?: string, limitOverride?: number) => {
+    setAllocLoading(true)
+    const limit = limitOverride ?? allocLimit
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) })
     const search = searchOverride !== undefined ? searchOverride : allocSearch
     if (search) params.set('search', search)
     if (allocDept) params.set('departmentId', allocDept)
@@ -404,7 +447,7 @@ export default function LeavesPage() {
     api.get(`/leaves/allocations?${params}`).then(d => {
       setAllAllocations(d.allocations || [])
       setAllocTotal(d.pagination?.total || 0)
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => setAllocLoading(false))
   }
 
   // Debounced search for allocations
@@ -460,60 +503,52 @@ export default function LeavesPage() {
     return localNow.toISOString().split('T')[0]
   }
 
-  const handleApply = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!applyForm.leave_type_id || !applyForm.start_date || !applyForm.end_date) {
-      toast.error('Please fill in all required fields'); return
-    }
-    if (applyForm.half_day && applyForm.start_date !== applyForm.end_date) {
+  const onApplyValid = async (data: LeaveFormData) => {
+    if (data.half_day && data.start_date !== data.end_date) {
       toast.error('Half-day leave must have the same start and end date.'); return
     }
-    setApplying(true)
     try {
       const res = await api.post('/leaves', {
-        leave_type_id: parseInt(applyForm.leave_type_id),
-        start_date: applyForm.start_date,
-        end_date: applyForm.end_date,
-        reason: applyForm.reason,
-        half_day: applyForm.half_day || false,
-        half_day_session: applyForm.half_day ? applyForm.half_day_session : undefined,
+        leave_type_id: parseInt(data.leave_type_id),
+        start_date: data.start_date,
+        end_date: data.end_date,
+        reason: data.reason,
+        half_day: data.half_day || false,
+        half_day_session: data.half_day ? data.half_day_session : undefined,
       })
       toast.success(res.message || 'Leave request submitted')
       setShowApply(false)
-      setApplyForm({ leave_type_id: '', start_date: '', end_date: '', reason: '', half_day: false, half_day_session: 'first_half' })
+      applyForm.reset()
       loadAll(); loadMyRequests(1)
     } catch (err: any) { toast.error(err.message || 'Failed to submit') }
-    finally { setApplying(false) }
   }
+  const handleApply = applyForm.handleSubmit(onApplyValid)
 
   // ── Leave type management ──────────────────────────────────
 
   const openAddType = () => {
     setEditType(null)
-    setTypeForm({ name: '', code: '', description: '', is_paid: true, default_days: '', max_allowed: '', status: 'active' })
+    typeForm.reset({ name: '', code: '', description: '', is_paid: true, default_days: '', max_allowed: '', status: 'active' })
     setShowTypeModal(true)
   }
   const openEditType = (lt: any) => {
     setEditType(lt)
-    setTypeForm({
+    typeForm.reset({
       name: lt.name || '', code: lt.code || '', description: lt.description || '',
       is_paid: Boolean(lt.is_paid),
       default_days: String(lt.default_days || ''),
       max_allowed: String(lt.max_allowed || ''),
-      status: lt.status || 'active',
+      status: (lt.status || 'active') as 'active' | 'inactive',
     })
     setShowTypeModal(true)
   }
-  const handleTypeSave = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!typeForm.name.trim()) { toast.error('Name is required'); return }
-    setSavingType(true)
+  const onTypeSaveValid = async (data: LeaveTypeFormData) => {
     try {
       const payload = {
-        name: typeForm.name, code: typeForm.code || null,
-        description: typeForm.description || null, is_paid: typeForm.is_paid,
-        default_days: parseInt(typeForm.default_days) || 0,
-        max_allowed: parseInt(typeForm.max_allowed) || 0, status: typeForm.status,
+        name: data.name, code: data.code || null,
+        description: data.description || null, is_paid: data.is_paid,
+        default_days: parseInt(data.default_days || '0'),
+        max_allowed: parseInt(data.max_allowed || '0'), status: data.status,
       }
       if (editType) {
         await api.put(`/leaves/types/${editType.id}`, payload)
@@ -524,8 +559,8 @@ export default function LeavesPage() {
       }
       setShowTypeModal(false); loadAll()
     } catch (err: any) { toast.error(err.message || 'Failed') }
-    finally { setSavingType(false) }
   }
+  const handleTypeSave = typeForm.handleSubmit(onTypeSaveValid)
   const handleDeleteType = async (id: number) => {
     setDeletingTypeId(id)
     setShowDeleteTypeModal(true)
@@ -769,33 +804,44 @@ export default function LeavesPage() {
                     {myReqTotal > 0 ? `${myReqTotal} total request${myReqTotal !== 1 ? 's' : ''}` : 'No requests'}
                   </p>
                 </div>
-                {/* Status filter */}
-                <div className="relative">
-                  <select
-                    value={reqFilter}
-                    onChange={e => { setReqFilter(e.target.value as any); setMyReqPage(1) }}
-                    className="appearance-none pl-3 pr-8 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition"
-                    style={{ colorScheme: 'normal' }}
+                <div className="flex items-center gap-2">
+                  {/* Status filter */}
+                  <div className="relative">
+                    <select
+                      value={reqFilter}
+                      onChange={e => { setReqFilter(e.target.value as any); setMyReqPage(1) }}
+                      className="appearance-none pl-3 pr-8 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl cursor-pointer focus:outline-none focus:ring-2 transition"
+                      style={{ colorScheme: 'normal' }}
+                    >
+                      <option value="">All Status</option>
+                      <option value="pending">Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                    <ChevronDown size={12}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                  {/* Refresh button */}
+                  <button
+                    onClick={() => loadMyRequests(myReqPage)}
+                    disabled={myReqLoading}
+                    className={`px-2.5 py-2 rounded-xl border transition cursor-pointer ${myReqLoading ? 'text-gray-400 cursor-not-allowed bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600' : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border-gray-200 dark:border-gray-600'}`}
+                    title="Refresh"
                   >
-                    <option value="">All Status</option>
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                  <ChevronDown size={12}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    <RefreshCw size={14} className={myReqLoading ? 'animate-spin' : ''} />
+                  </button>
                 </div>
               </div>
 
               {/* Table */}
-              {myRequests.length === 0 ? (
+              {myRequests.length === 0 && !myReqLoading ? (
                 <div className="px-5 py-14 text-center">
                   <div className="text-3xl mb-2">📭</div>
                   <p className="text-sm text-gray-400 dark:text-gray-500">No leave requests found</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto scrollbar-hide">
+                <div className="overflow-x-auto scrollbar-hide relative">
                   <table className="w-full min-w-[600px]">
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
@@ -847,6 +893,11 @@ export default function LeavesPage() {
                       ))}
                     </tbody>
                   </table>
+                  {myReqLoading && (
+                    <div className="absolute inset-0 bg-white/60 dark:bg-gray-800/60 flex items-center justify-center rounded-2xl">
+                      <svg className="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -904,26 +955,22 @@ export default function LeavesPage() {
               <button
                 onClick={() => { setTeamReqPage(1); loadTeamRequests(1, reqFilter, teamSearch) }}
                 disabled={teamReqLoading}
-                className={`px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl transition cursor-pointer ${teamReqLoading ? 'text-gray-400 cursor-not-allowed bg-gray-100 dark:bg-gray-700' : 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                className={`px-2.5 py-2 rounded-xl border transition cursor-pointer ${teamReqLoading ? 'text-gray-400 cursor-not-allowed bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600' : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border-gray-200 dark:border-gray-600'}`}
                 title="Refresh"
               >
-                {teamReqLoading ? (
-                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                ) : (
-                  <RefreshCw size={14} />
-                )}
+                <RefreshCw size={14} className={teamReqLoading ? 'animate-spin' : ''} />
               </button>
             </div>
 
             {/* Table */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              {filteredRequests.length === 0 ? (
+              {filteredRequests.length === 0 && !teamReqLoading ? (
                 <div className="px-5 py-14 text-center">
                   <div className="text-3xl mb-2">🔍</div>
                   <p className="text-sm text-gray-400 dark:text-gray-500">No requests found</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto scrollbar-hide">
+                <div className="overflow-x-auto scrollbar-hide relative">
                   <table className="w-full min-w-[700px]">
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
@@ -1013,6 +1060,11 @@ export default function LeavesPage() {
                       })}
                     </tbody>
                   </table>
+                  {teamReqLoading && (
+                    <div className="absolute inset-0 bg-white/60 dark:bg-gray-800/60 flex items-center justify-center rounded-2xl">
+                      <svg className="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    </div>
+                  )}
                 </div>
               )}
               <PaginationBar
@@ -1020,7 +1072,7 @@ export default function LeavesPage() {
                 total={teamReqTotal}
                 limit={teamReqLimit}
                 onPage={p => { setTeamReqPage(p); loadTeamRequests(p, reqFilter) }}
-                onLimitChange={l => { setTeamReqLimit(l); setTeamReqPage(1); loadTeamRequests(1, reqFilter, teamSearch) }}
+                onLimitChange={l => { setTeamReqLimit(l); setTeamReqPage(1); loadTeamRequests(1, reqFilter, teamSearch, l) }}
               />
             </div>
           </>
@@ -1031,7 +1083,15 @@ export default function LeavesPage() {
         {/* ═══════════════════════════════════════════════════ */}
         {tab === 'types' && isHRAdmin && (
           <>
-            <div className="flex justify-end">
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => loadLeaveTypes(typesPage)}
+                disabled={typesLoading}
+                className={`px-2.5 py-2 rounded-xl border transition cursor-pointer ${typesLoading ? 'text-gray-400 cursor-not-allowed bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600' : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border-gray-200 dark:border-gray-600'}`}
+                title="Refresh"
+              >
+                <RefreshCw size={14} className={typesLoading ? 'animate-spin' : ''} />
+              </button>
               <button
                 onClick={openAddType}
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-xl transition cursor-pointer border-0"
@@ -1042,13 +1102,14 @@ export default function LeavesPage() {
             </div>
 
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              {leaveTypes.length === 0 ? (
+              {leaveTypes.length === 0 && !typesLoading && (
                 <div className="px-5 py-14 text-center">
                   <div className="text-3xl mb-2">🏷️</div>
                   <p className="text-sm text-gray-400 dark:text-gray-500">No leave types defined</p>
                 </div>
-              ) : (
-                <div className="overflow-x-auto scrollbar-hide">
+              )}
+              {leaveTypes.length > 0 && (
+                <div className="overflow-x-auto scrollbar-hide relative">
                   <table className="w-full min-w-[800px]">
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
@@ -1123,6 +1184,11 @@ export default function LeavesPage() {
                       ))}
                     </tbody>
                   </table>
+                  {typesLoading && (
+                    <div className="absolute inset-0 bg-white/60 dark:bg-gray-800/60 flex items-center justify-center rounded-2xl">
+                      <svg className="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    </div>
+                  )}
                 </div>
               )}
               <PaginationBar
@@ -1187,22 +1253,24 @@ export default function LeavesPage() {
               {/* Refresh button */}
               <button
                 onClick={() => { setAllocPage(1); fetchAllAllocs(1, allocSearch) }}
-                className="px-3 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl transition cursor-pointer"
+                disabled={allocLoading}
+                className={`px-2.5 py-2 rounded-xl border transition cursor-pointer ${allocLoading ? 'text-gray-400 cursor-not-allowed bg-gray-100 dark:bg-gray-700 border-gray-200 dark:border-gray-600' : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border-gray-200 dark:border-gray-600'}`}
                 title="Refresh"
               >
-                <RefreshCw size={14} />
+                <RefreshCw size={14} className={allocLoading ? 'animate-spin' : ''} />
               </button>
             </div>
 
             {/* Table */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              {allAllocations.length === 0 ? (
+              {allAllocations.length === 0 && !allocLoading && (
                 <div className="px-5 py-14 text-center">
                   <div className="text-3xl mb-2">📋</div>
                   <p className="text-sm text-gray-400 dark:text-gray-500">No allocations found</p>
                 </div>
-              ) : (
-                <div className="overflow-x-auto scrollbar-hide">
+              )}
+              {allAllocations.length > 0 && (
+                <div className="overflow-x-auto scrollbar-hide relative">
                   <table className="w-full min-w-[850px]">
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
@@ -1267,6 +1335,11 @@ export default function LeavesPage() {
                       ))}
                     </tbody>
                   </table>
+                  {allocLoading && (
+                    <div className="absolute inset-0 bg-white/60 dark:bg-gray-800/60 flex items-center justify-center rounded-2xl">
+                      <svg className="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    </div>
+                  )}
                 </div>
               )}
               <PaginationBar
@@ -1274,7 +1347,7 @@ export default function LeavesPage() {
                 total={allocTotal}
                 limit={allocLimit}
                 onPage={p => { setAllocPage(p); fetchAllAllocs(p) }}
-                onLimitChange={l => { setAllocLimit(l); setAllocPage(1); fetchAllAllocs(1, allocSearch) }}
+                onLimitChange={l => { setAllocLimit(l); setAllocPage(1); fetchAllAllocs(1, allocSearch, l) }}
               />
             </div>
           </>
@@ -1309,10 +1382,8 @@ export default function LeavesPage() {
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">
                     Leave Type <span className="text-red-500">*</span>
                   </label>
-                  <select value={applyForm.leave_type_id}
-                    onChange={e => setApplyForm(p => ({ ...p, leave_type_id: e.target.value }))}
-                    required
-                    className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition cursor-pointer">
+                  <select {...applyForm.register('leave_type_id')}
+                    className={`w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border rounded-xl focus:outline-none focus:ring-2 transition cursor-pointer ${applyForm.formState.errors.leave_type_id ? 'border-red-500 dark:border-red-400' : 'border-gray-200 dark:border-gray-600'}`}>
                     <option value="">— Select leave type —</option>
                     {allocations.map((a: any) => (
                       <option key={a.leave_type_id} value={a.leave_type_id} disabled={a.available <= 0}>
@@ -1320,6 +1391,9 @@ export default function LeavesPage() {
                       </option>
                     ))}
                   </select>
+                  {applyForm.formState.errors.leave_type_id && (
+                    <p className="mt-1 text-xs text-red-500">{applyForm.formState.errors.leave_type_id.message}</p>
+                  )}
                 </div>
 
                 {/* Date range */}
@@ -1330,12 +1404,14 @@ export default function LeavesPage() {
                     </label>
                     <input
                       type="date"
-                      value={applyForm.start_date}
-                      onChange={e => setApplyForm(p => ({ ...p, start_date: e.target.value, half_day: false }))}
+                      {...applyForm.register('start_date')}
+                      onChange={e => { applyForm.register('start_date').onChange(e); applyForm.setValue('half_day', false) }}
                       min={getMinDate()}
-                      required
-                      className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition"
+                      className={`w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border rounded-xl focus:outline-none focus:ring-2 transition ${applyForm.formState.errors.start_date ? 'border-red-500 dark:border-red-400' : 'border-gray-200 dark:border-gray-600'}`}
                     />
+                    {applyForm.formState.errors.start_date && (
+                      <p className="mt-1 text-xs text-red-500">{applyForm.formState.errors.start_date.message}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">
@@ -1343,12 +1419,14 @@ export default function LeavesPage() {
                     </label>
                     <input
                       type="date"
-                      value={applyForm.end_date}
-                      onChange={e => setApplyForm(p => ({ ...p, end_date: e.target.value, half_day: false }))}
+                      {...applyForm.register('end_date')}
+                      onChange={e => { applyForm.register('end_date').onChange(e); applyForm.setValue('half_day', false) }}
                       min={getMinDate()}
-                      required
-                      className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition"
+                      className={`w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border rounded-xl focus:outline-none focus:ring-2 transition ${applyForm.formState.errors.end_date ? 'border-red-500 dark:border-red-400' : 'border-gray-200 dark:border-gray-600'}`}
                     />
+                    {applyForm.formState.errors.end_date && (
+                      <p className="mt-1 text-xs text-red-500">{applyForm.formState.errors.end_date.message}</p>
+                    )}
                   </div>
                 </div>
 
@@ -1359,39 +1437,39 @@ export default function LeavesPage() {
                       <div>
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Half-Day Leave</p>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          {applyForm.half_day_session === 'first_half' ? 'Morning (AM)' : 'Afternoon (PM)'}
+                          {applyForm.watch('half_day_session') === 'first_half' ? 'Morning (AM)' : 'Afternoon (PM)'}
                         </p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => setApplyForm(p => ({
-                          ...p,
-                          half_day: !p.half_day,
-                          end_date: !p.half_day ? p.start_date : p.end_date,
-                        }))}
+                        onClick={() => {
+                          const current = applyForm.watch('half_day')
+                          applyForm.setValue('half_day', !current)
+                          if (!current) applyForm.setValue('end_date', applyForm.watch('start_date'))
+                        }}
                         className={`relative inline-flex h-7 w-12 items-center rounded-full transition cursor-pointer border-2 ${
-                          applyForm.half_day ? 'border-indigo-600' : 'border-gray-300 dark:border-gray-600'
+                          applyForm.watch('half_day') ? 'border-indigo-600' : 'border-gray-300 dark:border-gray-600'
                         }`}
-                        style={applyForm.half_day ? { backgroundColor: ACCENT } : {}}
+                        style={applyForm.watch('half_day') ? { backgroundColor: ACCENT } : {}}
                       >
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-                          applyForm.half_day ? 'translate-x-6' : 'translate-x-1'
+                          applyForm.watch('half_day') ? 'translate-x-6' : 'translate-x-1'
                         }`} />
                       </button>
                     </div>
-                    {applyForm.half_day && (
+                    {applyForm.watch('half_day') && (
                       <div className="flex gap-2">
                         {(['first_half', 'second_half'] as const).map(session => (
                           <button
                             key={session}
                             type="button"
-                            onClick={() => setApplyForm(p => ({ ...p, half_day_session: session }))}
+                            onClick={() => applyForm.setValue('half_day_session', session)}
                             className={`flex-1 py-2 rounded-lg text-xs font-semibold border-2 transition cursor-pointer ${
-                              applyForm.half_day_session === session
+                              applyForm.watch('half_day_session') === session
                                 ? 'border-indigo-600 text-white'
                                 : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 bg-transparent hover:border-indigo-300'
                             }`}
-                            style={applyForm.half_day_session === session ? { backgroundColor: ACCENT, borderColor: ACCENT } : {}}
+                            style={applyForm.watch('half_day_session') === session ? { backgroundColor: ACCENT, borderColor: ACCENT } : {}}
                           >
                             {session === 'first_half' ? '🌅 Morning' : '🌆 Afternoon'}
                           </button>
@@ -1402,10 +1480,10 @@ export default function LeavesPage() {
                 )}
 
                 {/* Warnings */}
-                {applyForm.start_date && applyForm.end_date && (
+                {applyForm.watch('start_date') && applyForm.watch('end_date') && (
                   <LeaveWarnings
-                    startDate={applyForm.start_date}
-                    endDate={applyForm.end_date}
+                    startDate={applyForm.watch('start_date')}
+                    endDate={applyForm.watch('end_date')}
                     workingDays={ws?.working_days || ['mon', 'tue', 'wed', 'thu', 'fri']}
                     maxConsecutive={lv?.max_consecutive_leave_days}
                   />
@@ -1415,8 +1493,7 @@ export default function LeavesPage() {
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Reason</label>
                   <textarea
-                    value={applyForm.reason}
-                    onChange={e => setApplyForm(p => ({ ...p, reason: e.target.value }))}
+                    {...applyForm.register('reason')}
                     rows={3}
                     placeholder="Brief reason for leave..."
                     className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition placeholder-gray-400 resize-none"
@@ -1429,10 +1506,10 @@ export default function LeavesPage() {
                     className="px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer">
                     Cancel
                   </button>
-                  <button type="submit" disabled={applying}
+                  <button type="submit" disabled={applyForm.formState.isSubmitting}
                     className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition disabled:opacity-50 cursor-pointer border-0"
                     style={{ backgroundColor: ACCENT }}>
-                    {applying ? 'Submitting...' : 'Submit Request'}
+                    {applyForm.formState.isSubmitting ? 'Submitting...' : 'Submit Request'}
                   </button>
                 </div>
               </form>
@@ -1700,15 +1777,16 @@ export default function LeavesPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Name <span className="text-red-500">*</span></label>
-                    <input value={typeForm.name}
-                      onChange={e => setTypeForm(p => ({ ...p, name: e.target.value }))}
-                      required placeholder="e.g. Annual Leave"
-                      className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition" />
+                    <input {...typeForm.register('name')}
+                      placeholder="e.g. Annual Leave"
+                      className={`w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border rounded-xl focus:outline-none focus:ring-2 transition ${typeForm.formState.errors.name ? 'border-red-500 dark:border-red-400' : 'border-gray-200 dark:border-gray-600'}`} />
+                    {typeForm.formState.errors.name && (
+                      <p className="mt-1 text-xs text-red-500">{typeForm.formState.errors.name.message}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Code</label>
-                    <input value={typeForm.code}
-                      onChange={e => setTypeForm(p => ({ ...p, code: e.target.value }))}
+                    <input {...typeForm.register('code')}
                       placeholder="e.g. AL"
                       className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition" />
                   </div>
@@ -1716,14 +1794,12 @@ export default function LeavesPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Default Days</label>
-                    <input type="number" min="0" value={typeForm.default_days}
-                      onChange={e => setTypeForm(p => ({ ...p, default_days: e.target.value }))}
+                    <input type="number" min="0" {...typeForm.register('default_days')}
                       className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Max Allowed</label>
-                    <input type="number" min="0" value={typeForm.max_allowed}
-                      onChange={e => setTypeForm(p => ({ ...p, max_allowed: e.target.value }))}
+                    <input type="number" min="0" {...typeForm.register('max_allowed')}
                       className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition" />
                   </div>
                 </div>
@@ -1734,21 +1810,20 @@ export default function LeavesPage() {
                     <p className="text-xs text-gray-500 mt-0.5">Employee receives pay during this leave</p>
                   </div>
                   <button type="button"
-                    onClick={() => setTypeForm(p => ({ ...p, is_paid: !p.is_paid }))}
+                    onClick={() => typeForm.setValue('is_paid', !typeForm.watch('is_paid'))}
                     className={`relative inline-flex h-7 w-12 items-center rounded-full transition cursor-pointer border-2 ${
-                      typeForm.is_paid ? 'border-indigo-600' : 'border-gray-300 dark:border-gray-600'
+                      typeForm.watch('is_paid') ? 'border-indigo-600' : 'border-gray-300 dark:border-gray-600'
                     }`}
-                    style={typeForm.is_paid ? { backgroundColor: ACCENT } : {}}
+                    style={typeForm.watch('is_paid') ? { backgroundColor: ACCENT } : {}}
                   >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-                      typeForm.is_paid ? 'translate-x-6' : 'translate-x-1'
+                      typeForm.watch('is_paid') ? 'translate-x-6' : 'translate-x-1'
                     }`} />
                   </button>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">Description</label>
-                  <textarea value={typeForm.description}
-                    onChange={e => setTypeForm(p => ({ ...p, description: e.target.value }))}
+                  <textarea {...typeForm.register('description')}
                     rows={2} placeholder="Optional description..."
                     className="w-full px-3 py-2.5 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 transition resize-none" />
                 </div>
@@ -1757,10 +1832,10 @@ export default function LeavesPage() {
                     className="px-4 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-xl border border-gray-200 dark:border-gray-600 transition cursor-pointer">
                     Cancel
                   </button>
-                  <button type="submit" disabled={savingType}
+                  <button type="submit" disabled={typeForm.formState.isSubmitting}
                     className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition disabled:opacity-50 cursor-pointer border-0"
                     style={{ backgroundColor: ACCENT }}>
-                    {savingType ? 'Saving...' : editType ? 'Save Changes' : 'Create Type'}
+                    {typeForm.formState.isSubmitting ? 'Saving...' : editType ? 'Save Changes' : 'Create Type'}
                   </button>
                 </div>
               </form>
