@@ -96,7 +96,9 @@ class ApiClient {
           window.location.assign(`/login?next=${next}`);
         }
       }
-      throw new Error(data?.error || `Request failed with status ${res.status}`);
+      const err: any = new Error(data?.error || `Request failed with status ${res.status}`);
+      err.status = res.status;
+      throw err;
     }
 
     return data;

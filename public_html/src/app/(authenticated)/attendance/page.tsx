@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
 import PageLoader from '@/components/PageLoader'
-import { useDateSettings } from '@/contexts/CompanySettingsContext'
+import { useDateSettings, useCompanySettings } from '@/contexts/CompanySettingsContext'
 import {
   CheckCircle, Coffee, Clock, Edit2, Eye, LogIn,
   LogOut, PlayCircle, Search, StopCircle, Users, X,
@@ -448,6 +448,7 @@ export default function AttendancePage() {
   const canViewTeam = perms.includes('attendance.view_team') || isHRAdmin
   const canClock = perms.includes('attendance.clock_in_out')
   const { timezone: companyTz } = useDateSettings()
+  const { settings } = useCompanySettings()
 
   // -- Top-level tabs ---------------------------------------------------------
   const [tab, setTab] = useState<TopTab>('today')
@@ -476,6 +477,7 @@ export default function AttendancePage() {
   // -- Team --------------------------------------------------------------------
   const [teamRecords, setTeamRecords] = useState<any[]>([])
   const [stats, setStats] = useState<any>({})
+  const [teamLoading, setTeamLoading] = useState(false)
 
   // -- Break Adjustments ------------------------------------------------------
   const [adjustments, setAdjustments] = useState<AdjustmentRequest[]>([])
@@ -573,6 +575,7 @@ export default function AttendancePage() {
   }
 
   const loadTeam = async () => {
+    setTeamLoading(true)
     try {
       const [team, st, depts] = await Promise.all([
         api.get('/attendance/team'),
@@ -582,7 +585,7 @@ export default function AttendancePage() {
       setTeamRecords(team.records || [])
       setStats(st.stats || {})
       setDepartments(depts.departments || [])
-    } catch {}
+    } catch {} finally { setTeamLoading(false) }
   }
 
   const loadAdjustmentStats = async () => {
@@ -880,7 +883,7 @@ export default function AttendancePage() {
   // canClockIn: allow for 'absent' (first clock-in of the day) OR 'completed' (re-clock-in after clock-out)
   const canClockIn = myToday && (myToday.status === 'absent' || myToday.status === 'completed') && canClock
   const canClockOut = myToday && ['clocked_in', 'working'].includes(myToday.status) && myToday.status !== 'on_break' && canClock
-  const canStartBreak = myToday && ['clocked_in', 'working'].includes(myToday.status) && myToday.status !== 'on_break' && canClock
+  const canStartBreak = myToday && ['clocked_in', 'working'].includes(myToday.status) && myToday.status !== 'on_break' && canClock && !(settings?.working_schedule?.allow_multiple_breaks === false && myBreaks.length > 0)
   const canEndBreak = myToday && myToday.status === 'on_break' && canClock
 
   // --- Render -----------------------------------------------------------------
@@ -892,6 +895,16 @@ export default function AttendancePage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Attendance</h1>
       </div>
+
+      {/* Single-break info note */}
+      {settings?.working_schedule?.allow_multiple_breaks === false && (
+        <div className="w-full bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl px-4 py-3 flex items-start gap-3">
+          <AlertTriangle size={16} className="text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+            <span className="font-semibold">One break per day.</span> Your organization allows only a single break per day. Please plan your break accordingly.
+          </p>
+        </div>
+      )}
 
       {/* Top-level Tabs */}
       <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 dark:[background-color:#1f2937]">
@@ -1002,11 +1015,23 @@ export default function AttendancePage() {
                         <LogIn size={28} className="text-sky-600" />
                         <span className="text-xs font-semibold text-sky-700 dark:text-sky-300">Clock In</span>
                       </button>
-                      <button onClick={() => doAction('start-break')} disabled={!canStartBreak || actioning !== null}
-                        className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-dashed border-amber-200 dark:border-amber-800 hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer bg-transparent">
-                        <PlayCircle size={28} className="text-amber-600" />
-                        <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">Start Break</span>
-                      </button>
+                      {/* Start Break — with tooltip when single-break limit reached */}
+                      <div className="relative group">
+                        <button onClick={() => doAction('start-break')} disabled={!canStartBreak || actioning !== null}
+                          className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-dashed border-amber-200 dark:border-amber-800 hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer bg-transparent w-full">
+                          <PlayCircle size={28} className="text-amber-600" />
+                          <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">Start Break</span>
+                        </button>
+                        {/* Tooltip — shown when disabled due to single-break limit */}
+                        {!canStartBreak && settings?.working_schedule?.allow_multiple_breaks === false && myBreaks.length > 0 && (
+                          <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 whitespace-nowrap hidden group-hover:block z-50">
+                            <div className="bg-gray-900 dark:bg-gray-700 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg">
+                              Only one break allowed per day
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                       <button onClick={() => doAction('end-break')} disabled={!canEndBreak || actioning !== null}
                         className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-dashed border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer bg-transparent">
                         <StopCircle size={28} className="text-emerald-600" />
@@ -1328,12 +1353,24 @@ export default function AttendancePage() {
 
           {/* Team table */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
               <h2 className="text-base font-semibold text-gray-900 dark:text-white whitespace-nowrap">
                 Team Attendance — {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </h2>
+              <button
+                onClick={() => loadTeam()}
+                disabled={teamLoading}
+                className={`p-2 rounded-lg border-0 transition cursor-pointer ${teamLoading ? 'text-gray-400 cursor-not-allowed bg-gray-100 dark:bg-gray-700' : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                title="Refresh"
+              >
+                {teamLoading ? (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                )}
+              </button>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto relative">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
                 <tr>
@@ -1368,6 +1405,11 @@ export default function AttendancePage() {
                 )}
               </tbody>
             </table>
+            {teamLoading && (
+              <div className="absolute inset-0 bg-white/60 dark:bg-gray-800/60 flex items-center justify-center rounded-2xl">
+                <svg className="w-6 h-6 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              </div>
+            )}
           </div>
           </div>
         </>

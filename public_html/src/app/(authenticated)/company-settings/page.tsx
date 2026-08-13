@@ -35,7 +35,6 @@ type CompanySettings = {
   attendance: {
     allow_early_clock_in: boolean
     allow_late_clock_out: boolean
-    require_clock_out: boolean
     auto_close_attendance: boolean
     auto_mark_absent: boolean
   }
@@ -46,7 +45,6 @@ type CompanySettings = {
     max_consecutive_leave_days: number
     allow_leave_on_weekends: boolean
     allow_leave_on_company_holidays: boolean
-    require_leave_approval: boolean
   }
 }
 
@@ -220,7 +218,6 @@ export default function CompanySettingsPage() {
     attendance: {
       allow_early_clock_in: true,
       allow_late_clock_out: true,
-      require_clock_out: true,
       auto_close_attendance: false,
       auto_mark_absent: true,
     },
@@ -231,7 +228,6 @@ export default function CompanySettingsPage() {
       max_consecutive_leave_days: 10,
       allow_leave_on_weekends: false,
       allow_leave_on_company_holidays: false,
-      require_leave_approval: true,
     },
   })
 
@@ -261,7 +257,6 @@ export default function CompanySettingsPage() {
         attendance: {
           allow_early_clock_in: Boolean(s.attendance?.allow_early_clock_in),
           allow_late_clock_out: Boolean(s.attendance?.allow_late_clock_out),
-          require_clock_out: Boolean(s.attendance?.require_clock_out),
           auto_close_attendance: Boolean(s.attendance?.auto_close_attendance),
           auto_mark_absent: Boolean(s.attendance?.auto_mark_absent),
         },
@@ -272,7 +267,6 @@ export default function CompanySettingsPage() {
           max_consecutive_leave_days: Number(s.leave?.max_consecutive_leave_days) || 10,
           allow_leave_on_weekends: Boolean(s.leave?.allow_leave_on_weekends),
           allow_leave_on_company_holidays: Boolean(s.leave?.allow_leave_on_company_holidays),
-          require_leave_approval: Boolean(s.leave?.require_leave_approval),
         },
       })
       setOriginal(JSON.parse(JSON.stringify(settings)))
@@ -553,12 +547,6 @@ export default function CompanySettingsPage() {
               onChange={v => update('attendance', 'allow_late_clock_out', v)}
             />
             <ToggleRow
-              label={t('companySettings.requireClockOut')}
-              description="Employees must explicitly clock out; auto-close disabled"
-              checked={att.require_clock_out}
-              onChange={v => update('attendance', 'require_clock_out', v)}
-            />
-            <ToggleRow
               label={t('companySettings.autoCloseAttendance')}
               description="Automatically close attendance at end of office hours"
               checked={att.auto_close_attendance}
@@ -646,12 +634,6 @@ export default function CompanySettingsPage() {
                 description="Employees can apply for leaves that fall on company holidays"
                 checked={lv.allow_leave_on_company_holidays}
                 onChange={v => update('leave', 'allow_leave_on_company_holidays', v)}
-              />
-              <ToggleRow
-                label={t('companySettings.requireLeaveApproval')}
-                description="All leave requests require manager approval"
-                checked={lv.require_leave_approval}
-                onChange={v => update('leave', 'require_leave_approval', v)}
               />
             </div>
           </div>

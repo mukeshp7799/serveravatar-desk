@@ -74,18 +74,14 @@ function calcWorkdays(startDate, endDate, workingDays, holidaySet, leaveSettings
     const isHolidayDay = isHoliday(ds, holidaySet);
     const isWorkDay = isWorkday(ds, workingDays);
 
-    if (isWorkDay) {
-      if (isHolidayDay && !allow_leave_on_company_holidays) {
-        // skip
-      } else {
-        count++;
-      }
+    // Holiday takes priority — always skip regardless of weekend/workday classification
+    if (isHolidayDay && !allow_leave_on_company_holidays) {
+      // skip
+    } else if (isWorkDay) {
+      count++;
     } else if (isWeekendDay && !allow_leave_on_weekends) {
       // skip
-    } else if (isHolidayDay && !allow_leave_on_company_holidays) {
-      // skip
     } else {
-      // Weekend but allowed, or holiday on non-workday
       count++;
     }
     cur.setDate(cur.getDate() + 1);
@@ -106,18 +102,18 @@ async function validateLeaveApplication(userId, startDate, endDate, leaveTypeId,
   const workingDays = Array.isArray(ws?.working_days) ? ws.working_days : ['mon', 'tue', 'wed', 'thu', 'fri'];
   const halfDaySession = lv?.half_day_session || 'first_half';
   const minNotice = Number(lv?.minimum_leave_notice_days) || 1;
-  const allowBackdated = Boolean(lv?.allow_backdated_leave);
-  const allowHalfDay = Boolean(lv?.allow_half_day_leave);
+  const allowBackdated = lv?.allow_backdated_leave === true || lv?.allow_backdated_leave === 'true';
+  const allowHalfDay = lv?.allow_half_day_leave === true || lv?.allow_half_day_leave === 'true';
   const maxConsecutive = Number(lv?.max_consecutive_leave_days) || 365;
-  const allowOnWeekends = Boolean(lv?.allow_leave_on_weekends);
-  const allowOnHolidays = Boolean(lv?.allow_leave_on_company_holidays);
+  const allowOnWeekends = lv?.allow_leave_on_weekends === true || lv?.allow_leave_on_weekends === 'true';
+  const allowOnHolidays = lv?.allow_leave_on_company_holidays === true || lv?.allow_leave_on_company_holidays === 'true';
 
   // Fetch holidays
   const [holidayRows] = await pool.query(
     'SELECT date FROM company_holidays WHERE date BETWEEN ? AND ?',
     [startDate, endDate]
   );
-  const holidaySet = new Set(holidayRows.map(h => String(h.date).slice(0, 10)));
+  const holidaySet = new Set(holidayRows.map(h => (h.date instanceof Date ? h.date.toISOString().slice(0,10) : String(h.date).slice(0,10))));
 
   const leaveSettings = { allow_leave_on_weekends: allowOnWeekends, allow_leave_on_company_holidays: allowOnHolidays };
   const days = calcWorkdays(startDate, endDate, workingDays, holidaySet, leaveSettings, false, tz);
@@ -633,7 +629,7 @@ router.post('/', auth, async (req, res, next) => {
     const { working_schedule: ws, leave: lv } = await getSettings(pool, 'working_schedule', 'leave');
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const workingDays = Array.isArray(ws?.working_days) ? ws.working_days : ['mon', 'tue', 'wed', 'thu', 'fri'];
-    const allowHalfDay = Boolean(lv?.allow_half_day_leave);
+    const allowHalfDay = lv?.allow_half_day_leave === true || lv?.allow_half_day_leave === 'true';
     const halfDaySession = lv?.half_day_session || 'first_half';
 
     if (isHalfDay && !allowHalfDay) {
@@ -641,12 +637,13 @@ router.post('/', auth, async (req, res, next) => {
     }
 
     const [holidayRows] = await pool.query(
-      'SELECT date FROM company_holidays WHERE date BETWEEN ? AND ?', [start_date, end_date]
+      'SELECT date FROM company_holidays WHERE date BETWEEN ? AND ?',
+      [start_date, end_date]
     );
-    const holidaySet = new Set(holidayRows.map(h => String(h.date).slice(0, 10)));
+    const holidaySet = new Set(holidayRows.map(h => (h.date instanceof Date ? h.date.toISOString().slice(0,10) : String(h.date).slice(0,10))));
     const leaveSettings = {
-      allow_leave_on_weekends: Boolean(lv?.allow_leave_on_weekends),
-      allow_leave_on_company_holidays: Boolean(lv?.allow_leave_on_company_holidays),
+      allow_leave_on_weekends: lv?.allow_leave_on_weekends === true || lv?.allow_leave_on_weekends === 'true',
+      allow_leave_on_company_holidays: lv?.allow_leave_on_company_holidays === true || lv?.allow_leave_on_company_holidays === 'true',
       allow_half_day: allowHalfDay,
       half_day_session: halfDaySession,
     };

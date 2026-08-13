@@ -26,20 +26,17 @@ interface WorkingScheduleSettings {
 interface AttendanceSettings {
   allow_early_clock_in: boolean
   allow_late_clock_out: boolean
-  require_clock_out: boolean
   auto_close_attendance: boolean
   auto_mark_absent: boolean
 }
 
 interface LeaveSettings {
   allow_half_day_leave: boolean
-  half_day_session: 'first_half' | 'second_half'
   minimum_leave_notice_days: number
   allow_backdated_leave: boolean
   max_consecutive_leave_days: number
   allow_leave_on_weekends: boolean
   allow_leave_on_company_holidays: boolean
-  require_leave_approval: boolean
 }
 
 export interface CompanySettings {

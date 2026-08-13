@@ -4,9 +4,8 @@
  * Runs every 60 seconds.
  * Finds all users who:
  *   1. Have auto_close_attendance = true in company settings
- *   2. Have require_clock_out = false in company settings
- *   3. Are currently clocked_in / working (not on break, not already completed)
- *   4. Current time has passed office_end_time
+ *   2. Are currently clocked_in / working (not on break, not already completed)
+ *   3. Current time has passed office_end_time
  *
  * Auto-completes their attendance by:
  *   - Closing any open breaks
@@ -37,11 +36,6 @@ async function runAutoClockOut() {
       return { ran: false, reason: 'auto_close_attendance_disabled' };
     }
 
-    // Check if require_clock_out is false (i.e., auto clock-out is the mode)
-    const requireClockOut = await getSetting(pool, 'attendance', 'require_clock_out');
-    if (requireClockOut === true) {
-      return { ran: false, reason: 'require_clock_out_enabled' };
-    }
 
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const today = todayInTimezone(tz);

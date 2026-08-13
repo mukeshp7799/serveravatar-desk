@@ -236,6 +236,18 @@ router.post('/start-break', async (req, res, next) => {
       return res.status(400).json({ error: 'You are already on a break' });
     }
 
+    // Check if multiple breaks are allowed
+    const allowMultipleBreaks = await getCompanySetting('working_schedule', 'allow_multiple_breaks', false);
+    if (!allowMultipleBreaks) {
+      const [existingBreaks] = await pool.query(
+        'SELECT id FROM attendance_breaks WHERE attendance_id = ? LIMIT 1',
+        [today.id]
+      );
+      if (existingBreaks.length > 0) {
+        return res.status(400).json({ error: 'Multiple breaks are not allowed. You have already taken a break today.' });
+      }
+    }
+
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const now = nowInTimezone(tz);
     await pool.query(
@@ -351,8 +363,34 @@ router.post('/clock-out', async (req, res, next) => {
       return res.status(400).json({ error: 'Already clocked out today' });
     }
 
+    // ── Late clock-out check ──────────────────────────────────────────────
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const now = nowInTimezone(tz);
+    const allowLateClockOut = await getSetting(pool, 'attendance', 'allow_late_clock_out');
+    if (allowLateClockOut === false) {
+      const officeEndTime = await getSetting(pool, 'working_schedule', 'office_end_time') || '18:30';
+      let nowMinutes = now.getHours() * 60 + now.getMinutes();
+      if (tz && tz !== 'UTC') {
+        try {
+          const fmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
+          });
+          const parts = Object.fromEntries(
+            fmt.formatToParts(now).map(p => [p.type, p.value])
+          );
+          nowMinutes = (Number(parts.hour) % 24) * 60 + Number(parts.minute);
+        } catch (_) { /* fall back to UTC */ }
+      }
+      const [eh, em] = officeEndTime.split(':').map(Number);
+      const officeEndMinutes = (eh || 18) * 60 + (em || 30);
+      if (nowMinutes > officeEndMinutes) {
+        const [hh, mm] = officeEndTime.split(':');
+        return res.status(400).json({
+          error: `Late clock-out is not allowed. Office ends at ${hh}:${mm}. Please clock out at or before ${hh}:${mm}.`,
+          code: 'LATE_CLOCK_OUT_BLOCKED',
+        });
+      }
+    }
 
     // Close any open breaks first
     const [openBreaks] = await pool.query(

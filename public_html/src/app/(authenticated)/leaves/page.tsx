@@ -329,6 +329,7 @@ export default function LeavesPage() {
   const [teamReqPage, setTeamReqPage] = useState(1)
   const [teamReqTotal, setTeamReqTotal] = useState(0)
   const [teamReqLimit, setTeamReqLimit] = useState(10)
+  const [teamReqLoading, setTeamReqLoading] = useState(false)
   const [typesPage, setTypesPage] = useState(1)
   const [typesTotal, setTypesTotal] = useState(0)
   const [typesLimit, setTypesLimit] = useState(10)
@@ -361,6 +362,7 @@ export default function LeavesPage() {
   }
 
   const loadTeamRequests = (page = 1, filter = reqFilter, searchOverride?: string) => {
+    setTeamReqLoading(true)
     const limit = teamReqLimit
     const params = new URLSearchParams({ page: String(page), limit: String(limit) })
     if (filter) params.set('status', filter)
@@ -374,7 +376,7 @@ export default function LeavesPage() {
       setTeamReqTotal(d.pagination?.total || 0)
       setTeamReqPage(page)
       setDepartments(deptsData.departments || [])
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => setTeamReqLoading(false))
   }
 
   // Debounced search — fires 400ms after user stops typing
@@ -901,10 +903,15 @@ export default function LeavesPage() {
               {/* Refresh button */}
               <button
                 onClick={() => { setTeamReqPage(1); loadTeamRequests(1, reqFilter, teamSearch) }}
-                className="px-3 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-xl transition cursor-pointer"
+                disabled={teamReqLoading}
+                className={`px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl transition cursor-pointer ${teamReqLoading ? 'text-gray-400 cursor-not-allowed bg-gray-100 dark:bg-gray-700' : 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
                 title="Refresh"
               >
-                <RefreshCw size={14} />
+                {teamReqLoading ? (
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                ) : (
+                  <RefreshCw size={14} />
+                )}
               </button>
             </div>
 
@@ -1573,7 +1580,19 @@ export default function LeavesPage() {
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3.5">
                   <p className="text-xs text-gray-400 mb-1">Total Days</p>
-                  <p className="text-sm font-semibold" style={{ color: ACCENT }}>{selectedRequest.days}d</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold" style={{ color: ACCENT }}>{selectedRequest.days}d</p>
+                    {selectedRequest.half_day == 1 && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        Half Day
+                      </span>
+                    )}
+                  </div>
+                  {selectedRequest.half_day == 1 && selectedRequest.half_day_session && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {selectedRequest.half_day_session === 'first_half' ? 'Morning (AM)' : 'Afternoon (PM)'} session
+                    </p>
+                  )}
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3.5 col-span-2">
                   <p className="text-xs text-gray-400 mb-1">Period</p>

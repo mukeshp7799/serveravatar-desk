@@ -2,6 +2,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import api from '@/lib/api'
 import { useDateSettings } from '@/contexts/CompanySettingsContext';
 import toast from 'react-hot-toast';
@@ -97,6 +100,26 @@ function fmtLong(d: string, tz?: string) {
 
 interface CalItem { type: string; title: string; subtitle?: string; color: string; item: any; date?: string; }
 
+// ─── Zod Schemas ─────────────────────────────────────────────────────
+const holidaySchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  date: z.string().min(1, 'Date is required'),
+  holiday_type: z.string().optional(),
+  description: z.string().optional(),
+});
+const eventSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  start_date: z.string().min(1, 'Start date is required'),
+  end_date: z.string().optional(),
+  all_day: z.boolean().optional(),
+  category: z.string().optional(),
+  color: z.string().optional(),
+  location: z.string().optional(),
+  description: z.string().optional(),
+});
+type HolidayFormData = z.infer<typeof holidaySchema>;
+type EventFormData = z.infer<typeof eventSchema>;
+
 // ─── Unified Item Modal (Detail + Edit) ─────────────────────────────
 function ItemModal({ item, onClose, onSave, canManage, defaultMode }: {
   item: CalItem;
@@ -113,46 +136,98 @@ function ItemModal({ item, onClose, onSave, canManage, defaultMode }: {
   const isBirthday = item.type === 'birthday';
   const isAnniversary = item.type === 'anniversary';
 
-  // Holiday form state
-  const [hForm, setHForm] = useState({
-    name: item.item?.name || '',
-    date: item.item?.date?.slice(0,10) || '',
-    holiday_type: item.item?.holiday_type || 'company',
-    description: item.item?.description || '',
+  // Holiday React Hook Form
+  const hForm = useForm<HolidayFormData>({
+    resolver: zodResolver(holidaySchema),
+    defaultValues: {
+      name: item.item?.name || '',
+      date: (item.item?.date || '').slice(0, 10),
+      holiday_type: item.item?.holiday_type || 'company',
+      description: item.item?.description || '',
+    },
   });
 
-  // Event form state
-  const [eForm, setEForm] = useState({
-    title: item.item?.title || '',
-    description: item.item?.description || '',
-    start_date: item.item?.start_date?.slice(0,10) || '',
-    end_date: item.item?.end_date?.slice(0,10) || '',
-    all_day: item.item?.all_day !== undefined ? Boolean(item.item?.all_day) : true,
-    category: item.item?.category || 'other',
-    color: item.item?.color || '#6366f1',
-    location: item.item?.location || '',
+  // Event React Hook Form
+  const eForm = useForm<EventFormData>({
+    resolver: zodResolver(eventSchema),
+    defaultValues: {
+      title: item.item?.title || '',
+      description: item.item?.description || '',
+      start_date: (item.item?.start_date || '').slice(0, 10),
+      end_date: (item.item?.end_date || '').slice(0, 10),
+      all_day: item.item?.all_day !== undefined ? Boolean(item.item?.all_day) : true,
+      category: item.item?.category || 'other',
+      color: item.item?.color || '#6366f1',
+      location: item.item?.location || '',
+    },
   });
 
   const canEdit = canManage && (isHoliday || isEvent);
 
   const handleSave = async () => {
     if (isHoliday) {
-      if (!hForm.name || !hForm.date) return;
+      const valid = await hForm.trigger();
+      if (!valid) return;
       setSaving(true);
+      const formData = hForm.getValues();
       try {
-        if (item.item?.id) await api.put(`/calendar/holidays/${item.item.id}`, hForm);
-        else await api.post('/calendar/holidays', hForm);
+        if (item.item?.id) await api.put(`/calendar/holidays/${item.item.id}`, formData);
+        else await api.post('/calendar/holidays', formData);
+        toast.success('Holiday saved successfully');
         onSave();
-      } catch { toast.error('Failed to save holiday'); }
+      } catch (err: any) {
+        const status = err.status || 0;
+        if (status === 400 || status === 409 || status === 422) {
+          const msg = err.message || err.error || 'Validation error';
+          const fieldErrors: Record<string, string> = {};
+          if (err.errors && typeof err.errors === 'object') {
+            Object.entries(err.errors as Record<string, string>).forEach(([k, v]) => { fieldErrors[k] = v; });
+          } else {
+            const lower = msg.toLowerCase();
+            if (lower.includes('name') && !lower.includes('date')) fieldErrors.name = msg;
+            else if (lower.includes('date')) fieldErrors.date = msg;
+            else fieldErrors._general = msg;
+          }
+          if (fieldErrors.name) hForm.setError('name', { message: fieldErrors.name }, { shouldFocus: false });
+          if (fieldErrors.date) hForm.setError('date', { message: fieldErrors.date }, { shouldFocus: false });
+          if (fieldErrors._general) hForm.setError('root', { message: fieldErrors._general }, { shouldFocus: false });
+        } else {
+          onClose();
+          toast.error(err.message || 'Failed to save holiday');
+        }
+      }
       setSaving(false);
     } else if (isEvent) {
-      if (!eForm.title || !eForm.start_date) return;
+      const valid = await eForm.trigger();
+      if (!valid) return;
       setSaving(true);
+      const formData = eForm.getValues();
       try {
-        if (item.item?.id) await api.put(`/calendar/events/${item.item.id}`, eForm);
-        else await api.post('/calendar/events', eForm);
+        if (item.item?.id) await api.put(`/calendar/events/${item.item.id}`, formData);
+        else await api.post('/calendar/events', formData);
+        toast.success('Event saved successfully');
         onSave();
-      } catch { toast.error('Failed to save event'); }
+      } catch (err: any) {
+        const status = err.status || 0;
+        if (status === 400 || status === 409 || status === 422) {
+          const msg = err.message || err.error || 'Validation error';
+          const fieldErrors: Record<string, string> = {};
+          if (err.errors && typeof err.errors === 'object') {
+            Object.entries(err.errors as Record<string, string>).forEach(([k, v]) => { fieldErrors[k] = v; });
+          } else {
+            const lower = msg.toLowerCase();
+            if (lower.includes('title')) fieldErrors.title = msg;
+            else if (lower.includes('start') || lower.includes('date')) fieldErrors.start_date = msg;
+            else fieldErrors._general = msg;
+          }
+          if (fieldErrors.title) eForm.setError('title', { message: fieldErrors.title }, { shouldFocus: false });
+          if (fieldErrors.start_date) eForm.setError('start_date', { message: fieldErrors.start_date }, { shouldFocus: false });
+          if (fieldErrors._general) eForm.setError('root', { message: fieldErrors._general }, { shouldFocus: false });
+        } else {
+          onClose();
+          toast.error(err.message || 'Failed to save event');
+        }
+      }
       setSaving(false);
     }
   };
@@ -337,17 +412,19 @@ function ItemModal({ item, onClose, onSave, canManage, defaultMode }: {
           <div className="p-6 space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Holiday Name *</label>
-              <input value={hForm.name} onChange={e => setHForm(p => ({...p, name: e.target.value}))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <input {...hForm.register('name')}
+                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${hForm.formState.errors.name ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'}`} />
+              {hForm.formState.errors.name && <p className="mt-1 text-xs text-red-500">{String(hForm.formState.errors.name.message)}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Date *</label>
-              <input type="date" value={hForm.date} onChange={e => setHForm(p => ({...p, date: e.target.value}))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <input type="date" {...hForm.register('date')}
+                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${hForm.formState.errors.date ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'}`} />
+              {hForm.formState.errors.date && <p className="mt-1 text-xs text-red-500">{String(hForm.formState.errors.date.message)}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Type</label>
-              <select value={hForm.holiday_type} onChange={e => setHForm(p => ({...p, holiday_type: e.target.value}))}
+              <select {...hForm.register('holiday_type')}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 <option value="public">Public Holiday</option>
                 <option value="company">Company Holiday</option>
@@ -356,10 +433,14 @@ function ItemModal({ item, onClose, onSave, canManage, defaultMode }: {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Description</label>
-              <textarea value={hForm.description} onChange={e => setHForm(p => ({...p, description: e.target.value}))}
-                rows={2}
+              <textarea {...hForm.register('description')} rows={2}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
+            {hForm.formState.errors.root && (
+              <div className="px-6">
+                <p className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg px-3 py-2">{String(hForm.formState.errors.root.message)}</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -368,12 +449,13 @@ function ItemModal({ item, onClose, onSave, canManage, defaultMode }: {
           <div className="p-6 space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Event Title *</label>
-              <input value={eForm.title} onChange={e => setEForm(p => ({...p, title: e.target.value}))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <input {...eForm.register('title')}
+                className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${eForm.formState.errors.title ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'}`} />
+              {eForm.formState.errors.title && <p className="mt-1 text-xs text-red-500">{String(eForm.formState.errors.title.message)}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Category</label>
-              <select value={eForm.category} onChange={e => setEForm(p => ({...p, category: e.target.value}))}
+              <select {...eForm.register('category')}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 <option value="meeting">Meeting</option>
                 <option value="training">Training</option>
@@ -385,40 +467,45 @@ function ItemModal({ item, onClose, onSave, canManage, defaultMode }: {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Start Date *</label>
-                <input type="date" value={eForm.start_date} onChange={e => setEForm(p => ({...p, start_date: e.target.value}))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input type="date" {...eForm.register('start_date')}
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${eForm.formState.errors.start_date ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'}`} />
+                {eForm.formState.errors.start_date && <p className="mt-1 text-xs text-red-500">{String(eForm.formState.errors.start_date.message)}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">End Date</label>
-                <input type="date" value={eForm.end_date} onChange={e => setEForm(p => ({...p, end_date: e.target.value}))}
+                <input type="date" {...eForm.register('end_date')}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Color</label>
               <div className="flex gap-2 items-center">
-                <input type="color" value={eForm.color} onChange={e => setEForm(p => ({...p, color: e.target.value}))}
+                <input type="color" {...eForm.register('color')}
                   className="w-10 h-10 rounded cursor-pointer border border-gray-300 dark:border-gray-600" />
-                <input value={eForm.color} onChange={e => setEForm(p => ({...p, color: e.target.value}))}
+                <input {...eForm.register('color')}
                   className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Location</label>
-              <input value={eForm.location} onChange={e => setEForm(p => ({...p, location: e.target.value}))}
+              <input {...eForm.register('location')}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Description</label>
-              <textarea value={eForm.description} onChange={e => setEForm(p => ({...p, description: e.target.value}))}
-                rows={2}
+              <textarea {...eForm.register('description')} rows={2}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-              <input type="checkbox" checked={eForm.all_day} onChange={e => setEForm(p => ({...p, all_day: e.target.checked}))}
+              <input type="checkbox" {...eForm.register('all_day')}
                 className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 w-4 h-4" />
               All day event
             </label>
+            {eForm.formState.errors.root && (
+              <div>
+                <p className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg px-3 py-2">{String(eForm.formState.errors.root.message)}</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -499,15 +586,16 @@ export default function CalendarPage() {
 
   const getItemsForDay = (day: Date): CalItem[] => {
     const ds = formatDate(day);
+    const dsISO = `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`;
     const items: CalItem[] = [];
-    if (filters.holiday) data.holidays.filter(h => h.date === ds).forEach(h => items.push({ type:'holiday', title:h.name, subtitle:h.holiday_type, color:TYPE_COLORS[h.holiday_type]||TYPE_COLORS.holiday, item:h }));
+    if (filters.holiday) data.holidays.filter(h => (h.date||'').slice(0,10) === dsISO).forEach(h => items.push({ type:'holiday', title:h.name, subtitle:h.holiday_type, color:TYPE_COLORS[h.holiday_type]||TYPE_COLORS.holiday, item:h }));
     if (filters.event && Array.isArray(data.events)) {
       data.events.filter(e => {
         const s = (e.start_date||'').slice(0,10), en = (e.end_date||e.start_date||'').slice(0,10);
-        if (ds >= s && ds <= en) items.push({ type:'event', title:e.title, subtitle:e.category, color:e.color||TYPE_COLORS[e.category]||TYPE_COLORS.event, item:e });
+        if (dsISO >= s && dsISO <= en) items.push({ type:'event', title:e.title, subtitle:e.category, color:e.color||TYPE_COLORS[e.category]||TYPE_COLORS.event, item:e });
       });
     }
-    if (filters.leave) data.leaves.filter(l => ds >= l.start_date && ds <= l.end_date).forEach(l => items.push({ type:'leave', title:`${l.first_name} ${l.last_name}`, subtitle:l.leave_type, color:l.leave_color||TYPE_COLORS.leave, item:l }));
+    if (filters.leave) data.leaves.filter(l => { const ls=(l.start_date||'').slice(0,10), le=(l.end_date||'').slice(0,10); return dsISO>=ls&&dsISO<=le; }).forEach(l => items.push({ type:'leave', title:`${l.first_name} ${l.last_name}`, subtitle:l.leave_type, color:l.leave_color||TYPE_COLORS.leave, item:l }));
     if (filters.birthday) data.birthdays.filter(b => { if(!b.date_of_birth||b.date_of_birth==='0000-00-00')return false; const bd=b.date_of_birth.includes('T')?new Date(b.date_of_birth):new Date(b.date_of_birth+'T00:00:00'); return bd.getMonth()===day.getMonth()&&bd.getDate()===day.getDate(); }).forEach(b => { const age=calcYears(b.date_of_birth); items.push({ type:'birthday', title:`${b.first_name} ${b.last_name}'s Birthday`, subtitle: age > 0 ? `Turning ${age}` : 'Birthday', color:TYPE_COLORS.birthday, item:{...b, years: age} }); });
     if (filters.anniversary) data.anniversaries.filter(a => { if(!a.hire_date||a.hire_date==='0000-00-00')return false; const hd=a.hire_date.includes('T')?new Date(a.hire_date):new Date(a.hire_date+'T00:00:00'); return hd.getMonth()===day.getMonth()&&hd.getDate()===day.getDate(); }).forEach(a => { const yrs=a.years ?? calcYears(a.hire_date); const mos=a.months ?? 0; items.push({ type:'anniversary', title:`${a.first_name} ${a.last_name}'s Work Anniversary`, subtitle: anniversaryLabel(yrs, mos)||'Work Anniversary', color:TYPE_COLORS.anniversary, item:{...a, years: yrs, months: mos} }); });
     return items;
@@ -533,10 +621,11 @@ export default function CalendarPage() {
 
   const getWeekItems = (day: Date): CalItem[] => {
     const ds = formatDate(day);
+    const dsISO = `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`;
     const items: CalItem[] = [];
-    if (filters.holiday) data.holidays.filter(h=>h.date===ds).forEach(h=>items.push({type:'holiday',title:h.name,subtitle:h.holiday_type,color:TYPE_COLORS[h.holiday_type]||TYPE_COLORS.holiday,item:h}));
-    if (filters.event) data.events.filter(e=>{const s=(e.start_date||'').slice(0,10),en=(e.end_date||e.start_date||'').slice(0,10);if(ds>=s&&ds<=en)items.push({type:'event',title:e.title,subtitle:e.category,color:e.color||TYPE_COLORS[e.category]||TYPE_COLORS.event,item:e});});
-    if (filters.leave) data.leaves.filter(l=>ds>=l.start_date&&ds<=l.end_date).forEach(l=>items.push({type:'leave',title:`${l.first_name} ${l.last_name}`,subtitle:l.leave_type,color:l.leave_color||TYPE_COLORS.leave,item:l}));
+    if (filters.holiday) data.holidays.filter(h=>(h.date||'').slice(0,10)===dsISO).forEach(h=>items.push({type:'holiday',title:h.name,subtitle:h.holiday_type,color:TYPE_COLORS[h.holiday_type]||TYPE_COLORS.holiday,item:h}));
+    if (filters.event) data.events.filter(e=>{const s=(e.start_date||'').slice(0,10),en=(e.end_date||e.start_date||'').slice(0,10);if(dsISO>=s&&dsISO<=en)items.push({type:'event',title:e.title,subtitle:e.category,color:e.color||TYPE_COLORS[e.category]||TYPE_COLORS.event,item:e});});
+    if (filters.leave) data.leaves.filter(l=>{const ls=(l.start_date||'').slice(0,10),le=(l.end_date||'').slice(0,10);return dsISO>=ls&&dsISO<=le;}).forEach(l=>items.push({type:'leave',title:`${l.first_name} ${l.last_name}`,subtitle:l.leave_type,color:l.leave_color||TYPE_COLORS.leave,item:l}));
     if (filters.birthday) data.birthdays.filter(b=>{if(!b.date_of_birth||b.date_of_birth==='0000-00-00')return false;const bd=b.date_of_birth.includes('T')?new Date(b.date_of_birth):new Date(b.date_of_birth+'T00:00:00');return bd.getMonth()===day.getMonth()&&bd.getDate()===day.getDate();}).forEach(b=>{const age=calcYears(b.date_of_birth);items.push({type:'birthday',title:`${b.first_name} ${b.last_name}'s Birthday`,subtitle:age>0?`Turning ${age}`:'Birthday',color:TYPE_COLORS.birthday,item:{...b,years:age}})});
     if (filters.anniversary) data.anniversaries.filter(a=>{if(!a.hire_date||a.hire_date==='0000-00-00')return false;const hd=a.hire_date.includes('T')?new Date(a.hire_date):new Date(a.hire_date+'T00:00:00');return hd.getMonth()===day.getMonth()&&hd.getDate()===day.getDate();}).forEach(a=>{const yrs=a.years ?? calcYears(a.hire_date);const mos=a.months ?? 0;items.push({type:'anniversary',title:`${a.first_name} ${a.last_name}'s Work Anniversary`,subtitle:anniversaryLabel(yrs, mos)||'Work Anniversary',color:TYPE_COLORS.anniversary,item:{...a,years:yrs,months:mos}})});
     return items;
@@ -545,7 +634,7 @@ export default function CalendarPage() {
   const getAllAgendaItems = (): CalItem[] => {
     const y=current.getFullYear(),m=current.getMonth();
     const items: CalItem[] = [];
-    if(filters.holiday) data.holidays.forEach(h=>{const raw=h.date||'';const day=raw.includes('T')?raw.slice(8,10):raw.slice(8,10);items.push({ date:day, rawDate:raw, type:'holiday', title:h.name, subtitle:h.holiday_type, color:TYPE_COLORS[h.holiday_type]||TYPE_COLORS.holiday, item:h } as CalItem);});
+    if(filters.holiday) data.holidays.forEach(h=>{const raw=(h.date||'').slice(0,10);const day=raw.slice(8,10);items.push({ date:day, rawDate:raw, type:'holiday', title:h.name, subtitle:h.holiday_type, color:TYPE_COLORS[h.holiday_type]||TYPE_COLORS.holiday, item:h } as CalItem);});
     if(filters.event) data.events.forEach(e=>{const raw=e.start_date||'';const day=raw.includes('T')?raw.slice(8,10):raw.slice(8,10);items.push({ date:day, rawDate:raw, type:'event', title:e.title, subtitle:e.category, color:e.color||TYPE_COLORS[e.category]||TYPE_COLORS.event, item:e } as CalItem);});
     if(filters.leave) data.leaves.forEach(l=>{const raw=l.start_date||'';const day=raw.includes('T')?raw.slice(8,10):raw.slice(8,10);items.push({ date:day, rawDate:raw, type:'leave', title:`${l.first_name} ${l.last_name}`, subtitle:l.leave_type, color:l.leave_color||TYPE_COLORS.leave, item:l } as CalItem);});
     if(filters.birthday) data.birthdays.forEach(b=>{if(!b.date_of_birth||b.date_of_birth==='0000-00-00')return;const age=calcYears(b.date_of_birth);const dob=b.date_of_birth.includes('T')?b.date_of_birth:b.date_of_birth+'T00:00:00';const d=new Date(dob);const day=String(d.getDate()).padStart(2,'0');items.push({ date:day, rawDate:dob, type:'birthday', title:`${b.first_name} ${b.last_name}'s Birthday`, subtitle:age>0?`Turning ${age}`:'Birthday', color:TYPE_COLORS.birthday, item:{...b,years:age} } as CalItem);});
