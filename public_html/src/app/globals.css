@@ -548,6 +548,31 @@ html { scroll-behavior: smooth; }
 .ps:hover > .ps__scrollbar-y-rail:hover,
 .ps:hover > .ps__scrollbar-x-rail:hover { background-color: transparent; }
 
+/* Discussions page — always-visible scrollbars */
+.discussions-list-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #C9CDD4 transparent;
+}
+.discussions-list-scroll::-webkit-scrollbar { width: 5px; }
+.discussions-list-scroll::-webkit-scrollbar-track { background: transparent; }
+.discussions-list-scroll::-webkit-scrollbar-thumb {
+  background-color: #C9CDD4;
+  border-radius: 9999px;
+}
+.discussions-list-scroll::-webkit-scrollbar-thumb:hover { background-color: #9CA3AF; }
+
+/* Discussions chat — make PerfectScrollbar rails always visible */
+.discussions-chat-scroll.ps .ps__rail-y,
+.discussions-chat-scroll.ps .ps__rail-x {
+  opacity: 0.5 !important;
+}
+.discussions-chat-scroll.ps:hover .ps__rail-y,
+.discussions-chat-scroll.ps:hover .ps__rail-x,
+.discussions-chat-scroll.ps.ps--active-y .ps__rail-y,
+.discussions-chat-scroll.ps.ps--active-x .ps__rail-x {
+  opacity: 0.8 !important;
+}
+
 /* Native fallback scrollbars — only on elements WITHOUT .ps wrapper.
    Use `:not(.ps *)` to avoid showing on PS-internals. */
 *:not(.ps):not(.ps *) {

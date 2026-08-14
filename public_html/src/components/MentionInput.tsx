@@ -85,8 +85,12 @@ export function extractMentionTokens(text: string, members: ActiveMember[]): Men
  * ──────────────────────────────────────────────────────────────── */
 
 export interface MentionInputProps {
-  /** Current project ID — used to fetch active members for autocomplete. */
+  /** Current project ID — used to fetch active members for autocomplete.
+   *  Pass 'all' (or any truthy non-numeric value) when `fetchAllUsers` is true. */
   projectId: number | string
+  /** When true, fetch all active system users instead of project members.
+   *  Uses GET /api/users/active for @mention autocomplete. */
+  fetchAllUsers?: boolean
   /** Controlled value — the raw text/HTML content. */
   value: string
   /** Called when the content changes with the new raw text value. */
@@ -111,6 +115,7 @@ export interface MentionInputProps {
 
 export default function MentionInput({
   projectId,
+  fetchAllUsers = false,
   value,
   onChange,
   placeholder = 'Write something… (type @ to mention)',
@@ -133,16 +138,20 @@ export default function MentionInput({
   const [triggerAt, setTriggerAt] = useState<number | null>(null)
   const [cursorPos, setCursorPos] = useState(0)
 
-  /* ── Fetch active project members once per project ─────────── */
+  /* ── Fetch members: project-scoped or all active system users ─── */
   useEffect(() => {
-    if (!projectId) return
     let cancelled = false
     setLoading(true)
+    const endpoint = fetchAllUsers ? '/users/active' : `/projects/${projectId}/active-members`
     api
-      .get(`/projects/${projectId}/active-members`)
+      .get(endpoint)
       .then((data: any) => {
         if (cancelled) return
-        setMembers(Array.isArray(data?.members) ? data.members : [])
+        // Both endpoints return { users: [...] } or { members: [...] }
+        const list = fetchAllUsers
+          ? (Array.isArray(data?.users) ? data.users : [])
+          : (Array.isArray(data?.members) ? data.members : [])
+        setMembers(list)
       })
       .catch(() => {
         if (!cancelled) setMembers([])
@@ -153,7 +162,7 @@ export default function MentionInput({
     return () => {
       cancelled = true
     }
-  }, [projectId])
+  }, [projectId, fetchAllUsers])
 
   /* ── Filtered dropdown list ────────────────────────────────── */
   const filtered = query

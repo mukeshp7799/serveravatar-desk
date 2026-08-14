@@ -42,6 +42,23 @@ router.get('/', auth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/users/active — all active system users for @mention autocomplete.
+// Any authenticated user can access this endpoint.
+router.get('/active', auth, async (req, res, next) => {
+  try {
+    const { search } = req.query;
+    let query = `SELECT id, first_name, last_name, email, avatar_url, status FROM users WHERE status = 'active'`;
+    const params = [];
+    if (search) {
+      query += ' AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    query += ' ORDER BY first_name ASC LIMIT 100';
+    const [users] = await pool.query(query, params);
+    res.json({ users });
+  } catch (err) { next(err); }
+});
+
 // GET /api/users/:id — requires `users.view_all` (users can always view themselves)
 router.get('/:id', auth, async (req, res, next) => {
   try {

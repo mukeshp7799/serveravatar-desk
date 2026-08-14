@@ -70,7 +70,7 @@ const hydrateMessages = async (messageRows, currentUserId) => {
   }));
 };
 
-// GET /api/discussions?projectId=...   (projectId is optional)
+// GET /api/discussions?projectId=...&page=1&limit=20  (projectId, page, limit are optional)
 // Any authenticated user with 'discussions.view' can see all discussions.
 // No project membership restriction.
 router.get('/', auth, async (req, res, next) => {
@@ -78,22 +78,51 @@ router.get('/', auth, async (req, res, next) => {
     if (!req.user.permissions.includes('discussions.view')) {
       return res.status(403).json({ error: 'You do not have permission to view discussions.' });
     }
-    const { projectId } = req.query;
-    let query = `SELECT d.*, u.first_name, u.last_name, u.avatar_url,
-                        (SELECT COUNT(*) FROM messages WHERE discussion_id = d.id AND is_direct = 0) as message_count
-                 FROM discussions d
-                 JOIN users u ON d.created_by_user_id = u.id
-                 WHERE 1=1`;
+    const { projectId, search } = req.query;
+    const page  = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+
+    let baseQuery = `FROM discussions d
+                     JOIN users u ON d.created_by_user_id = u.id
+                     WHERE 1=1`;
     const params = [];
 
     if (projectId) {
-      query += ' AND d.project_id = ?';
+      baseQuery += ' AND d.project_id = ?';
       params.push(projectId);
     }
 
-    query += ' ORDER BY d.created_at DESC';
-    const [discussions] = await pool.query(query, params);
-    res.json({ discussions });
+    if (search && search.trim()) {
+      baseQuery += ' AND (d.title LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)';
+      const term = `%${search.trim()}%`;
+      params.push(term, term, term);
+    }
+
+    // Total count
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total ${baseQuery}`,
+      params
+    );
+
+    const [discussions] = await pool.query(
+      `SELECT d.*, u.first_name, u.last_name, u.avatar_url,
+              (SELECT COUNT(*) FROM messages WHERE discussion_id = d.id AND is_direct = 0) AS message_count
+       ${baseQuery}
+       ORDER BY d.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    res.json({
+      discussions,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (err) { next(err); }
 });
 
@@ -276,6 +305,56 @@ router.post('/:id/messages/:messageId/reactions', auth, async (req, res, next) =
     // Re-hydrate just this message to return updated reactions.
     const hydrated = await hydrateMessages(messageRows, req.user.id);
     res.json({ reactions: hydrated[0]?.reactions || [] });
+  } catch (err) { next(err); }
+});
+
+// GET /api/discussions/mentions — discussions containing messages where the current user is @mentioned.
+// Uses the mentions table (source_type='discussion_message') to find relevant discussions.
+router.get('/mentions', auth, async (req, res, next) => {
+  try {
+    if (!req.user.permissions.includes('discussions.view')) {
+      return res.status(403).json({ error: 'You do not have permission to view discussions.' });
+    }
+    const page  = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(DISTINCT d.id) AS total
+       FROM discussions d
+       JOIN mentions mn ON mn.source_id IN (
+         SELECT id FROM messages WHERE discussion_id = d.id AND is_direct = 0
+       ) AND mn.source_type = 'discussion_message' AND mn.mentioned_user_id = ?`,
+      [req.user.id]
+    );
+
+    const [rows] = await pool.query(
+      `SELECT DISTINCT d.*, u.first_name, u.last_name, u.avatar_url,
+              p.name AS project_name,
+              (SELECT COUNT(*) FROM messages WHERE discussion_id = d.id AND is_direct = 0) AS message_count,
+              (SELECT m.created_at FROM mentions mn2
+               JOIN messages m ON m.id = mn2.source_id AND mn2.source_type = 'discussion_message'
+               WHERE m.discussion_id = d.id AND mn2.mentioned_user_id = ?
+               ORDER BY m.created_at DESC LIMIT 1) AS last_mention_at
+       FROM discussions d
+       JOIN users u ON d.created_by_user_id = u.id
+       LEFT JOIN projects p ON d.project_id = p.id
+       JOIN mentions mn ON mn.source_id IN (
+         SELECT id FROM messages WHERE discussion_id = d.id AND is_direct = 0
+       ) AND mn.source_type = 'discussion_message' AND mn.mentioned_user_id = ?
+       ORDER BY last_mention_at DESC
+       LIMIT ? OFFSET ?`,
+      [req.user.id, req.user.id, limit, offset]
+    );
+    res.json({
+      discussions: rows,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (err) { next(err); }
 });
 

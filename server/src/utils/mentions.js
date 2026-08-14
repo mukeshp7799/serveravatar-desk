@@ -52,7 +52,7 @@ function extractMentionTokens(content = "") {
  * Returns:  Array<{ id, first_name, last_name, email, avatar_url }>
  */
 async function resolveMentions(projectId, tokens) {
-  if (!tokens.length || !projectId) return [];
+  if (!tokens.length) return [];
 
   // Build a safe IN clause for the usernames.
   // We search first_name+last_name combos and also email prefixes.
@@ -69,7 +69,12 @@ async function resolveMentions(projectId, tokens) {
     [...tokens, ...tokens, ...tokens]
   );
 
-  // Filter to only active users who are project members (or the owner).
+  // For null projectId (global discussions), allow all active system users.
+  // Otherwise filter to project members / owner only.
+  if (projectId === null || projectId === undefined) {
+    return rows.filter((r) => r.id)
+  }
+
   const [memberRows] = await pool.query(
     `SELECT user_id FROM project_members
       WHERE project_id = ? AND status = 'active'
