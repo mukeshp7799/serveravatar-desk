@@ -12,6 +12,17 @@ const { logActivity } = require('../services/activityService');
 
 const router = express.Router();
 
+// MySQL2 charset issue: emoji columns can return wrong characters when MySQL2 parses
+// the result set due to latin1/utf8mb4 mismatch. Use hexToEmoji() to safely convert.
+function hexToEmoji(hex) {
+  if (!hex || typeof hex !== 'string' || !/^[0-9A-Fa-f]+$/.test(hex)) return hex || '';
+  try {
+    return Buffer.from(hex, 'hex').toString('utf8');
+  } catch {
+    return hex;
+  }
+}
+
 // ============================================================
 // HELPERS
 // ============================================================
@@ -120,8 +131,8 @@ router.use(auth);
 
 // ============================================================
 // GET /api/announcements
-// List announcements (respects audience targeting + auto-archives expired)
-// Query params: status, page, limit, audience
+// List announcements with scope-based visibility.
+// Query params: scope (all|my|drafts|archived), page, limit
 // ============================================================
 router.get('/', async (req, res, next) => {
   try {
@@ -130,8 +141,7 @@ router.get('/', async (req, res, next) => {
     var page = parseInt(req.query.page) || 1;
     var limit = parseInt(req.query.limit) || 20;
     var offset = (page - 1) * limit;
-    var statusFilter = req.query.status; // draft, published, archived
-    var adminView = req.query.admin === '1'; // show all (for admins)
+    var scope = req.query.scope || 'all'; // all | my | drafts | archived
 
     var userId = req.user.id;
     var userPerms = req.user.permissions || [];
@@ -149,42 +159,78 @@ router.get('/', async (req, res, next) => {
     var whereConditions = [];
     var params = [];
 
-    if (!isAdmin) {
-      // Non-admins: only published announcements they can see + their own drafts
-      var audienceConditions = [];
-      if (userPerms.includes('announcements.view')) {
-        // Everyone-visible
-        audienceConditions.push("(a.audience_target = 'everyone' AND a.status = 'published')");
-        // Department-targeted
-        var [deptRows] = await pool.query('SELECT department_id FROM users WHERE id = ?', [userId]);
-        var userDept = deptRows[0]?.department_id;
-        if (userDept) audienceConditions.push("(a.audience_target = 'departments' AND JSON_CONTAINS(a.target_ids, '" + userDept + "'))");
-        // Role-targeted
-        var [roleRows] = await pool.query('SELECT role_id FROM users WHERE id = ?', [userId]);
-        var userRole = roleRows[0]?.role_id;
-        if (userRole) audienceConditions.push("(a.audience_target = 'roles' AND JSON_CONTAINS(a.target_ids, '" + userRole + "'))");
-        // Employee-targeted
-        audienceConditions.push("(a.audience_target = 'employees' AND JSON_CONTAINS(a.target_ids, '" + userId + "'))");
-      }
-      // Own drafts
-      audienceConditions.push('(a.posted_by = ' + userId + ' AND a.status = \'draft\')');
-
-      if (audienceConditions.length > 0) {
-        whereConditions.push('(' + audienceConditions.join(' OR ') + ')');
-      } else {
-        // No permissions at all — return empty
-        res.json({ announcements: [], total: 0, page: page, limit: limit });
-        return;
-      }
-    } else if (adminView) {
-      // Admin viewing all — no audience filter
-    } else {
-      // Admin without adminView flag — same as regular user
+    // ── Scope: my ──────────────────────────────────────────────────────────
+    // Published announcements created by the current user.
+    // No audience filter — user sees everything they posted (published).
+    if (scope === 'my') {
+      whereConditions.push('a.posted_by = ? AND a.status = ?');
+      params.push(userId, 'published');
     }
 
-    if (statusFilter) {
-      whereConditions.push('a.status = ?');
-      params.push(statusFilter);
+    // ── Scope: drafts ─────────────────────────────────────────────────────
+    // Drafts created by the current user.
+    // No audience filter — user sees only their own drafts.
+    else if (scope === 'drafts') {
+      whereConditions.push('a.posted_by = ? AND a.status = ?');
+      params.push(userId, 'draft');
+    }
+
+    // ── Scope: archived ───────────────────────────────────────────────────
+    // Admins/HR (announcements.manage): all archived announcements.
+    // Others: only archived announcements they created.
+    else if (scope === 'archived') {
+      if (isAdmin) {
+        whereConditions.push('a.status = ?');
+        params.push('archived');
+      } else {
+        whereConditions.push('a.status = ? AND a.posted_by = ?');
+        params.push('archived', userId);
+      }
+    }
+
+    // ── Scope: all (default) ──────────────────────────────────────────────
+    // Admins/HR (announcements.manage): all announcements regardless of audience.
+    // Normal employees: published announcements targeted to them, their role, or everyone.
+    else {
+      if (isAdmin) {
+        // Admin sees everything — no audience filter needed
+      } else {
+        // Get user's department and role for targeting checks
+        var [userRows] = await pool.query(
+          'SELECT department_id, role_id FROM users WHERE id = ?',
+          [userId]
+        );
+        var userDept = userRows[0]?.department_id;
+        var userRole = userRows[0]?.role_id;
+
+        var audienceConditions = [];
+
+        // Everyone-visible: any published announcement with audience = 'everyone'
+        audienceConditions.push("(a.audience_target = 'everyone' AND a.status = 'published')");
+
+        // Department-targeted: published announcements targeting user's department
+        if (userDept) {
+          audienceConditions.push("(a.audience_target = 'departments' AND a.status = 'published' AND JSON_CONTAINS(a.target_ids, ?))");
+          params.push(String(userDept));
+        }
+
+        // Role-targeted: published announcements targeting user's role
+        if (userRole) {
+          audienceConditions.push("(a.audience_target = 'roles' AND a.status = 'published' AND JSON_CONTAINS(a.target_ids, ?))");
+          params.push(String(userRole));
+        }
+
+        // Employee-targeted: published announcements explicitly targeting this user
+        audienceConditions.push("(a.audience_target = 'employees' AND a.status = 'published' AND JSON_CONTAINS(a.target_ids, ?))");
+        params.push(String(userId));
+
+        if (audienceConditions.length > 0) {
+          whereConditions.push('(' + audienceConditions.join(' OR ') + ')');
+        } else {
+          res.json({ announcements: [], total: 0, page: page, limit: limit });
+          return;
+        }
+      }
     }
 
     var whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
@@ -193,7 +239,7 @@ router.get('/', async (req, res, next) => {
     var [countRows] = await pool.query(countSql, params);
     var total = countRows[0].total;
 
-    var dataSql = 'SELECT ' + selectCols + ' ' + fromJoin + ' ' + whereClause + ' ORDER BY a.is_pinned DESC, a.status ASC, a.created_at DESC LIMIT ? OFFSET ?';
+    var dataSql = 'SELECT ' + selectCols + ' ' + fromJoin + ' ' + whereClause + ' ORDER BY a.is_pinned DESC, COALESCE(a.pinned_order, 999999) ASC, a.status ASC, a.created_at DESC LIMIT ? OFFSET ?';
     var [rows] = await pool.query(dataSql, [...params, limit, offset]);
 
     // Fetch reaction counts + per-emoji user names for returned announcements
@@ -201,8 +247,9 @@ router.get('/', async (req, res, next) => {
     var reactionsMap = {};
     if (annIds.length > 0) {
       // Per-emoji user details for tooltip (chronological)
+      // Exclude current user from tooltip user list — their presence is indicated by `mine` flag
       var [reactionRows] = await pool.query(
-        `SELECT ar.announcement_id, ar.emoji, ar.user_id,
+        `SELECT ar.announcement_id, HEX(ar.emoji) as hex, ar.user_id,
                 u.first_name, u.last_name, u.email
          FROM announcement_reactions ar
          JOIN users u ON ar.user_id = u.id
@@ -211,19 +258,20 @@ router.get('/', async (req, res, next) => {
         [annIds]
       );
       var [reactionCounts] = await pool.query(
-        `SELECT announcement_id, emoji, COUNT(*) as count,
+        `SELECT announcement_id, HEX(emoji) as hex, COUNT(*) as count,
                 MAX(user_id = ?) AS mine
          FROM announcement_reactions
          WHERE announcement_id IN (?)
-         GROUP BY announcement_id, emoji`,
+         GROUP BY announcement_id, HEX(emoji)`,
         [userId, annIds]
       );
 
       // Seed map with count + mine per (announcement_id, emoji)
       reactionCounts.forEach(rc => {
+        const emoji = hexToEmoji(rc.hex);
         if (!reactionsMap[rc.announcement_id]) reactionsMap[rc.announcement_id] = {};
-        reactionsMap[rc.announcement_id][rc.emoji] = {
-          emoji: rc.emoji,
+        reactionsMap[rc.announcement_id][emoji] = {
+          emoji,
           count: rc.count,
           mine: !!rc.mine,
           users: [],
@@ -233,7 +281,8 @@ router.get('/', async (req, res, next) => {
 
       // Fill in user names for each emoji
       reactionRows.forEach(rr => {
-        const grp = reactionsMap[rr.announcement_id] && reactionsMap[rr.announcement_id][rr.emoji];
+        const emoji = hexToEmoji(rr.hex);
+        const grp = reactionsMap[rr.announcement_id] && reactionsMap[rr.announcement_id][emoji];
         if (!grp) return;
         const name = [rr.first_name, rr.last_name].filter(Boolean).join(' ').trim() || rr.email || 'Unknown';
         grp.users.push(name);
@@ -308,30 +357,27 @@ router.get('/:id', async (req, res, next) => {
     var canView = await canUserViewAnnouncement(ann, req.user.id, req.user.permissions || []);
     if (!canView) return res.status(403).json({ error: 'Permission denied' });
 
-    // Get reactions
+    // Get reactions — include all users' names for tooltip (mine flag is computed separately)
     var [reactions] = await pool.query(
-      'SELECT ar.emoji, ar.user_id, u.first_name, u.last_name FROM announcement_reactions ar JOIN users u ON ar.user_id = u.id WHERE ar.announcement_id = ?',
+      'SELECT HEX(ar.emoji) as hex, ar.user_id, u.first_name, u.last_name FROM announcement_reactions ar JOIN users u ON ar.user_id = u.id WHERE ar.announcement_id = ?',
       [req.params.id]
-    );
-    var [userReact] = await pool.query(
-      'SELECT emoji FROM announcement_reactions WHERE announcement_id = ? AND user_id = ?',
-      [req.params.id, req.user.id]
     );
 
     var reactionSummary = {};
-    var userEmojis = [];
+    var userEmojis = new Set();
     reactions.forEach(r => {
-      if (!reactionSummary[r.emoji]) reactionSummary[r.emoji] = { emoji: r.emoji, count: 0, users: [] };
-      reactionSummary[r.emoji].count++;
-      reactionSummary[r.emoji].users.push(r.first_name + ' ' + r.last_name);
+      if (r.user_id === req.user.id) userEmojis.add(hexToEmoji(r.hex));
+      const emoji = hexToEmoji(r.hex);
+      if (!reactionSummary[emoji]) reactionSummary[emoji] = { emoji, count: 0, users: [] };
+      reactionSummary[emoji].count++;
+      reactionSummary[emoji].users.push(r.first_name + ' ' + r.last_name);
     });
-    userReact.forEach(r => userEmojis.push(r.emoji));
 
     res.json({
       ...ann,
       is_pinned: Boolean(ann.is_pinned),
       poster_name: ann.first_name + ' ' + ann.last_name,
-      reactions: { emojis: Object.values(reactionSummary), total: reactions.length, userEmojis: userEmojis },
+      reactions: { emojis: Object.values(reactionSummary), total: reactions.length, userEmojis: [...userEmojis] },
       is_owner: ann.posted_by === req.user.id,
       can_edit: req.user.permissions.includes('announcements.manage') || ann.posted_by === req.user.id
     });
@@ -436,9 +482,22 @@ router.put('/:id', requirePermission('announcements.create'), async (req, res, n
 
     var isPinnedVal = (is_pinned !== undefined) ? (is_pinned ? 1 : 0) : ann.is_pinned;
 
+    // Determine pinned_order value to set
+    var pinnedOrderVal = ann.pinned_order;
+    if (isPinnedVal === 1 && (ann.pinned_order === null || ann.pinned_order === undefined)) {
+      // Being pinned via edit form — assign next order
+      var [orderRows] = await pool.query('SELECT COALESCE(MAX(pinned_order), 0) + 1 as next_order FROM announcements WHERE is_pinned = 1');
+      pinnedOrderVal = orderRows[0].next_order;
+    } else if (isPinnedVal === 0 && ann.pinned_order !== null) {
+      // Being unpinned via edit form — clear order and compact
+      var freedOrder = ann.pinned_order;
+      pinnedOrderVal = null;
+      await pool.query('UPDATE announcements SET pinned_order = pinned_order - 1 WHERE is_pinned = 1 AND pinned_order > ?', [freedOrder]);
+    }
+
     await pool.query(
-      'UPDATE announcements SET title=?, content=?, priority=?, status=?, publish_date=?, expiry_date=?, audience_target=?, target_ids=?, is_pinned=? WHERE id=?',
-      [title, content, priority, status, publishDateVal, expiry_date || null, audience_target, targetIdsJson, isPinnedVal, req.params.id]
+      'UPDATE announcements SET title=?, content=?, priority=?, status=?, publish_date=?, expiry_date=?, audience_target=?, target_ids=?, is_pinned=?, pinned_order=? WHERE id=?',
+      [title, content, priority, status, publishDateVal, expiry_date || null, audience_target, targetIdsJson, isPinnedVal, pinnedOrderVal, req.params.id]
     );
 
     // Notify if newly published
@@ -490,6 +549,10 @@ router.post('/:id/reactions', auth, async (req, res, next) => {
 
     // Replace flow (old_emoji provided): delete old_emoji first, then insert new emoji if not already present.
     // Toggle flow (no old_emoji): toggle emoji on/off.
+    // NOTE: MySQL2 strips ZWJ from multi-character emoji string parameters, so we use
+    // direct string comparison (emoji = ?) instead of HEX comparison — MySQL2 preserves
+    // ZWJ bytes when the column is utf8mb4 and the comparison uses unicode_ci collation.
+    console.log('[DEBUG] POST /reactions:', { announcementId: req.params.id, userId: req.user.id, emoji, old_emoji });
     if (old_emoji && typeof old_emoji === 'string' && old_emoji !== emoji) {
       await pool.query(
         'DELETE FROM announcement_reactions WHERE announcement_id = ? AND user_id = ? AND emoji = ?',
@@ -510,12 +573,15 @@ router.post('/:id/reactions', auth, async (req, res, next) => {
         'SELECT id FROM announcement_reactions WHERE announcement_id = ? AND user_id = ? AND emoji = ?',
         [req.params.id, req.user.id, emoji]
       );
+      console.log('[DEBUG] existing query result:', existing);
       if (existing.length > 0) {
+        console.log('[DEBUG] DELETE reaction:', { annId: req.params.id, userId: req.user.id, emoji });
         await pool.query(
           'DELETE FROM announcement_reactions WHERE announcement_id = ? AND user_id = ? AND emoji = ?',
           [req.params.id, req.user.id, emoji]
         );
       } else {
+        console.log('[DEBUG] INSERT reaction:', { annId: req.params.id, userId: req.user.id, emoji });
         await pool.query(
           'INSERT INTO announcement_reactions (announcement_id, user_id, emoji) VALUES (?, ?, ?)',
           [req.params.id, req.user.id, emoji]
@@ -524,31 +590,36 @@ router.post('/:id/reactions', auth, async (req, res, next) => {
     }
 
     // Return updated reactions so the frontend can patch state without refetching
+    console.log('[DEBUG] Running aggregate query for annId:', req.params.id);
     var [aggregateRows] = await pool.query(
-      `SELECT emoji, COUNT(*) AS count, MAX(user_id = ?) AS mine
-       FROM announcement_reactions WHERE announcement_id = ? GROUP BY emoji`,
+      `SELECT HEX(emoji) as hex, COUNT(*) AS count, MAX(user_id = ?) AS mine
+       FROM announcement_reactions WHERE announcement_id = ? GROUP BY HEX(emoji)`,
       [req.user.id, req.params.id]
     );
     var [userRows] = await pool.query(
-      `SELECT ar.emoji, u.first_name, u.last_name, u.email
+      `SELECT HEX(ar.emoji) as hex, u.first_name, u.last_name, u.email
        FROM announcement_reactions ar JOIN users u ON ar.user_id = u.id
        WHERE ar.announcement_id = ? ORDER BY ar.created_at ASC`,
       [req.params.id]
     );
     var usersByEmoji = {};
     userRows.forEach(r => {
-      if (!usersByEmoji[r.emoji]) usersByEmoji[r.emoji] = [];
+      const emoji = hexToEmoji(r.hex);
+      if (!usersByEmoji[emoji]) usersByEmoji[emoji] = [];
       var name = [r.first_name, r.last_name].filter(Boolean).join(' ').trim() || r.email || 'Unknown';
-      usersByEmoji[r.emoji].push(name);
+      usersByEmoji[emoji].push(name);
     });
-    var reactions = aggregateRows.map(r => ({
-      emoji: r.emoji,
-      count: r.count,
-      mine: !!r.mine,
-      users: usersByEmoji[r.emoji] || [],
-    }));
+    var reactions = aggregateRows.map(r => {
+      const emoji = hexToEmoji(r.hex);
+      return {
+        emoji,
+        count: r.count,
+        mine: !!r.mine,
+        users: usersByEmoji[emoji] || [],
+      };
+    });
     res.json({ reactions });
-  } catch (err) {
+    } catch (err) {
     next(err);
   }
 });
@@ -560,17 +631,17 @@ router.post('/:id/reactions', auth, async (req, res, next) => {
 router.get('/reactions/:id', async (req, res, next) => {
   try {
     var [reactions] = await pool.query(
-      'SELECT ar.emoji, COUNT(*) as count FROM announcement_reactions ar WHERE ar.announcement_id = ? GROUP BY ar.emoji',
+      'SELECT HEX(ar.emoji) as hex, COUNT(*) as count FROM announcement_reactions ar WHERE ar.announcement_id = ? GROUP BY HEX(ar.emoji)',
       [req.params.id]
     );
     var [userReact] = await pool.query(
-      'SELECT emoji FROM announcement_reactions WHERE announcement_id = ? AND user_id = ?',
+      'SELECT HEX(emoji) as hex FROM announcement_reactions WHERE announcement_id = ? AND user_id = ?',
       [req.params.id, req.user?.id || 0]
     );
     res.json({
-      emojis: reactions.map(r => ({ emoji: r.emoji, count: r.count })),
+      emojis: reactions.map(r => ({ emoji: hexToEmoji(r.hex), count: r.count })),
       total: reactions.reduce((sum, r) => sum + r.count, 0),
-      userEmojis: userReact.map(r => r.emoji)
+      userEmojis: userReact.map(r => hexToEmoji(r.hex))
     });
   } catch (err) {
     next(err);
@@ -587,7 +658,24 @@ router.patch('/:id/pin', requirePermission('announcements.manage'), async (req, 
     if (existing.length === 0) return res.status(404).json({ error: 'Announcement not found' });
 
     var newPinState = existing[0].is_pinned ? 0 : 1;
-    await pool.query('UPDATE announcements SET is_pinned = ? WHERE id = ?', [newPinState, req.params.id]);
+    if (newPinState === 1) {
+      // Pin: assign the next pinned_order (highest existing + 1)
+      var [orderRows] = await pool.query('SELECT COALESCE(MAX(pinned_order), 0) + 1 as next_order FROM announcements WHERE is_pinned = 1');
+      var nextOrder = orderRows[0].next_order;
+      await pool.query('UPDATE announcements SET is_pinned = 1, pinned_order = ? WHERE id = ?', [nextOrder, req.params.id]);
+    } else {
+      // Unpin: clear the pinned_order and compact remaining pinned orders
+      var [unpinRow] = await pool.query('SELECT pinned_order FROM announcements WHERE id = ?', [req.params.id]);
+      var freedOrder = unpinRow[0]?.pinned_order;
+      await pool.query('UPDATE announcements SET is_pinned = 0, pinned_order = NULL WHERE id = ?', [req.params.id]);
+      // Close the gap: decrement pinned_order for all items that were pinned AFTER this one
+      if (freedOrder !== null) {
+        await pool.query(
+          'UPDATE announcements SET pinned_order = pinned_order - 1 WHERE is_pinned = 1 AND pinned_order > ?',
+          [freedOrder]
+        );
+      }
+    }
 
     res.json({ message: newPinState ? 'Announcement pinned' : 'Announcement unpinned', is_pinned: Boolean(newPinState) });
   } catch (err) {

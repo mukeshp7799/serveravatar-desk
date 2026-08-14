@@ -134,6 +134,19 @@ export const announcementSchema = z.object({
 });
 export type AnnouncementInput = z.infer<typeof announcementSchema>;
 
+export const announcementFormSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(200),
+  content: z.string().min(1, 'Content is required').max(5000),
+  priority: z.enum(['low', 'normal', 'high', 'urgent']),
+  status: z.enum(['draft', 'published', 'archived']),
+  audience_target: z.enum(['everyone', 'departments', 'roles', 'employees']),
+  target_ids: z.array(z.number()).optional(),
+  publish_date: z.string().optional().or(z.literal('')),
+  expiry_date: z.string().optional().or(z.literal('')),
+  is_pinned: z.boolean().optional(),
+});
+export type AnnouncementFormData = z.infer<typeof announcementFormSchema>;
+
 // ─── Task (create / edit) ───────────────────────────────────────────────
 export const taskSchema = z.object({
   projectId: z.string().min(1, 'Please select a project'),

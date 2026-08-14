@@ -1,5 +1,6 @@
 'use client'
 import PortalModal from '@/components/PortalModal';
+import ConfirmDialog from '@/components/project/ConfirmDialog';
 import PageLoader from '@/components/PageLoader'
 import ReactionBar from '@/components/project/ReactionBar'
 import { useEffect, useState, useRef } from 'react'
@@ -10,11 +11,11 @@ import toast from 'react-hot-toast'
 import { Megaphone, Pencil, Trash2, Bell, Users, ShieldCheck, UserCheck, Calendar, Clock, X, Pin, PinOff, RotateCcw } from 'lucide-react'
 import api from '@/lib/api'
 import { useDateSettings } from '@/contexts/CompanySettingsContext'
-import { announcementSchema, type AnnouncementInput } from '@/lib/schemas'
+import { announcementSchema, announcementFormSchema, type AnnouncementInput, type AnnouncementFormData } from '@/lib/schemas'
 import type { Reaction } from '@/types/project'
 
 type AnnTab = 'all' | 'my' | 'drafts' | 'archived'
-const LIMIT = 15
+const LIMIT_OPTIONS = [10, 20, 30, 50] as const
 
 interface AnnReactions {
   emojis: { emoji: string; count: number; users?: string[] }[]
@@ -80,6 +81,7 @@ function AnnouncementCard({
   currentUserId: number
   canManage: boolean
 }) {
+  const { t } = useTranslation()
   const { date_format } = useDateSettings();
   const fmtDate = (raw: string | Date | null | undefined): string => {
     if (!raw) return '';
@@ -94,9 +96,9 @@ function AnnouncementCard({
       .replace('DD', String(day).padStart(2,'0')).replace('D', String(day));
   };
 
-  const [showReactions, setShowReactions] = useState(false)
   const reactionRef = useRef<HTMLDivElement>(null)
   const AudienceIcon = audienceIcon[ann.audience_target] || Bell
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const reactions: Reaction[] = ann.reactions.emojis.map(e => ({
     emoji: e.emoji,
@@ -107,32 +109,30 @@ function AnnouncementCard({
 
   const handleReactionToggle = async (emoji: string, oldEmoji?: string) => {
     if (oldEmoji && oldEmoji !== emoji) {
-      // User had oldEmoji, switching to a different emoji → replace
       await onReact(ann.id, emoji, oldEmoji)
     } else {
-      // Toggle own reaction on/off
       await onReact(ann.id, emoji)
     }
   }
 
+  const bgColor = ann.priority === 'urgent' ? 'bg-red-500'
+    : ann.priority === 'high' ? 'bg-amber-400'
+    : ann.priority === 'normal' ? 'bg-indigo-500' : 'bg-gray-300'
+
+  const iconBg = ann.priority === 'urgent' ? 'bg-red-500'
+    : ann.priority === 'high' ? 'bg-amber-500'
+    : ann.priority === 'normal' ? 'bg-indigo-600' : 'bg-gray-500'
+
   return (
-    <div className={`bg-white rounded-2xl border overflow-hidden hover:shadow-md transition-shadow group ${
-      ann.is_pinned ? 'border-amber-300 shadow-amber-100' : 'border-gray-100'
-    }`}>
-      <div className={`h-1 ${
-        ann.priority === 'urgent' ? 'bg-red-500' :
-        ann.priority === 'high' ? 'bg-amber-400' :
-        ann.priority === 'normal' ? 'bg-indigo-500' : 'bg-gray-300'
-      }`} />
-      <div className="p-5">
-        <div className="flex justify-between items-start mb-3 gap-3">
-          <div className="flex items-start gap-3 flex-1 min-w-0">
-            <div className={`relative w-11 h-11 rounded-xl flex items-center justify-center text-white shadow shrink-0 ${
-              ann.priority === 'urgent' ? 'bg-red-500' :
-              ann.priority === 'high' ? 'bg-amber-500' :
-              ann.priority === 'normal' ? 'bg-indigo-600' : 'bg-gray-500'
-            }`}>
-              <Megaphone size={20} strokeWidth={2.25} />
+    <div className={`bg-white rounded-2xl border overflow-hidden hover:shadow-md transition-shadow group ${ann.is_pinned ? 'border-amber-300 shadow-amber-100' : 'border-gray-100'}`}>
+      <div className={`h-1 ${bgColor}`} />
+      <div className="p-4 sm:p-5">
+        {/* Header row */}
+        <div className="flex flex-col sm:flex-row justify-between items-start gap-2 sm:gap-3 mb-3">
+          {/* Left: icon + badges + title + meta */}
+          <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0 w-full">
+            <div className={`relative w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center text-white shadow shrink-0 ${iconBg}`}>
+              <Megaphone size={16} strokeWidth={2.25} />
               {ann.is_pinned && (
                 <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center shadow">
                   <Pin size={8} strokeWidth={3} className="text-white" />
@@ -140,91 +140,102 @@ function AnnouncementCard({
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-0.5">
+              {/* Badges row */}
+              <div className="flex flex-wrap items-center gap-1.5 mb-1">
                 {ann.is_pinned && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
                     <Pin size={9} /> Pinned
                   </span>
                 )}
+                <span className={`inline-flex items-center rounded-full px-1.5 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-bold border ${priorityColors[ann.priority]}`}>
+                  {priorityBadge[ann.priority]}
+                </span>
+                <span className={`inline-flex items-center gap-0.5 sm:gap-1 rounded-full px-1.5 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-bold border ${statusColors[ann.status]}`}>
+                  {ann.status === 'published' ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> : null}
+                  {ann.status.charAt(0).toUpperCase() + ann.status.slice(1)}
+                </span>
+                {ann.audience_target !== 'everyone' && (
+                  <span className="hidden xs:inline-flex items-center gap-0.5 text-[10px] sm:text-xs text-gray-500" title={audienceLabel[ann.audience_target]}>
+                    <AudienceIcon size={11} />
+                  </span>
+                )}
               </div>
-              <h3 className="text-base font-extrabold text-gray-900 leading-tight">{ann.title}</h3>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 mt-1">
-                <div className="flex items-center gap-1">
-                  <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[9px] font-bold">
+              {/* Title */}
+              <h3 className="text-sm sm:text-base font-extrabold text-gray-900 leading-tight truncate">{ann.title}</h3>
+              {/* Meta row */}
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] sm:text-xs text-gray-500 mt-0.5">
+                <div className="flex items-center gap-0.5 sm:gap-1">
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[8px] sm:text-[9px] font-bold shrink-0">
                     {ann.poster_name?.[0] || '?'}
                   </div>
-                  <span className="font-semibold">{ann.poster_name}</span>
+                  <span className="font-semibold truncate max-w-[80px] sm:max-w-none">{ann.poster_name}</span>
                 </div>
                 <span>•</span>
                 <span>{fmtDate(ann.created_at)}</span>
               </div>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <div className="flex flex-wrap gap-1 justify-end">
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold border ${priorityColors[ann.priority]}`}>
-                {priorityBadge[ann.priority]}
-              </span>
-              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border ${statusColors[ann.status]}`}>
-                {ann.status === 'published' ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> : null}
-                {ann.status.charAt(0).toUpperCase() + ann.status.slice(1)}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              {ann.audience_target !== 'everyone' && (
-                <span className="inline-flex items-center gap-1 text-xs text-gray-500" title={audienceLabel[ann.audience_target]}>
-                  <AudienceIcon size={12} /> {ann.audience_target}
-                </span>
-              )}
-              {(canManage || ann.is_owner) && (
-                <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {canManage && (
-                    <button onClick={() => onPin(ann.id)} title={ann.is_pinned ? 'Unpin' : 'Pin'}
-                      className="w-7 h-7 rounded-lg text-amber-600 hover:bg-amber-50 cursor-pointer border-none transition flex items-center justify-center">
-                      {ann.is_pinned ? <PinOff size={13} strokeWidth={2.25} /> : <Pin size={13} strokeWidth={2.25} />}
-                    </button>
-                  )}
-                  {ann.status === 'archived' && canManage && (
-                    <button onClick={() => onRestore(ann.id)} title="Restore"
-                      className="w-7 h-7 rounded-lg text-emerald-600 hover:bg-emerald-50 cursor-pointer border-none transition flex items-center justify-center">
-                      <RotateCcw size={13} strokeWidth={2.25} />
-                    </button>
-                  )}
-                  <button onClick={() => onEdit(ann)} title="Edit"
-                    className="w-7 h-7 rounded-lg text-indigo-600 hover:bg-indigo-50 cursor-pointer border-none transition flex items-center justify-center">
-                    <Pencil size={13} strokeWidth={2.25} />
+          {/* Action buttons */}
+          {(canManage || ann.is_owner) && (
+            <div className="flex items-center gap-1 shrink-0 ml-auto sm:ml-0">
+              <div className="flex gap-0.5">
+                {canManage && (
+                  <button onClick={() => onPin(ann.id)} title={ann.is_pinned ? 'Unpin' : 'Pin'}
+                    className="w-7 h-7 rounded-lg text-amber-600 hover:bg-amber-50 cursor-pointer border-none transition flex items-center justify-center">
+                    {ann.is_pinned ? <PinOff size={13} strokeWidth={2.25} /> : <Pin size={13} strokeWidth={2.25} />}
                   </button>
-                  <button onClick={() => onDelete(ann.id)} title="Archive"
-                    className="w-7 h-7 rounded-lg text-red-600 hover:bg-red-50 cursor-pointer border-none transition flex items-center justify-center">
-                    <Trash2 size={13} strokeWidth={2.25} />
+                )}
+                {ann.status === 'archived' && canManage && (
+                  <button onClick={() => onRestore(ann.id)} title="Restore"
+                    className="w-7 h-7 rounded-lg text-emerald-600 hover:bg-emerald-50 cursor-pointer border-none transition flex items-center justify-center">
+                    <RotateCcw size={13} strokeWidth={2.25} />
                   </button>
-                </div>
-              )}
+                )}
+                <button onClick={() => onEdit(ann)} title="Edit"
+                  className="w-7 h-7 rounded-lg text-indigo-600 hover:bg-indigo-50 cursor-pointer border-none transition flex items-center justify-center">
+                  <Pencil size={13} strokeWidth={2.25} />
+                </button>
+                <button onClick={() => setShowDeleteConfirm(true)} title="Archive"
+                  className="w-7 h-7 rounded-lg text-red-600 hover:bg-red-50 cursor-pointer border-none transition flex items-center justify-center">
+                  <Trash2 size={13} strokeWidth={2.25} />
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap bg-gray-50 p-4 rounded-xl border border-gray-100 mb-3">
+        {/* Content */}
+        <p className="text-xs sm:text-sm text-gray-700 leading-relaxed whitespace-pre-wrap bg-gray-50 p-3 sm:p-4 rounded-xl border border-gray-100 mb-2 sm:mb-3 line-clamp-3">
           {ann.content}
         </p>
 
-        <div className="flex items-center justify-between gap-3">
-          <div className="relative" ref={reactionRef}>
+        {/* Footer: reactions + expiry */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <div className="relative w-full sm:w-auto overflow-hidden" ref={reactionRef}>
             <ReactionBar
               reactions={reactions}
               onToggle={handleReactionToggle}
               disabled={ann.status !== 'published' && ann.status !== 'archived'}
+              disabledTooltipMessage="Reactions are available only after this announcement is published."
               currentUserName=""
             />
           </div>
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            {ann.expiry_date && (
-              <span className="flex items-center gap-1" title="Expires">
-                <Clock size={11} /> {new Date(ann.expiry_date) < new Date() ? 'Expired' : 'Expires ' + fmtDate(ann.expiry_date)}
-              </span>
-            )}
-          </div>
+          {ann.expiry_date && (
+            <span className="hidden sm:flex items-center gap-1 text-[10px] sm:text-xs text-gray-400 shrink-0" title="Expires">
+              <Clock size={11} /> {new Date(ann.expiry_date) < new Date() ? 'Expired' : 'Expires ' + fmtDate(ann.expiry_date)}
+            </span>
+          )}
         </div>
+
+        <ConfirmDialog
+          open={showDeleteConfirm}
+          title={t('announcements.deleteTitle')}
+          description={t('announcements.deleteConfirm')}
+          confirmLabel={t('common.delete') || 'Delete'}
+          destructive
+          onConfirm={() => { setShowDeleteConfirm(false); onDelete(ann.id); }}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
       </div>
     </div>
   )
@@ -236,7 +247,9 @@ function CreateEditModal({ ann, lookups, onClose, onSaved }: {
   const { t } = useTranslation()
   const {
     register, handleSubmit, reset, watch, setValue, formState: { errors },
-  } = useForm({
+  } = useForm<AnnouncementFormData>({
+    resolver: zodResolver(announcementFormSchema),
+    mode: 'onBlur',
     defaultValues: ann ? {
       title: ann.title, content: ann.content,
       priority: ann.priority, status: ann.status,
@@ -261,7 +274,7 @@ function CreateEditModal({ ann, lookups, onClose, onSaved }: {
     setValue('target_ids', updated)
   }
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: AnnouncementFormData) => {
     try {
       const payload = {
         title: data.title, content: data.content,
@@ -280,7 +293,10 @@ function CreateEditModal({ ann, lookups, onClose, onSaved }: {
         toast.success(ann ? t('announcements.updated') : t('announcements.published'))
       }
       onSaved()
-    } catch (err: any) { toast.error(err.message || t('common.failedToSave')) }
+    } catch (err: any) {
+      toast.error(err.message || t('common.failedToSave'))
+      onClose()
+    }
   }
 
   return (
@@ -423,7 +439,7 @@ function CreateEditModal({ ann, lookups, onClose, onSaved }: {
 export default function AnnouncementsPage() {
   const { t } = useTranslation()
 
-  const { timezone, date_format } = useDateSettings();
+  const { date_format } = useDateSettings();
   const fmtDate = (raw: string | Date | null | undefined): string => {
     if (!raw) return '';
     const d = typeof raw === 'string' ? new Date(raw) : raw;
@@ -436,6 +452,7 @@ export default function AnnouncementsPage() {
       .replace('MM', String(m).padStart(2,'0')).replace('M', String(m))
       .replace('DD', String(day).padStart(2,'0')).replace('D', String(day));
   };
+
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<AnnTab>('all')
@@ -444,19 +461,21 @@ export default function AnnouncementsPage() {
   const [lookups, setLookups] = useState<Lookups>({ departments: [], roles: [], employees: [] })
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
+  const [limit, setLimit] = useState(10)
   const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
   const userPerms: string[] = Array.isArray(user.permissions) ? user.permissions : []
   const canPost = userPerms.includes('announcements.create')
   const canManage = userPerms.includes('announcements.manage')
 
-  const loadAnnouncements = async (pageNum = 1) => {
+  const loadAnnouncements = async (pageNum = 1, explicitLimit?: number) => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ page: String(pageNum), limit: String(LIMIT) })
+      const effectiveLimit = explicitLimit !== undefined ? explicitLimit : limit
+      const params = new URLSearchParams({ page: String(pageNum), limit: String(effectiveLimit) })
       if (tab === 'all') params.set('admin', '1')
-      if (tab === 'drafts') params.set('status', 'draft')
-      if (tab === 'archived') params.set('status', 'archived')
-      if (tab === 'my') params.set('status', 'published')
+      if (tab === 'drafts') params.set('scope', 'drafts')
+      if (tab === 'archived') params.set('scope', 'archived')
+      if (tab === 'my') params.set('scope', 'my')
       const res = await api.get(`/announcements?${params.toString()}`)
       setAnnouncements(res.announcements || [])
       setTotal(res.total || 0)
@@ -476,10 +495,8 @@ export default function AnnouncementsPage() {
 
   const handleReact = async (annId: number, emoji: string, oldEmoji?: string) => {
     try {
-      // Send {emoji, old_emoji} so backend handles replace correctly
       const body = oldEmoji ? { emoji, old_emoji: oldEmoji } : { emoji }
       const res = await api.post(`/announcements/${annId}/reactions`, body)
-      // Backend returns {reactions: [{emoji, count, mine, users}]}
       const newReactions = res.reactions || []
       const userEmojis = newReactions.filter((r: any) => r.mine).map((r: any) => r.emoji)
       const total = newReactions.reduce((s: number, r: any) => s + r.count, 0)
@@ -519,13 +536,14 @@ export default function AnnouncementsPage() {
 
   const handleEdit = (ann: Announcement) => { setEditAnn(ann); setShowCreate(false) }
 
-  const tabs: { key: AnnTab; label: string }[] = [
+  const tabs: { key: AnnTab; label: string; show?: boolean }[] = [
     { key: 'all', label: 'All' },
-    { key: 'my', label: 'My Announcements' },
-    { key: 'drafts', label: 'Drafts' },
+    { key: 'my', label: 'My Announcements', show: canPost },
+    { key: 'drafts', label: 'Drafts', show: canPost },
     { key: 'archived', label: 'Archived' },
   ]
-  const pages = Math.ceil(total / LIMIT)
+
+  const pages = Math.ceil(total / limit)
 
   return (
     <div className="space-y-5 animate-fade-in-up">
@@ -543,7 +561,7 @@ export default function AnnouncementsPage() {
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-200 p-1.5 flex gap-1 flex-wrap">
-        {tabs.map(tb => (
+        {tabs.filter(tb => tb.show !== false).map(tb => (
           <button key={tb.key} onClick={() => setTab(tb.key)}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition cursor-pointer border-none
               ${tab === tb.key ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100 bg-transparent'}`}>
@@ -578,13 +596,74 @@ export default function AnnouncementsPage() {
         </div>
       )}
 
-      {pages > 1 && (
-        <div className="flex items-center justify-center gap-3">
-          <button onClick={() => loadAnnouncements(page - 1)} disabled={page <= 1}
-            className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold disabled:opacity-40 cursor-pointer hover:bg-gray-50">Prev</button>
-          <span className="text-sm text-gray-500">Page {page} of {pages} ({total} total)</span>
-          <button onClick={() => loadAnnouncements(page + 1)} disabled={page >= pages}
-            className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold disabled:opacity-40 cursor-pointer hover:bg-gray-50">Next</button>
+      {(
+        <div className="flex flex-wrap items-start sm:items-center justify-between gap-x-6 gap-y-2 px-4 sm:px-5 py-3 border-t border-gray-100 bg-white rounded-b-2xl">
+          <p className="text-xs text-gray-500 whitespace-nowrap leading-7">
+            Showing <span className="font-medium text-gray-700">{Math.min((page - 1) * limit + 1, total)}</span> to{' '}
+            <span className="font-medium text-gray-700">{Math.min(page * limit, total)}</span> of{' '}
+            <span className="font-medium text-gray-700">{total.toLocaleString()}</span> results
+          </p>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400 whitespace-nowrap leading-7">Per page:</span>
+              <div className="relative">
+                <select
+                  value={limit}
+                  onChange={e => { const newLimit = Number(e.target.value); setLimit(newLimit); setPage(1); loadAnnouncements(1, newLimit) }}
+                  className="appearance-none pl-2 pr-6 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg cursor-pointer focus:outline-none focus:ring-2 transition"
+                  style={{ '--tw-ring-color': '#4F46E5', colorScheme: 'normal' } as any}
+                >
+                  {LIMIT_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <span className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-gray-400">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => { setPage(p => Math.max(1, p - 1)); loadAnnouncements(page - 1) }}
+                disabled={page === 1}
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition cursor-pointer bg-transparent"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              {Array.from({ length: pages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === pages || Math.abs(p - page) <= 1)
+                .reduce<(number | string)[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && Number(p) - Number(arr[idx - 1]) > 1) acc.push('...')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((p, i) =>
+                  p === '...' ? (
+                    <span key={`e-${i}`} className="w-8 h-8 flex items-center justify-center text-xs text-gray-400">…</span>
+                  ) : (
+                    <button key={p} onClick={() => { setPage(Number(p)); loadAnnouncements(Number(p)) }}
+                      className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-semibold transition cursor-pointer border ${
+                        page === p
+                          ? 'text-white border-transparent'
+                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                      style={page === p ? { backgroundColor: '#4F46E5' } : {}}
+                    >{p}</button>
+                  )
+                )}
+              <button
+                onClick={() => { setPage(p => Math.min(pages, p + 1)); loadAnnouncements(page + 1) }}
+                disabled={page === pages}
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 transition cursor-pointer bg-transparent"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

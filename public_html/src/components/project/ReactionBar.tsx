@@ -15,10 +15,12 @@ interface ReactionBarProps {
    */
   onToggle: (emoji: string, oldEmoji?: string) => Promise<void> | void
   disabled?: boolean
+  /** Shown in tooltip when hovering over chips/add-button while disabled. */
+  disabledTooltipMessage?: string
   currentUserName: string
 }
 
-export default function ReactionBar({ reactions, onToggle, disabled, currentUserName }: ReactionBarProps) {
+export default function ReactionBar({ reactions, onToggle, disabled, disabledTooltipMessage, currentUserName }: ReactionBarProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerTheme, setPickerTheme] = useState<Theme>(Theme.LIGHT)
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -79,26 +81,37 @@ export default function ReactionBar({ reactions, onToggle, disabled, currentUser
   const sorted = [...reactions].sort((a, b) => b.count - a.count)
   const myReaction = sorted.find((r) => r.mine)?.emoji
 
-  const others = (r: Reaction) =>
-    r.users.filter((u) => u.trim().toLowerCase() !== currentUserName.trim().toLowerCase())
-
   const tooltipFor = (r: Reaction) => {
-    const otherNames = others(r)
+    // Get current user's full name from localStorage to filter from the users list
+    let myName = currentUserName;
+    try {
+      const stored = JSON.parse(window.localStorage.getItem('user') || '{}');
+      if (stored.firstName || stored.lastName) {
+        myName = [stored.firstName, stored.lastName].filter(Boolean).join(' ').trim();
+      }
+    } catch (_) { /* ignore */ }
+
+    // Include current user's name as "You" alongside other reactors' names
     if (r.mine) {
-      return otherNames.length > 0 ? `You, ${otherNames.join(', ')}` : 'You'
+      const others = r.users.filter(
+        (u) => u.trim().toLowerCase() !== myName.trim().toLowerCase()
+      )
+      return others.length > 0 ? 'You, ' + others.join(', ') : 'You'
     }
-    return otherNames.length > 0 ? otherNames.join(', ') : 'No reactions'
+    return r.users.length > 0 ? r.users.join(', ') : 'No reactions'
   }
 
-  const handleChipClick = (emoji: string) => {
-    // Clicking own reaction → remove it (pass emoji as both to signal remove)
-    // Clicking a different reaction → REPLACE old with new (pass oldEmoji)
-    if (myReaction && myReaction !== emoji) {
-      void onToggle(emoji, myReaction) // REPLACE old reaction with new one
-    } else if (myReaction === emoji) {
-      void onToggle(emoji, emoji) // REMOVE own reaction
+  const handleChipClick = (emoji: string, fromPicker = false) => {
+    // Add button (picker): always ADD — ignore existing reaction so user can have multiple
+    if (fromPicker) {
+      void onToggle(emoji)
+      return
+    }
+    // Clicking own reaction chip → REMOVE it
+    if (myReaction === emoji) {
+      void onToggle(emoji, emoji)
     } else {
-      void onToggle(emoji) // ADD first reaction
+      void onToggle(emoji)
     }
   }
 
@@ -115,7 +128,7 @@ export default function ReactionBar({ reactions, onToggle, disabled, currentUser
             key={`${r.emoji}-${r.count}-${r.mine ? 1 : 0}`}
             reaction={r}
             tooltipId={tooltipId}
-            tooltipText={tooltipFor(r)}
+            tooltipText={disabled ? (disabledTooltipMessage || tooltipFor(r)) : tooltipFor(r)}
             disabled={!!disabled}
             onToggle={(emoji, _oldEmoji) => {
               // _oldEmoji is from ChipWithTooltip's interface but ReactionBar
@@ -142,6 +155,8 @@ export default function ReactionBar({ reactions, onToggle, disabled, currentUser
           aria-label="Add reaction"
           aria-expanded={pickerOpen}
           className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-indigo-600 dark:hover:text-indigo-300 transition cursor-pointer disabled:opacity-50"
+          data-tooltip-id="app-tooltip"
+          data-tooltip-content={disabled ? (disabledTooltipMessage || '') : undefined}
         >
           <Smile size={12} strokeWidth={2.5} />
           <Plus size={11} strokeWidth={2.75} className="-ml-1" />
@@ -157,8 +172,9 @@ export default function ReactionBar({ reactions, onToggle, disabled, currentUser
           >
             <EmojiPicker
               onEmojiClick={(data: EmojiClickData) => {
+                console.log('[DEBUG] EmojiPicker onEmojiClick emoji=', JSON.stringify(String(data.emoji)), 'unified=', data.unified)
                 setPickerOpen(false)
-                handleChipClick(data.emoji)
+                handleChipClick(data.emoji, true) // true = fromPicker → always ADD
               }}
               theme={pickerTheme}
               emojiStyle={EmojiStyle.NATIVE}
