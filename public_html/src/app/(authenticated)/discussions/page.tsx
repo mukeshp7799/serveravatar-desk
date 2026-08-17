@@ -131,18 +131,18 @@ function getInitials(first = '', last = '') {
   return `${(first[0] || '?').toUpperCase()}${(last[0] || '?').toUpperCase()}`
 }
 function Avatar({
-  id, first, last, url, size = 'md', className = '',
+  id, first, last, url, size = 'md', className = '', title,
 }: {
   id: number; first?: string; last?: string; url?: string | null
-  size?: 'xs' | 'sm' | 'md' | 'lg'; className?: string
+  size?: 'xs' | 'sm' | 'md' | 'lg'; className?: string; title?: string
 }) {
   const sz = { xs: 'w-6 h-6 text-[9px]', sm: 'w-8 h-8 text-[10px]', md: 'w-10 h-10 text-xs', lg: 'w-12 h-12 text-sm' }[size]
   const color = getAvatarColor(id)
   return url ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt="" className={`${sz} rounded-full object-cover ring-2 ring-white shrink-0 ${className}`} />
+    <img src={url} alt="" data-tooltip-id="app-tooltip" data-tooltip-content={title || ''} className={`${sz} rounded-full object-cover ring-2 ring-white shrink-0 ${className}`} />
   ) : (
-    <div className={`${sz} ${color} rounded-full flex items-center justify-center text-white font-bold ring-2 ring-white shrink-0 ${className}`}>
+    <div data-tooltip-id="app-tooltip" data-tooltip-content={title || ''} className={`${sz} ${color} rounded-full flex items-center justify-center text-white font-bold ring-2 ring-white shrink-0 ${className}`}>
       {getInitials(first, last)}
     </div>
   )
@@ -229,6 +229,7 @@ function DiscussionRow({
         url={d.avatar_url}
         size="sm"
         className="mt-0.5"
+        title={d.first_name ? `${d.first_name} ${d.last_name}`.trim() : ''}
       />
 
       {/* Main content */}
@@ -239,8 +240,6 @@ function DiscussionRow({
 
         {/* Meta row */}
         <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-1">
-          <span className="text-xs text-gray-600 font-medium">{d.first_name} {d.last_name}</span>
-          <span className="text-gray-300">·</span>
           <span className="text-xs text-gray-400 flex items-center gap-0.5">
             <Clock size={10} strokeWidth={2} />
             {fmtRelative(d.created_at)}
@@ -262,11 +261,11 @@ function DiscussionRow({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 shrink-0 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
         {canDelete && (
           <button
             onClick={onDelete}
-            title="Delete discussion"
+            data-tooltip-id="app-tooltip" data-tooltip-content="Delete discussion"
             className="w-7 h-7 rounded-lg flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer border-none bg-transparent"
           >
             <Trash2 size={13} strokeWidth={2} />
@@ -286,12 +285,14 @@ function MessageBubble({
   user,
   activeMembers,
   onToggleReaction,
+  onDeleteMessageDispatch,
   currentUserName,
 }: {
   m: DiscussionMessage
   user: any
   activeMembers: ActiveMember[]
   onToggleReaction: (messageId: number, emoji: string, oldEmoji?: string) => void
+  onDeleteMessageDispatch: (messageId: number) => void
   currentUserName: string
 }) {
   const senderId = m.sender_id ?? m.user_id ?? m.userId
@@ -308,10 +309,11 @@ function MessageBubble({
         url={m.avatar_url}
         size="sm"
         className="mt-1 shrink-0"
+        title={m.first_name ? `${m.first_name} ${m.last_name}`.trim() : ''}
       />
       <div className={`max-w-[80%] flex flex-col ${isMe ? 'items-end' : ''}`}>
         <div className={`flex items-center gap-2 mb-1 ${isMe ? 'flex-row-reverse' : ''}`}>
-          <span className="text-xs font-semibold text-gray-700">{m.first_name} {m.last_name}</span>
+          <span className="text-xs font-semibold text-gray-700 sr-only">{m.first_name} {m.last_name}</span>
           <span className="text-[10px] text-gray-400">{new Date(m.created_at).toLocaleString()}</span>
         </div>
         <div className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
@@ -321,15 +323,23 @@ function MessageBubble({
         }`}>
           {highlightMentions(m.content || '', activeMembers)}
         </div>
-        {m.reactions?.length > 0 && (
-          <div className="mt-1">
-            <ReactionBar
-              reactions={m.reactions}
-              onToggle={(emoji, oldEmoji) => onToggleReaction(m.id, emoji, oldEmoji)}
-              currentUserName={currentUserName}
-            />
-          </div>
-        )}
+        <div className="mt-1 flex items-center gap-2">
+          <ReactionBar
+            reactions={m.reactions || []}
+            onToggle={(emoji, oldEmoji) => onToggleReaction(m.id, emoji, oldEmoji)}
+            currentUserName={currentUserName}
+          />
+          {isMe && (
+            <button
+              type="button"
+              onClick={() => onDeleteMessageDispatch(m.id)}
+              className="inline-flex items-center justify-center w-6 h-6 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition cursor-pointer border-none bg-transparent"
+              data-tooltip-id="app-tooltip" data-tooltip-content="Delete message"
+            >
+              <Trash2 size={12} strokeWidth={2} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -344,6 +354,7 @@ function ConversationPanel({
   activeMembers,
   onClose,
   onToggleReaction,
+  onDeleteMessageDispatch,
   onSendMessage,
   sending,
 }: {
@@ -352,6 +363,7 @@ function ConversationPanel({
   activeMembers: ActiveMember[]
   onClose: () => void
   onToggleReaction: (messageId: number, emoji: string, oldEmoji?: string) => void
+  onDeleteMessageDispatch: (messageId: number) => void
   onSendMessage: (content: string) => Promise<void>
   sending: boolean
 }) {
@@ -404,7 +416,7 @@ function ConversationPanel({
         <button
           onClick={onClose}
           className="w-8 h-8 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition cursor-pointer border-none shrink-0"
-          title="Back"
+          data-tooltip-id="app-tooltip" data-tooltip-content="Back"
         >
           <ArrowLeft size={15} strokeWidth={2.5} />
         </button>
@@ -433,6 +445,7 @@ function ConversationPanel({
                 user={user}
                 activeMembers={activeMembers}
                 onToggleReaction={onToggleReaction}
+                onDeleteMessageDispatch={(id) => onDeleteMessageDispatch(id)}
                 currentUserName={currentUserName}
               />
             ))}
@@ -453,6 +466,7 @@ function ConversationPanel({
             rows={2}
             disabled={sending}
             className="text-sm"
+            dropdownAbove
           />
         </div>
         <button
@@ -488,7 +502,9 @@ export default function DiscussionsPage() {
   const [loadingThread, setLoadingThread] = useState(false)
   const [sending, setSending] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null)
+  const [showFilters, setShowFilters] = useState(false)
+  const filterRef = useRef<HTMLDivElement>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'discussion'; id: number; title: string } | { type: 'message'; id: number } | null>(null)
   const [user, setUser] = useState<any>(null)
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 30, totalPages: 0 })
   const [loadingMore, setLoadingMore] = useState(false)
@@ -497,11 +513,22 @@ export default function DiscussionsPage() {
   // Detect mobile viewport
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 1024)
+    const check = () => setIsMobile(window.innerWidth <= 768)
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
+
+  // Close filter dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (showFilters && filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setShowFilters(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showFilters])
 
   // Restore selection from URL on mount (read directly from window to avoid useSearchParams/Suspense requirement)
   useEffect(() => {
@@ -585,6 +612,7 @@ export default function DiscussionsPage() {
       (entries) => {
         const entry = entries[0]
         if (!entry.isIntersecting) return
+        if (loadingMore) return                   // already loading — prevent duplicate calls
         const { page, totalPages } = pagination
         if (page >= totalPages) return          // no more pages
         loadDiscussions(page + 1)
@@ -593,7 +621,7 @@ export default function DiscussionsPage() {
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [pagination.page, pagination.totalPages])
+  }, [pagination.page, pagination.totalPages, loadingMore])
 
   const openDiscussion = async (id: number) => {
     setLoadingThread(true)
@@ -615,19 +643,27 @@ export default function DiscussionsPage() {
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return
     try {
-      await api.delete(`/discussions/${deleteTarget.id}`)
-      toast.success(t('common.deletedSuccessfully'))
-      if (selectedDiscussion?.discussion?.id === deleteTarget.id) {
-        setSelectedDiscussion(null)
-        const url = new URL(window.location.href)
-        url.searchParams.delete('id')
-        window.history.replaceState({}, '', url.toString())
+      if (deleteTarget.type === 'message') {
+        await api.delete(`/discussions/${selectedDiscussion?.discussion.id}/messages/${deleteTarget.id}`)
+        setSelectedDiscussion(prev => {
+          if (!prev) return prev
+          return { ...prev, messages: prev.messages.filter(m => m.id !== deleteTarget.id) }
+        })
+      } else {
+        await api.delete(`/discussions/${deleteTarget.id}`)
+        if (selectedDiscussion?.discussion?.id === deleteTarget.id) {
+          setSelectedDiscussion(null)
+          const url = new URL(window.location.href)
+          url.searchParams.delete('id')
+          window.history.replaceState({}, '', url.toString())
+        }
+        loadDiscussions(1)
       }
-      setDeleteTarget(null)
-      loadDiscussions(1)
+      toast.success(t('common.deletedSuccessfully'))
     } catch (err: any) {
-      setDeleteTarget(null)
       toast.error(err.message || 'Permission denied')
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -682,6 +718,23 @@ export default function DiscussionsPage() {
     }
   }
 
+  const handleDeleteMessage = async (messageId: number) => {
+    if (!selectedDiscussion) return
+    try {
+      await api.delete(`/discussions/${selectedDiscussion.discussion.id}/messages/${messageId}`)
+      setSelectedDiscussion(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          messages: prev.messages.filter(m => m.id !== messageId)
+        }
+      })
+      toast.success(t('common.deletedSuccessfully'))
+    } catch (err: any) {
+      toast.error(err.message || t('common.failedToDelete'))
+    }
+  }
+
   const handleCreateSubmit = async (data: DiscussionInput) => {
     try {
       const res = await api.post('/discussions', {
@@ -689,6 +742,7 @@ export default function DiscussionsPage() {
         title: data.title,
       })
       setShowCreate(false)
+      reset()
       toast.success(t('discussions.created'))
       loadDiscussions(1)
       if (res.id) {
@@ -715,6 +769,7 @@ export default function DiscussionsPage() {
   const { register, handleSubmit: handleCreate, reset, formState: { errors } } = useForm<DiscussionInput>({
     resolver: zodResolver(discussionSchema),
     mode: 'onBlur',
+    defaultValues: { projectId: '', title: '' },
   })
 
   return (
@@ -733,38 +788,6 @@ export default function DiscussionsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          {/* Project filter */}
-          <select
-            value={projectFilter === 'all' ? 'all' : projectFilter}
-            onChange={e => setProjectFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-            className="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent cursor-pointer"
-          >
-            <option value="all">All Projects</option>
-            {projects.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-
-          {/* Search */}
-          <div className="relative">
-            <Search size={14} strokeWidth={2} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search discussions…"
-              className="pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-xl bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-48"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer p-0 border-none bg-transparent"
-                title="Clear search"
-              >
-                <X size={13} strokeWidth={2.5} />
-              </button>
-            )}
-          </div>
 
           {/* New Discussion */}
           {canManage && (
@@ -782,7 +805,7 @@ export default function DiscussionsPage() {
             onClick={() => { setIsRefreshing(true); loadDiscussions(1) }}
             disabled={loading}
             className="w-9 h-9 flex items-center justify-center text-gray-500 hover:text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition cursor-pointer border-none shrink-0"
-            title="Refresh"
+            data-tooltip-id="app-tooltip" data-tooltip-content="Refresh"
           >
             <RotateCw size={15} strokeWidth={2} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -790,13 +813,13 @@ export default function DiscussionsPage() {
       </div>
 
       {/* ── Main content: list + panel ─────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 flex-1 min-h-0 max-h-[calc(100vh-10rem)]" style={{ gridTemplateRows: 'minmax(0, 1fr)' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-5 gap-5 flex-1 min-h-0 max-h-[calc(100vh-10rem)]" style={{ gridTemplateRows: 'minmax(0, 1fr)' }}>
 
         {/* Discussion List */}
-        <div className={`bg-white rounded-2xl border border-gray-100 flex flex-col min-h-0 h-full ${isMobile && selectedDiscussion ? 'hidden' : ''}`}>
+        <div className={`col-span-1 md:col-span-1 lg:col-span-1 xl:col-span-2 bg-white rounded-2xl border border-gray-100 flex flex-col min-h-0 h-full ${isMobile && selectedDiscussion ? 'hidden' : ''}`}>
           {/* List header: tabs */}
           <div className="px-3 py-2 border-b border-gray-100 shrink-0 bg-gray-50/50">
-            <div className="flex items-center gap-1 bg-white rounded-xl p-0.5 w-fit">
+            <div className="flex items-center gap-1 bg-white rounded-xl p-0.5 w-full">
               {(['all', 'mine', 'mentions'] as Tab[]).map((t_) => (
                 <button
                   key={t_}
@@ -811,6 +834,71 @@ export default function DiscussionsPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Search + Filter panel */}
+          <div className="px-3 py-2 border-b border-gray-100 shrink-0 bg-gray-50/50">
+            <div className="flex items-center gap-2">
+              {/* Search */}
+              <div className="relative flex-1">
+                <Search size={13} strokeWidth={2} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search discussions…"
+                  className="pl-8 pr-7 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1.5 focus:ring-indigo-500 focus:border-transparent w-full"
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer p-0 border-none bg-transparent"
+                    data-tooltip-id="app-tooltip" data-tooltip-content="Clear search"
+                  >
+                    <X size={12} strokeWidth={2.5} />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter toggle */}
+              <div className="relative shrink-0">
+                <button
+                  onClick={() => setShowFilters(prev => !prev)}
+                  className={`h-7 px-2 flex items-center gap-1.5 rounded-lg border text-xs transition cursor-pointer border-none ${showFilters ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                  data-tooltip-id="app-tooltip"
+                  data-tooltip-content={projectFilter === 'all' ? 'All Projects' : (projects.find((p: any) => p.id === projectFilter)?.name || 'Filter')}
+                >
+                  <Filter size={12} strokeWidth={2} />
+                </button>
+
+                {/* Project filter dropdown */}
+                {showFilters && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShowFilters(false)} aria-hidden />
+                    <div className="absolute left-0 top-full mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-200 z-40 py-1 animate-scale-in">
+                      <button
+                        type="button"
+                        onClick={() => { setProjectFilter('all'); setShowFilters(false) }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition cursor-pointer border-none ${projectFilter === 'all' ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-gray-700 hover:bg-indigo-50 hover:text-indigo-700'}`}
+                      >
+                        All Projects
+                      </button>
+                      {projects.map((p: any) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => { setProjectFilter(p.id); setShowFilters(false) }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition cursor-pointer border-none ${projectFilter === p.id ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-gray-700 hover:bg-indigo-50 hover:text-indigo-700'}`}
+                        >
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
           </div>
 
           {loading ? (
@@ -841,7 +929,7 @@ export default function DiscussionsPage() {
                     user={user}
                     isActive={selectedDiscussion?.discussion?.id === d.id}
                     onClick={() => openDiscussion(d.id)}
-                    onDelete={(e) => { e.stopPropagation(); setDeleteTarget({ id: d.id, title: d.title }) }}
+                    onDelete={(e) => { e.stopPropagation(); setDeleteTarget({ type: 'discussion', id: d.id, title: d.title }) }}
                   />
                 ))}
                 {/* Infinite scroll sentinel */}
@@ -862,8 +950,7 @@ export default function DiscussionsPage() {
         </div>
 
         {/* Conversation Panel */}
-        <div className={`${isMobile ? (selectedDiscussion ? 'flex' : 'hidden') : 'flex'} flex-col min-h-0 flex-1 lg:col-span-2`}
-          style={{ display: isMobile ? (selectedDiscussion ? 'flex' : 'none') : 'flex' }}
+        <div className={`col-span-1 md:col-span-1 lg:col-span-1 xl:col-span-3 ${isMobile ? (selectedDiscussion ? 'flex' : 'hidden') : 'flex'} flex-col min-h-0 flex-1`}
         >
           <ConversationPanel
             thread={selectedDiscussion}
@@ -876,6 +963,7 @@ export default function DiscussionsPage() {
               window.history.replaceState({}, '', url.toString())
             }}
             onToggleReaction={handleToggleReaction}
+            onDeleteMessageDispatch={(id) => setDeleteTarget({ type: 'message', id })}
             onSendMessage={handleSendMessage}
             sending={sending}
           />
@@ -891,9 +979,13 @@ export default function DiscussionsPage() {
                 <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
                   <Trash2 size={24} className="text-red-600" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Discussion?</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-2">
+                  {deleteTarget.type === 'discussion' ? 'Delete Discussion?' : 'Delete Message?'}
+                </h3>
                 <p className="text-sm text-gray-500">
-                  This will permanently delete "<span className="font-semibold">{deleteTarget.title}</span>" and all its messages. This action cannot be undone.
+                  {deleteTarget.type === 'discussion'
+                    ? <>This will permanently delete "<span className="font-semibold">{deleteTarget.title}</span>" and all its messages. This action cannot be undone.</>
+                    : 'This message will be permanently deleted. This action cannot be undone.'}
                 </p>
               </div>
               <div className="flex gap-3 px-6 pb-6">
@@ -914,7 +1006,7 @@ export default function DiscussionsPage() {
         <PortalModal>
           <div
             className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={() => { setShowCreate(false); reset({ projectId: '', title: '' }) }}
+            onClick={() => { setShowCreate(false); reset() }}
           >
             <div
               className="bg-white rounded-3xl w-full max-w-md shadow-2xl animate-scale-in overflow-hidden"
@@ -932,7 +1024,7 @@ export default function DiscussionsPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => { setShowCreate(false); reset({ projectId: '', title: '' }) }}
+                  onClick={() => { setShowCreate(false); reset() }}
                   className="w-9 h-9 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center text-white transition cursor-pointer border-none"
                 >
                   <X size={16} strokeWidth={2.5} />
@@ -985,7 +1077,7 @@ export default function DiscussionsPage() {
                 <div className="flex gap-3 justify-end">
                   <button
                     type="button"
-                    onClick={() => { setShowCreate(false); reset({ projectId: '', title: '' }) }}
+                    onClick={() => { setShowCreate(false); reset() }}
                     className="px-5 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition cursor-pointer border-none"
                   >
                     Cancel

@@ -126,7 +126,80 @@ router.get('/', auth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/discussions/:id
+// GET /api/discussions/mentions — discussions containing messages where the current user is @mentioned.
+// Uses the mentions table (source_type='discussion_message') to find relevant discussions.
+router.get('/mentions', auth, async (req, res, next) => {
+  try {
+    if (!req.user.permissions.includes('discussions.view')) {
+      return res.status(403).json({ error: 'You do not have permission to view discussions.' });
+    }
+    const { projectId, search } = req.query;
+    const page  = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+
+    const mentionJoin = `JOIN mentions mn ON mn.source_id IN (
+         SELECT id FROM messages WHERE discussion_id = d.id AND is_direct = 0
+       ) AND mn.source_type = 'discussion_message' AND mn.mentioned_user_id = ?`;
+
+    const whereParts = [];
+    const whereParams = [];
+
+    if (projectId) {
+      whereParts.push('d.project_id = ?');
+      whereParams.push(projectId);
+    }
+
+    if (search && search.trim()) {
+      whereParts.push('(d.title LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)');
+      const term = `%${search.trim()}%`;
+      whereParams.push(term, term, term);
+    }
+
+    const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+    // Params order: [mentioned_user_id (JOIN), WHERE params..., mentioned_user_id (ORDER BY subquery), limit, offset]
+    const countSql = `SELECT COUNT(DISTINCT d.id) AS total
+       FROM discussions d
+       JOIN users u ON d.created_by_user_id = u.id
+       ${mentionJoin}
+       ${whereClause}`;
+
+    const selectSql = `SELECT DISTINCT d.*, u.first_name, u.last_name, u.avatar_url,
+              p.name AS project_name,
+              (SELECT COUNT(*) FROM messages WHERE discussion_id = d.id AND is_direct = 0) AS message_count,
+              (SELECT m.created_at FROM mentions mn2
+               JOIN messages m ON m.id = mn2.source_id AND mn2.source_type = 'discussion_message'
+               WHERE m.discussion_id = d.id AND mn2.mentioned_user_id = ?
+               ORDER BY m.created_at DESC LIMIT 1) AS last_mention_at
+       FROM discussions d
+       JOIN users u ON d.created_by_user_id = u.id
+       LEFT JOIN projects p ON d.project_id = p.id
+       ${mentionJoin}
+       ${whereClause}
+       ORDER BY last_mention_at DESC
+       LIMIT ? OFFSET ?`;
+
+    const joinParams = [req.user.id];
+    const countParams = [...joinParams, ...whereParams];
+    const selectParams = [...joinParams, ...whereParams, req.user.id, limit, offset];
+
+    const [[{ total }]] = await pool.query(countSql, countParams);
+    const [rows] = await pool.query(selectSql, selectParams);
+
+    res.json({
+      discussions: rows,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (err) { next(err); }
+});
+
+
 router.get('/:id', auth, async (req, res, next) => {
   try {
     if (!req.user.permissions.includes('discussions.view')) {
@@ -308,56 +381,6 @@ router.post('/:id/messages/:messageId/reactions', auth, async (req, res, next) =
   } catch (err) { next(err); }
 });
 
-// GET /api/discussions/mentions — discussions containing messages where the current user is @mentioned.
-// Uses the mentions table (source_type='discussion_message') to find relevant discussions.
-router.get('/mentions', auth, async (req, res, next) => {
-  try {
-    if (!req.user.permissions.includes('discussions.view')) {
-      return res.status(403).json({ error: 'You do not have permission to view discussions.' });
-    }
-    const page  = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
-    const offset = (page - 1) * limit;
-
-    const [[{ total }]] = await pool.query(
-      `SELECT COUNT(DISTINCT d.id) AS total
-       FROM discussions d
-       JOIN mentions mn ON mn.source_id IN (
-         SELECT id FROM messages WHERE discussion_id = d.id AND is_direct = 0
-       ) AND mn.source_type = 'discussion_message' AND mn.mentioned_user_id = ?`,
-      [req.user.id]
-    );
-
-    const [rows] = await pool.query(
-      `SELECT DISTINCT d.*, u.first_name, u.last_name, u.avatar_url,
-              p.name AS project_name,
-              (SELECT COUNT(*) FROM messages WHERE discussion_id = d.id AND is_direct = 0) AS message_count,
-              (SELECT m.created_at FROM mentions mn2
-               JOIN messages m ON m.id = mn2.source_id AND mn2.source_type = 'discussion_message'
-               WHERE m.discussion_id = d.id AND mn2.mentioned_user_id = ?
-               ORDER BY m.created_at DESC LIMIT 1) AS last_mention_at
-       FROM discussions d
-       JOIN users u ON d.created_by_user_id = u.id
-       LEFT JOIN projects p ON d.project_id = p.id
-       JOIN mentions mn ON mn.source_id IN (
-         SELECT id FROM messages WHERE discussion_id = d.id AND is_direct = 0
-       ) AND mn.source_type = 'discussion_message' AND mn.mentioned_user_id = ?
-       ORDER BY last_mention_at DESC
-       LIMIT ? OFFSET ?`,
-      [req.user.id, req.user.id, limit, offset]
-    );
-    res.json({
-      discussions: rows,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
-  } catch (err) { next(err); }
-});
-
 // DELETE /api/discussions/:id
 // Only the discussion creator OR a user with 'discussions.delete' permission can delete.
 router.delete('/:id', auth, async (req, res, next) => {
@@ -374,6 +397,25 @@ router.delete('/:id', auth, async (req, res, next) => {
 
     await pool.query('DELETE FROM discussions WHERE id = ?', [req.params.id]);
     res.json({ message: t(req.lang, 'errors.discussionDeleted') });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/discussions/:id/messages/:messageId
+// Only the message sender can delete their own messages.
+router.delete('/:id/messages/:messageId', auth, async (req, res, next) => {
+  try {
+    const [messageRows] = await pool.query(
+      'SELECT id, sender_id FROM messages WHERE id = ? AND discussion_id = ? AND is_direct = 0',
+      [req.params.messageId, req.params.id]
+    );
+    if (!messageRows.length) return res.status(404).json({ error: 'Message not found' });
+
+    if (messageRows[0].sender_id !== req.user.id) {
+      return res.status(403).json({ error: 'You can only delete your own messages.' });
+    }
+
+    await pool.query('DELETE FROM messages WHERE id = ?', [req.params.messageId]);
+    res.json({ message: 'Message deleted' });
   } catch (err) { next(err); }
 });
 

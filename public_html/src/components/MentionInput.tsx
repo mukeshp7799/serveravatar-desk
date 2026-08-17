@@ -107,6 +107,8 @@ export interface MentionInputProps {
   maxLength?: number
   /** Called when Ctrl+Enter (or Cmd+Enter) is pressed in the textarea. */
   onCtrlEnter?: () => void
+  /** When true, the mention dropdown appears above the textarea instead of below. */
+  dropdownAbove?: boolean
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -124,6 +126,7 @@ export default function MentionInput({
   disabled = false,
   maxLength,
   onCtrlEnter,
+  dropdownAbove = false,
 }: MentionInputProps) {
   const uid = useId()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -326,8 +329,8 @@ export default function MentionInput({
       {open && (
         <div
           ref={dropdownRef}
-          className="absolute z-50 mt-1 w-64 rounded-xl border border-gray-200 dark:border-gray-700
-            bg-white dark:bg-gray-900 shadow-xl overflow-hidden"
+          className={`absolute z-50 ${dropdownAbove ? 'bottom-full mb-0.5' : 'mt-1'} w-64 max-h-72 rounded-xl border border-gray-200 dark:border-gray-700
+            bg-white dark:bg-gray-900 shadow-xl overflow-y-auto`}
           role="listbox"
           aria-label="Mention a team member"
         >

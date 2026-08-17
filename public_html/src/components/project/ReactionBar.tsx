@@ -102,9 +102,9 @@ export default function ReactionBar({ reactions, onToggle, disabled, disabledToo
   }
 
   const handleChipClick = (emoji: string, fromPicker = false) => {
-    // Add button (picker): always ADD — ignore existing reaction so user can have multiple
+    // Picker click: replace existing reaction if user already has one, otherwise add.
     if (fromPicker) {
-      void onToggle(emoji)
+      void onToggle(emoji, myReaction || undefined)
       return
     }
     // Clicking own reaction chip → REMOVE it
