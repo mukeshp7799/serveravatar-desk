@@ -542,16 +542,15 @@ router.delete("/:id/comments/:commentId", auth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/* POST /api/documents/:id/comments/:commentId/reactions — add a reaction emoji
+/* POST /api/documents/:id/comments/:commentId/reactions — add or replace a reaction emoji
  *
- * Body: { emoji } — adds the emoji reaction. Silently no-ops if the user already
- * reacted with this exact emoji (prevents duplicate rows).
- *
- * Supports multiple reactions per user — each call adds one distinct emoji.
+ * Body: { emoji, old_emoji? }
+ *   - REPLACE (old_emoji provided): removes old_emoji first, then adds emoji.
+ *   - ADD (no old_emoji): adds emoji only if user hasn't reacted with it yet.
  */
 router.post("/:id/comments/:commentId/reactions", auth, async (req, res, next) => {
   try {
-    const { emoji } = req.body;
+    const { emoji, old_emoji } = req.body;
     if (!emoji || typeof emoji !== "string" || emoji.length > 16) {
       return res.status(400).json({ error: "Invalid emoji" });
     }
@@ -561,7 +560,15 @@ router.post("/:id/comments/:commentId/reactions", auth, async (req, res, next) =
     );
     if (comment.length === 0) return res.status(404).json({ error: "Comment not found" });
 
-    // Add — silently no-op if already reacted with this exact emoji.
+    // REPLACE: remove old_emoji if switching to a different emoji.
+    if (old_emoji && typeof old_emoji === "string" && old_emoji !== emoji) {
+      await pool.query(
+        "DELETE FROM document_comment_reactions WHERE comment_id = ? AND user_id = ? AND emoji = ?",
+        [req.params.commentId, req.user.id, old_emoji]
+      );
+    }
+
+    // Add — silently no-op if user already reacted with this exact emoji.
     const [alreadyHas] = await pool.query(
       "SELECT id FROM document_comment_reactions WHERE comment_id = ? AND user_id = ? AND emoji = ?",
       [req.params.commentId, req.user.id, emoji]

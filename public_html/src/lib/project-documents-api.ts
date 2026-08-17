@@ -235,11 +235,25 @@ export function useComments(documentId: Document['id'] | null): UseCommentsResul
               ),
             }
           }
+        } else if (oldEmoji && oldEmoji !== emoji) {
+          // REPLACE: user had oldEmoji, switching to a different emoji.
+          // Remove oldEmoji entry, then add new emoji (or increment if someone else used it).
+          let updated = reactions.filter((r) => r.emoji !== oldEmoji)
+          const existingNew = updated.find((r) => r.emoji === emoji)
+          if (existingNew) {
+            updated = updated.map((r) =>
+              r.emoji === emoji
+                ? { ...r, count: r.count + 1, mine: true, users: [...r.users, 'You'] }
+                : r
+            )
+          } else {
+            updated = [...updated, { emoji, count: 1, mine: true, users: ['You'] }]
+          }
+          return { ...c, reactions: updated }
         } else {
-          // ADD: add new emoji reaction (can have multiple reactions per user).
+          // ADD: first reaction or no old emoji.
           const existing = reactions.find((r) => r.emoji === emoji)
           if (existing) {
-            // Another user already reacted with this emoji — add our name to the group.
             return {
               ...c,
               reactions: reactions.map((r) =>
@@ -253,14 +267,17 @@ export function useComments(documentId: Document['id'] | null): UseCommentsResul
         }
       }))
 
-      // If oldEmoji === emoji → REMOVE (DELETE). Otherwise → ADD (POST).
+      // REMOVE (oldEmoji === emoji): DELETE the emoji.
+      // REPLACE (oldEmoji !== emoji): POST with old_emoji so backend atomically replaces.
+      // ADD (no oldEmoji): POST the new emoji.
       if (oldEmoji && oldEmoji === emoji) {
         const res = await api.delete(`/documents/${documentId}/comments/${commentId}/reactions`, { emoji })
         if (res?.reactions != null) {
           setComments((prev) => prev.map((c) => String(c.id) === String(commentId) ? { ...c, reactions: res.reactions } : c))
         }
       } else {
-        const res = await api.post(`/documents/${documentId}/comments/${commentId}/reactions`, { emoji })
+        const body = oldEmoji && oldEmoji !== emoji ? { emoji, old_emoji: oldEmoji } : { emoji }
+        const res = await api.post(`/documents/${documentId}/comments/${commentId}/reactions`, body)
         if (res?.reactions != null) {
           setComments((prev) => prev.map((c) => String(c.id) === String(commentId) ? { ...c, reactions: res.reactions } : c))
         }

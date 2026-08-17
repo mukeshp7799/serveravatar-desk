@@ -107,12 +107,8 @@ export default function ReactionBar({ reactions, onToggle, disabled, disabledToo
       void onToggle(emoji, myReaction || undefined)
       return
     }
-    // Clicking own reaction chip → REMOVE it
-    if (myReaction === emoji) {
-      void onToggle(emoji, emoji)
-    } else {
-      void onToggle(emoji)
-    }
+    // Clicking own reaction chip → REMOVE it; clicking a different chip → REPLACE existing
+    void onToggle(emoji, myReaction === emoji ? emoji : myReaction)
   }
 
   useEffect(() => {

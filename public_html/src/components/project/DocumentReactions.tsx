@@ -275,7 +275,7 @@ function DocChipWithTooltip({
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => onToggle(r.emoji, r.mine ? undefined : (reactions.find(r2 => r2.mine)?.emoji ?? undefined))}
+        onClick={() => onToggle(r.emoji, reactions.find(r2 => r2.mine)?.emoji ?? undefined)}
         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold transition border cursor-pointer active:scale-90 hover:scale-105 ${
           r.mine
             ? 'bg-indigo-100 dark:bg-indigo-900/50 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-200 ring-2 ring-indigo-300/40 dark:ring-indigo-700/40'

@@ -419,9 +419,9 @@ function DocumentViewer({
       setDeleting(false)
     }
   }
-  const handleToggleReaction = async (emoji: string) => {
+  const handleToggleReaction = async (emoji: string, oldEmoji?: string) => {
     try {
-      await docs.toggleReaction(doc.id, emoji)
+      await docs.toggleReaction(doc.id, emoji, oldEmoji)
     } catch (e: any) {
       toast.error(e?.message || 'Failed to update reaction')
     }
