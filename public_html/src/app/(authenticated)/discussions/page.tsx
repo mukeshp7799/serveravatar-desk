@@ -188,6 +188,7 @@ interface Discussion {
   last_name: string
   avatar_url: string | null
   message_count: number
+  has_mention?: boolean | number
   created_at: string
   project_name?: string
 }
@@ -235,7 +236,14 @@ function DiscussionRow({
       {/* Main content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <p className="font-semibold text-sm text-gray-900 line-clamp-1 leading-snug">{d.title}</p>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <p className="font-semibold text-sm text-gray-900 line-clamp-1 leading-snug">{d.title}</p>
+            {!!d.has_mention && (
+              <span className="shrink-0 w-5 h-5 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center" title="You were mentioned">
+                <span className="text-indigo-600 text-[10px] font-bold leading-none">@</span>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Meta row */}
@@ -421,7 +429,14 @@ function ConversationPanel({
           <ArrowLeft size={15} strokeWidth={2.5} />
         </button>
         <div className="flex-1 min-w-0">
-          <h3 className="font-bold text-white text-sm truncate">{thread.discussion.title}</h3>
+          <div className="flex items-center gap-1.5">
+            <h3 className="font-bold text-white text-sm truncate">{thread.discussion.title}</h3>
+            {!!thread.discussion.has_mention && (
+              <span className="shrink-0 w-5 h-5 rounded-full bg-white/20 border border-white/30 flex items-center justify-center" title="You were mentioned">
+                <span className="text-white text-[10px] font-bold leading-none">@</span>
+              </span>
+            )}
+          </div>
           {thread.discussion.project_name && (
             <p className="text-indigo-200 text-[11px] truncate">{thread.discussion.project_name}</p>
           )}
@@ -513,7 +528,7 @@ export default function DiscussionsPage() {
   // Detect mobile viewport
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth <= 768)
+    const check = () => setIsMobile(window.innerWidth < 768)
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)

@@ -107,11 +107,14 @@ router.get('/', auth, async (req, res, next) => {
 
     const [discussions] = await pool.query(
       `SELECT d.*, u.first_name, u.last_name, u.avatar_url,
-              (SELECT COUNT(*) FROM messages WHERE discussion_id = d.id AND is_direct = 0) AS message_count
+              (SELECT COUNT(*) FROM messages WHERE discussion_id = d.id AND is_direct = 0) AS message_count,
+              (SELECT COUNT(*) > 0 FROM mentions mn
+               JOIN messages m ON m.id = mn.source_id AND mn.source_type = 'discussion_message'
+               WHERE m.discussion_id = d.id AND mn.mentioned_user_id = ?) AS has_mention
        ${baseQuery}
        ORDER BY d.created_at DESC
        LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
+      [...params, req.user.id, limit, offset]
     );
 
     res.json({
@@ -206,10 +209,13 @@ router.get('/:id', auth, async (req, res, next) => {
       return res.status(403).json({ error: 'You do not have permission to view discussions.' });
     }
     const [discussions] = await pool.query(
-      `SELECT d.*, u.first_name, u.last_name, u.avatar_url, p.name as project_name
+      `SELECT d.*, u.first_name, u.last_name, u.avatar_url, p.name as project_name,
+              (SELECT COUNT(*) > 0 FROM mentions mn
+               JOIN messages m ON m.id = mn.source_id AND mn.source_type = 'discussion_message'
+               WHERE m.discussion_id = d.id AND mn.mentioned_user_id = ?) AS has_mention
        FROM discussions d JOIN users u ON d.created_by_user_id = u.id
        LEFT JOIN projects p ON d.project_id = p.id WHERE d.id = ?`,
-      [req.params.id]
+      [req.user.id, req.params.id]
     );
     if (discussions.length === 0) return res.status(404).json({ error: t(req.lang, 'errors.discussionNotFound') });
 

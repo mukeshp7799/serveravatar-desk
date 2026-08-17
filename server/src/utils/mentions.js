@@ -62,31 +62,15 @@ async function resolveMentions(projectId, tokens) {
   const [rows] = await pool.query(
     `SELECT u.id, u.first_name, u.last_name, u.email, u.avatar_url
        FROM users u
-      WHERE LOWER(CONCAT(IFNULL(u.first_name,''),'.',IFNULL(u.last_name,''))) IN (${placeholders})
+      WHERE LOWER(CONCAT(IFNULL(TRIM(u.first_name),''),'.',IFNULL(TRIM(u.last_name),''))) IN (${placeholders})
          OR LOWER(u.email) IN (${placeholders})
-         OR LOWER(CONCAT(IFNULL(u.first_name,''),' ',IFNULL(u.last_name,''))) IN (${placeholders})
+         OR LOWER(CONCAT(IFNULL(TRIM(u.first_name),''),' ',IFNULL(TRIM(u.last_name),''))) IN (${placeholders})
     `,
     [...tokens, ...tokens, ...tokens]
   );
 
-  // For null projectId (global discussions), allow all active system users.
-  // Otherwise filter to project members / owner only.
-  if (projectId === null || projectId === undefined) {
-    return rows.filter((r) => r.id)
-  }
-
-  const [memberRows] = await pool.query(
-    `SELECT user_id FROM project_members
-      WHERE project_id = ? AND status = 'active'
-     UNION
-     SELECT manager_id AS user_id FROM projects WHERE id = ?`,
-    [projectId, projectId]
-  );
-  const allowedUserIds = new Set(memberRows.map((r) => r.user_id));
-
-  return rows.filter(
-    (r) => r.id && allowedUserIds.has(r.id)
-  );
+  // Any user can mention any other user — no project membership restriction.
+  return rows.filter((r) => r.id);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
