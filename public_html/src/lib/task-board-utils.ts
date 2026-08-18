@@ -38,28 +38,27 @@ export function isColumnCompleted(columnName: string | null | undefined): boolea
  */
 export type DueUrgency = 'overdue' | 'today' | 'tomorrow' | 'soon' | 'far' | 'none'
 
-/** Parse a `YYYY-MM-DD` string into a local Date at midnight. */
+/** Parse a `YYYY-MM-DD` string into a UTC Date at midnight. */
 function parseLocalDate(yyyyMmDd: string): Date {
-  const [y, m, d] = yyyyMmDd.split('-').map(Number)
-  return new Date(y, (m || 1) - 1, d || 1)
+  // Normalize ISO timestamp "2026-08-20T00:00:00.000Z" -> "2026-08-20" before parsing
+  const normalized = yyyyMmDd.substring(0, 10)
+  const [y, m, d] = normalized.split('-').map(Number)
+  return new Date(Date.UTC(y, (m || 1) - 1, d || 1))
 }
 
-/** Returns today's date as a `YYYY-MM-DD` string (local time). */
+/** Returns today's date as a `YYYY-MM-DD` string (UTC). */
 export function todayYmd(): string {
   const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
 }
 
 /** Add `n` calendar days to a `YYYY-MM-DD` string and return `YYYY-MM-DD`. */
 function addDaysYmd(yyyyMmDd: string, n: number): string {
   const d = parseLocalDate(yyyyMmDd)
-  d.setDate(d.getDate() + n)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
+  d.setUTCDate(d.getUTCDate() + n)
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
 
@@ -73,13 +72,13 @@ function diffDaysYmd(a: string, b: string): number {
 /** Format a `YYYY-MM-DD` string for display, e.g. "Aug 23". */
 function formatShortDate(yyyyMmDd: string): string {
   const d = parseLocalDate(yyyyMmDd)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return d.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' })
 }
 
 /** Format a `YYYY-MM-DD` string with year, e.g. "Aug 23, 2027". */
 function formatLongDate(yyyyMmDd: string): string {
   const d = parseLocalDate(yyyyMmDd)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return d.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export interface DueLabel {

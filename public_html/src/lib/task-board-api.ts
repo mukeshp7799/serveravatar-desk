@@ -350,6 +350,45 @@ export function useTaskBoard(projectId: string | number) {
     })))
   }, [])
 
+  // Optimistic-only task move — updates board immediately without an API call.
+  // Used by onDragOver for live drag feedback. onDragEnd calls moveTask (with API)
+  // to persist the final position.
+  const moveTaskOptimistic = useCallback((
+    taskId: string | number,
+    toColumnId: string | number,
+    newIndex: number,
+  ) => {
+    setBoard((cur) => {
+      const next = cur.map((c) => ({ ...c, tasks: c.tasks.map((t) => ({ ...t })) }))
+      let fromIdx = -1, fromCol = -1
+      for (let i = 0; i < next.length; i++) {
+        const idx = next[i].tasks.findIndex((t) => String(t.id) === String(taskId))
+        if (idx >= 0) { fromIdx = idx; fromCol = i; break }
+      }
+      if (fromCol < 0) return cur
+      const moved = next[fromCol].tasks[fromIdx]
+      next[fromCol].tasks.splice(fromIdx, 1)
+      const toCol = next.findIndex((c) => String(c.id) === String(toColumnId))
+      if (toCol < 0) return cur
+      const arr = next[toCol].tasks
+      const safeIndex = Math.max(0, Math.min(newIndex, arr.length))
+      const prev = safeIndex > 0 ? arr[safeIndex - 1] : null
+      const after = safeIndex < arr.length ? arr[safeIndex] : null
+      const prevPos = prev?.position ?? null
+      const afterPos = after?.position ?? null
+      const newPos =
+        prevPos == null && afterPos == null ? 1000 :
+        prevPos == null ? (afterPos as number) - 1000 :
+        afterPos == null ? prevPos + 1000 :
+        (prevPos + afterPos) / 2
+      next[toCol].tasks.splice(safeIndex, 0, { ...moved, column_id: toColumnId, position: newPos })
+      if (fromCol !== toCol) {
+        next[fromCol].tasks.forEach((t, i) => { t.position = (i + 1) * 1000 })
+      }
+      return next
+    })
+  }, [])
+
   // Reorder multiple tasks at once (for intra-column reordering)
   const reorderTasks = useCallback(async (
     updates: Array<{ id: string | number; column_id: string | number; position: number }>,
@@ -362,7 +401,7 @@ export function useTaskBoard(projectId: string | number) {
     refresh,
     createColumn, renameColumn, deleteColumn, reorderColumns,
     createTask, editTask, deleteTask, restoreTask, permanentDeleteTask,
-    moveTask, moveTaskToColumn, patchTaskInBoard, reorderTasks,
+    moveTask, moveTaskOptimistic, moveTaskToColumn, patchTaskInBoard, reorderTasks,
   }
 }
 

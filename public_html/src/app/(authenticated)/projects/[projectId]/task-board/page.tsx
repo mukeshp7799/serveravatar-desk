@@ -20,8 +20,8 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import {
-  DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
-  closestCorners, useDroppable,
+  DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors,
+  pointerWithin, useDroppable,
   type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from '@dnd-kit/core'
 import {
@@ -92,7 +92,7 @@ function SortableColumn({
   onAddTask: (columnId: string | number) => void
   onOpenTask: (task: BoardTask) => void
   activeTaskId: string | number | null
-  /** Active due-date filter — tasks that don't match are hidden. */
+  /** Active due-date filter - tasks that don't match are hidden. */
   filter: DueFilter
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -145,7 +145,7 @@ function SortableColumn({
             </h3>
           )}
         </div>
-        {/* Action buttons — hidden by default, appear on column hover */}
+        {/* Action buttons - hidden by default, appear on column hover */}
         <div
           className="flex items-center gap-0.5 shrink-0 transition-opacity"
           style={{ opacity: hovered ? 1 : 0 }}
@@ -172,7 +172,7 @@ function SortableColumn({
         </div>
       </div>
 
-      {/* Tasks list — scrolls internally, column stretches to full board height */}
+      {/* Tasks list - scrolls internally, column stretches to full board height */}
       <DroppableColumn columnId={String(column.id)}>
         <SortableContext items={column.tasks.map((t) => `task-${t.id}`)} strategy={verticalListSortingStrategy}>
           <div className="flex-1 overflow-y-auto  px-2 py-1.5 min-h-0">
@@ -222,7 +222,7 @@ function DroppableColumn({
 }
 
 /* ──────────────────────────────────────────────────────────────────
- * Sortable task card — Basecamp-style
+ * Sortable task card - Basecamp-style
  *
  * Layout (top to bottom):
  *   ┌─ priority stripe (left edge, 4px) ──────────────────────────┐
@@ -270,7 +270,7 @@ function SortableTask({
     id: `task-${task.id}`,
     data: { type: 'task', task },
   })
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
+  const style = { opacity: isDragging ? 0 : 1, transition: 'opacity 150ms ease' }
   const doneSub = task.subtasks.filter((s) => s.done).length
   const totalSub = task.subtasks.length
   const descText = htmlToText(task.description_html)
@@ -299,35 +299,22 @@ function SortableTask({
       {...attributes}
       {...listeners}
     >
-      {/* Priority accent stripe — left edge */}
+      {/* Priority accent stripe - left edge */}
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${PRIORITY_BAR[task.priority]}`} aria-hidden />
 
-      {/* Overdue badge — top-right corner, layered above the card */}
-      {dueLabel?.isOverdue && (
-        <span
-          className="absolute top-2 right-2 z-10 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-rose-600 text-white shadow-sm"
-          title={dueLabel.title}
-        >
-          <AlertCircle size={9} strokeWidth={3} />
-          Overdue
-        </span>
-      )}
-
       <div className="pl-4 pr-3.5 pt-3 pb-3">
-        {/* Title row: title + priority pill (or overdue pill when applicable) */}
+        {/* Title row: title + priority pill */}
         <div className="flex items-start gap-2">
-          <h4 className={`flex-1 min-w-0 text-[13.5px] font-semibold leading-snug break-words line-clamp-2 ${dueLabel?.isOverdue ? 'text-rose-950 dark:text-rose-100' : 'text-gray-900 dark:text-white'}`}>
+          <h4 className={`flex-1 min-w-0 text-[13.5px] font-semibold leading-snug truncate pr-1 ${dueLabel?.isOverdue ? 'text-rose-950 dark:text-rose-100' : 'text-gray-900 dark:text-white'}`}>
             {task.title}
           </h4>
-          {dueLabel?.isOverdue ? null : (
-            <span
-              className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${PRIORITY_PILL[task.priority]}`}
-              title={`${PRIORITY_LABEL[task.priority]} priority`}
-            >
-              <span className={`w-1 h-1 rounded-full ${PRIORITY_BAR[task.priority]}`} />
-              {PRIORITY_LABEL[task.priority]}
-            </span>
-          )}
+          <span
+            className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${PRIORITY_PILL[task.priority]}`}
+            title={`${PRIORITY_LABEL[task.priority]} priority`}
+          >
+            <span className={`w-1 h-1 rounded-full ${PRIORITY_BAR[task.priority]}`} />
+            {PRIORITY_LABEL[task.priority]}
+          </span>
         </div>
 
         {/* Description preview (only if there is one) */}
@@ -350,7 +337,7 @@ function SortableTask({
                 {doneSub}/{totalSub}
               </span>
             )}
-            {/* Due date — always shown when present, colour-coded by urgency */}
+            {/* Due date - always shown when present, colour-coded by urgency */}
             {dueLabel && (
               <DueDateChip label={dueLabel.label} urgency={dueLabel.urgency} title={dueLabel.title} />
             )}
@@ -456,7 +443,7 @@ function NewTaskModal({
               <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} aria-hidden />
               <div className="relative bg-white dark:bg-gray-900 rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-gray-200 dark:border-gray-800 w-full sm:max-w-xl flex flex-col max-h-screen sm:max-h-[85vh]" onClick={e => e.stopPropagation()}>
                 <header className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-800">
-                  <h2 className="text-base font-bold text-gray-900 dark:text-white">New task — {columnName}</h2>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white">New task - {columnName}</h2>
                   <button type="button" onClick={onClose} className="w-9 h-9 inline-flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg bg-transparent border-none cursor-pointer" title="Close">
                     <X size={16} strokeWidth={2.25} />
                   </button>
@@ -471,7 +458,7 @@ function NewTaskModal({
                   <textarea
                     value={desc}
                     onChange={(e) => setDesc(e.target.value)}
-                    placeholder="Description (optional)…"
+                    placeholder="Description (optional)..."
                     rows={8}
                     className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none min-h-[180px]"
                   />
@@ -490,7 +477,7 @@ function NewTaskModal({
                   <div>
                     <MultiSelectDropdown
                       label="Assignees"
-                      placeholder="Select assignees…"
+                      placeholder="Select assignees..."
                       options={members.map((m) => ({
                         id: m.id,
                         label: m.name,
@@ -580,10 +567,10 @@ function humanizeAction(action: string, details: any): string {
     default:                   return action
   }
 }
-function truncate(s: string, n = 30) { return s.length > n ? s.slice(0, n - 1) + '…' : s }
+function truncate(s: string, n = 30) { return s.length > n ? s.slice(0, n - 1) + '...' : s }
 
 /* ──────────────────────────────────────────────────────────────────
- * Filter dropdown — quick filters by due date
+ * Filter dropdown - quick filters by due date
  *
  * Lives in the toolbar next to "Archived" and "Add column". Shows the
  * current filter (or "All") and a count badge when a non-default filter
@@ -645,7 +632,7 @@ function FilterDropdown({
             <span>{current.label}</span>
           </>
         )}
-        {/* Overdue count badge — always visible when there's any overdue task,
+        {/* Overdue count badge - always visible when there's any overdue task,
             even when the current filter isn't "Overdue". */}
         {overdueCount > 0 && (
           <span
@@ -697,7 +684,7 @@ function FilterDropdown({
 }
 
 /* ──────────────────────────────────────────────────────────────────
- * useFileInput — ref-only helper to wire a hidden <input type="file">
+ * useFileInput - ref-only helper to wire a hidden <input type="file">
  * ────────────────────────────────────────────────────────────────── */
 /**
  * Wires a hidden `<input type="file">` to a handler.
@@ -770,7 +757,7 @@ export default function TaskBoardPage() {
   const [showArchived, setShowArchived] = useState(false)
   const [archivedCount, setArchivedCount] = useState(0)
   const [dueFilter, setDueFilter] = useState<DueFilter>('all')
-  // Live "today" — re-computed every minute so the overdue boundary
+  // Live "today" - re-computed every minute so the overdue boundary
   // rolls over without a page reload.
   const [, forceTick] = useState(0)
   useEffect(() => {
@@ -783,7 +770,10 @@ export default function TaskBoardPage() {
     [tb.board, todayYmd()],
   )
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+  )
 
   const currentUserName = useMemo(() => {
     if (typeof window === 'undefined') return ''
@@ -846,7 +836,28 @@ export default function TaskBoardPage() {
   }
 
   const onDragOver = (e: DragOverEvent) => {
-    // We handle moves at onDragEnd for simplicity
+    // NOTE: Task board moves happen ONLY in onDragEnd (at drop time).
+    // During drag we only track which column is under the cursor for the
+    // DragOverlay visual — the board state is never mutated here.
+    const { active, over } = e
+    if (!over) return
+    const activeId = String(active.id)
+    const overId = String(over.id)
+    const activeData = active.data.current
+    const overData = over.data.current
+
+    // ── Column reorder ─────────────────────────────────
+    if (activeData?.type === 'column') {
+      const ids = tb.board.map((c) => String(c.id))
+      const from = ids.indexOf(activeId.replace(/^col-/, ''))
+      const to = ids.indexOf(overId.replace(/^col-/, ''))
+      if (from < 0 || to < 0 || from === to) return
+      const next = arrayMove(ids, from, to)
+      tb.reorderColumns(next as Array<string | number>)
+    }
+    // ── Task cross-column: NO-OP during drag ───────────
+    // Tasks are only moved on drop (onDragEnd) so the dragged card
+    // stays visually associated with its original column until released.
   }
 
   const onDragEnd = async (e: DragEndEvent) => {
@@ -865,23 +876,20 @@ export default function TaskBoardPage() {
       const from = ids.indexOf(activeId.replace(/^col-/, ''))
       const to = ids.indexOf(overId.replace(/^col-/, ''))
       if (from < 0 || to < 0) return
-      const next = arrayMove(ids, from, to)
       try {
-        await tb.reorderColumns(next as Array<string | number>)
+        await tb.reorderColumns(arrayMove(ids, from, to) as Array<string | number>)
       } catch (e: any) {
         toast.error('Failed to reorder columns')
       }
       return
     }
 
-    // ─── Task move ──────────────────────────────────────
+    // ─── Task move (onDragOver is NO-OP for tasks — board only changes here) ─
     if (activeData?.type === 'task') {
       const taskId = String(activeId.replace(/^task-/, ''))
-      // Determine destination column + index
       let toColumnId: string | null = null
       let toIndex = 0
       if (overData?.type === 'task') {
-        // Drop over another task — same column as that task, at the position of `over`
         const overTaskId = String(overId.replace(/^task-/, ''))
         for (const c of tb.board) {
           const idx = c.tasks.findIndex((t) => String(t.id) === overTaskId)
@@ -896,19 +904,12 @@ export default function TaskBoardPage() {
       }
       if (!toColumnId) return
       try {
-
         const result = await tb.moveTask(taskId, toColumnId, toIndex)
-        // Show a success toast only on real cross-column / new-position moves.
-        // Re-dropping in the same spot returns { noop: true } and shouldn't
-        // clutter the UI with a toast.
         if (result?.ok && !result.noop && result.toColumnName) {
-          if (
-            result.fromColumnId != null &&
-            String(result.fromColumnId) !== String(toColumnId)
-          ) {
-            toast.success(`Moved to “${result.toColumnName}”`)
+          if (result.fromColumnId != null && String(result.fromColumnId) !== String(toColumnId)) {
+            toast.success(`Moved to "${result.toColumnName}"`)
           } else {
-            toast.success(`Reordered in “${result.toColumnName}”`)
+            toast.success(`Reordered in "${result.toColumnName}"`)
           }
         }
       } catch (e: any) {
@@ -1005,7 +1006,7 @@ export default function TaskBoardPage() {
           onAction={() => setShowAddColumn(true)}
         />
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
           <SortableContext items={tb.board.map((c) => `col-${c.id}`)} strategy={horizontalListSortingStrategy}>
             <div className="flex gap-3 overflow-x-auto pb-4 items-stretch">
               {tb.board.map((col) => (
