@@ -194,7 +194,7 @@ interface Discussion {
 }
 
 /* ─── Constants ────────────────────────────────────────────────── */
-const TABS = ['all', 'mine', 'mentions'] as const
+const TABS = ['all', 'mine'] as const
 type Tab = typeof TABS[number]
 /* ─────────────────────────────────────────────────────────────────
  *  Discussion List Item
@@ -397,8 +397,8 @@ function ConversationPanel({
     return name || user?.email || 'You'
   })()
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     if (!message.trim()) return
     const content = message.trim()
     setMessage('')
@@ -482,6 +482,7 @@ function ConversationPanel({
             disabled={sending}
             className="text-sm"
             dropdownAbove
+            onCtrlEnter={handleSubmit}
           />
         </div>
         <button
@@ -588,7 +589,7 @@ export default function DiscussionsPage() {
     params.set('page', String(page))
     params.set('limit', String(pagination.limit))
 
-    const endpoint = tab === 'mentions' ? '/discussions/mentions' : '/discussions'
+    const endpoint = '/discussions'
 
     api.get(`${endpoint}${params.size ? '?' + params.toString() : ''}`).then((res: any) => {
       let list: Discussion[] = res.discussions || []
@@ -791,18 +792,18 @@ export default function DiscussionsPage() {
     <div className="space-y-5 animate-fade-in-up h-full flex flex-col">
 
       {/* ── Header ─────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex  items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-sm">
             <MessageSquare size={18} strokeWidth={2} className="text-white" />
           </div>
           <div>
             <h1 className="font-extrabold text-gray-900 text-lg leading-tight">Discussions</h1>
-            <p className="text-xs text-gray-500">{pagination.total} {tab === 'all' ? 'total' : tab === 'mine' ? 'my' : 'mentioned'} discussions</p>
+            <p className="text-xs text-gray-500">{pagination.total} {tab === 'all' ? 'total' : 'my'} discussions</p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-2">
 
           {/* New Discussion */}
           {canManage && (
@@ -831,21 +832,21 @@ export default function DiscussionsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-5 gap-5 flex-1 min-h-0 max-h-[calc(100vh-10rem)]" style={{ gridTemplateRows: 'minmax(0, 1fr)' }}>
 
         {/* Discussion List */}
-        <div className={`col-span-1 md:col-span-1 lg:col-span-1 xl:col-span-2 bg-white rounded-2xl border border-gray-100 flex flex-col min-h-0 h-full ${isMobile && selectedDiscussion ? 'hidden' : ''}`}>
+        <div className={`col-span-1 md:col-span-1 lg:col-span-1 xl:col-span-2 bg-white rounded-2xl border border-gray-100 flex flex-col min-h-96 h-full ${isMobile && selectedDiscussion ? 'hidden' : ''}`}>
           {/* List header: tabs */}
           <div className="px-3 py-2 border-b border-gray-100 shrink-0 bg-gray-50/50">
             <div className="flex items-center gap-1 bg-white rounded-xl p-0.5 w-full">
-              {(['all', 'mine', 'mentions'] as Tab[]).map((t_) => (
+              {(['all', 'mine'] as Tab[]).map((t_) => (
                 <button
                   key={t_}
                   onClick={() => setTab(t_)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border-none ${
+                  className={`flex-1 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border-none text-center ${
                     tab === t_
                       ? 'bg-indigo-600 text-white shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700'
                   }`}
                 >
-                  {t_ === 'all' ? 'All' : t_ === 'mine' ? 'My' : 'Mentions'}
+                  {t_ === 'all' ? 'All' : 'My'}
                 </button>
               ))}
             </div>
@@ -862,7 +863,7 @@ export default function DiscussionsPage() {
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search discussions…"
-                  className="pl-8 pr-7 py-1.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1.5 focus:ring-indigo-500 focus:border-transparent w-full"
+                  className="pl-8 pr-7 py-2.5 text-xs border border-gray-200 rounded-lg bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-1.5 focus:ring-indigo-500 focus:border-indigo-500 w-full"
                 />
                 {search && (
                   <button
@@ -879,7 +880,7 @@ export default function DiscussionsPage() {
               <div className="relative shrink-0">
                 <button
                   onClick={() => setShowFilters(prev => !prev)}
-                  className={`h-7 px-2 flex items-center gap-1.5 rounded-lg border text-xs transition cursor-pointer border-none ${showFilters ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                  className={`h-[38px] px-2.5 py-2.5 flex items-center justify-center gap-1.5 rounded-lg text-xs transition cursor-pointer border-none ${showFilters ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                   data-tooltip-id="app-tooltip"
                   data-tooltip-content={projectFilter === 'all' ? 'All Projects' : (projects.find((p: any) => p.id === projectFilter)?.name || 'Filter')}
                 >
@@ -925,12 +926,10 @@ export default function DiscussionsPage() {
               <div>
                 <MessageCircle size={40} strokeWidth={1.5} className="text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-500 font-semibold text-sm mb-1">
-                  {tab === 'mentions' ? 'No mentions yet' : 'No discussions yet'}
+                  No discussions yet
                 </p>
                 <p className="text-gray-400 text-xs">
-                  {tab === 'mentions'
-                    ? 'You will see discussions where you are @mentioned here.'
-                    : 'Start a new discussion to get the conversation going.'}
+                  Start a new discussion to get the conversation going.
                 </p>
               </div>
             </div>
@@ -965,7 +964,7 @@ export default function DiscussionsPage() {
         </div>
 
         {/* Conversation Panel */}
-        <div className={`col-span-1 md:col-span-1 lg:col-span-1 xl:col-span-3 ${isMobile ? (selectedDiscussion ? 'flex' : 'hidden') : 'flex'} flex-col min-h-0 flex-1`}
+        <div className={`col-span-1 md:col-span-1 lg:col-span-1 xl:col-span-3 ${isMobile ? (selectedDiscussion ? 'flex' : 'hidden') : 'flex'} flex-col min-h-96 flex-1`}
         >
           <ConversationPanel
             thread={selectedDiscussion}

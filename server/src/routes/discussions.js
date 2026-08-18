@@ -114,7 +114,7 @@ router.get('/', auth, async (req, res, next) => {
        ${baseQuery}
        ORDER BY d.created_at DESC
        LIMIT ? OFFSET ?`,
-      [...params, req.user.id, limit, offset]
+      [req.user.id, ...params, limit, offset]
     );
 
     res.json({

@@ -131,6 +131,11 @@ export default function MentionInput({
   const uid = useId()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  /** Ref to track dropdown active state synchronously — avoids React state batching delay. */
+  const dropdownActiveRef = useRef(false)
+  /** Ref to track selectedIndex for synchronous read inside event callbacks */
+  const selectedIndexRef = useRef(0)
 
   const [members, setMembers] = useState<ActiveMember[]>([])
   const [loading, setLoading] = useState(false)
@@ -195,7 +200,9 @@ export default function MentionInput({
           setTriggerAt(lastAt)
           setQuery(afterAt)
           setOpen(true)
+          selectedIndexRef.current = 0
           setSelectedIndex(0)
+          dropdownActiveRef.current = true
           return
         }
       }
@@ -203,6 +210,7 @@ export default function MentionInput({
       setOpen(false)
       setQuery('')
       setTriggerAt(null)
+      dropdownActiveRef.current = false
     },
     [onChange]
   )
@@ -210,6 +218,11 @@ export default function MentionInput({
   /* ── Sync cursor position on keyup/click ───────────────────── */
   const handleSelect = useCallback(
     (e: React.MouseEvent | React.KeyboardEvent) => {
+      // If dropdown is already active, don't reset selectedIndex — arrow keys handle navigation
+      if (dropdownActiveRef.current) return
+      // If dropdown is already closed, don't re-open it
+      if (!open) return
+
       const pos = (e.target as HTMLTextAreaElement).selectionStart ?? cursorPos
       setCursorPos(pos)
       const text = (e.target as HTMLTextAreaElement).value || value
@@ -221,46 +234,90 @@ export default function MentionInput({
           setTriggerAt(lastAt)
           setQuery(afterAt)
           setOpen(true)
+          selectedIndexRef.current = 0
           setSelectedIndex(0)
+          dropdownActiveRef.current = true
           return
         }
       }
       setOpen(false)
       setQuery('')
       setTriggerAt(null)
+      dropdownActiveRef.current = false
     },
-    [value, cursorPos]
+    [value, cursorPos, open]
   )
 
   /* ── Keyboard navigation in dropdown ──────────────────────── */
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      // Ctrl+Enter / Cmd+Enter → send (outside dropdown)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault()
-        if (onCtrlEnter) onCtrlEnter()
-        return
-      }
-      if (!open) return
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setSelectedIndex((i) => Math.min(i + 1, filtered.length - 1))
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setSelectedIndex((i) => Math.max(i - 1, 0))
-      } else if (e.key === 'Enter' || e.key === 'Tab') {
-        if (filtered[selectedIndex]) {
-          e.preventDefault()
-          insertMention(filtered[selectedIndex])
-        }
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
+      // Close dropdown helper
+      const closeDropdown = () => {
         setOpen(false)
         setQuery('')
         setTriggerAt(null)
+        dropdownActiveRef.current = false
+      }
+
+      // Use ref for synchronous dropdown detection — avoids React state batching lag
+      if (dropdownActiveRef.current) {
+        // Dropdown is open — handle navigation and selection
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          const newIdx = Math.min(selectedIndexRef.current + 1, Math.max(0, filtered.length - 1))
+          selectedIndexRef.current = newIdx
+          setSelectedIndex(newIdx)
+          // Auto-scroll so the highlighted item stays visible
+          setTimeout(() => {
+            const list = listRef.current
+            if (!list) return
+            const buttons = list.querySelectorAll<HTMLButtonElement>('button[role="option"]')
+            buttons[newIdx]?.scrollIntoView({ block: "nearest" })
+          }, 0)
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          const newIdx = Math.max(selectedIndexRef.current - 1, 0)
+          selectedIndexRef.current = newIdx
+          setSelectedIndex(newIdx)
+          // Auto-scroll so the highlighted item stays visible
+          setTimeout(() => {
+            const list = listRef.current
+            if (!list) return
+            const buttons = list.querySelectorAll<HTMLButtonElement>('button[role="option"]')
+            buttons[newIdx]?.scrollIntoView({ block: "nearest" })
+          }, 0)
+        } else if (e.key === 'Tab') {
+          if (filtered[selectedIndexRef.current]) {
+            e.preventDefault()
+            insertMention(filtered[selectedIndexRef.current])
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault()
+          closeDropdown()
+        } else if (e.key === 'Enter') {
+          // Select highlighted user from dropdown (do NOT send message)
+          if (filtered[selectedIndexRef.current]) {
+            e.preventDefault()
+            insertMention(filtered[selectedIndexRef.current])
+          }
+        }
+        return
+      }
+      // Dropdown is closed — Ctrl/Cmd+Enter or plain Enter sends the message
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault()
+        closeDropdown()
+        if (onCtrlEnter) onCtrlEnter()
+        return
+      }
+      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && onCtrlEnter) {
+        e.preventDefault()
+        closeDropdown()
+        onCtrlEnter()
+        return
       }
     },
-    [open, filtered, selectedIndex, onCtrlEnter]
+    [filtered, onCtrlEnter]
   )
 
   /* ── Insert a selected mention into the textarea ───────────── */
@@ -274,6 +331,7 @@ export default function MentionInput({
       setOpen(false)
       setQuery('')
       setTriggerAt(null)
+      dropdownActiveRef.current = false
       // Move cursor after the inserted mention.
       setTimeout(() => {
         const ta = textareaRef.current
@@ -330,10 +388,11 @@ export default function MentionInput({
         <div
           ref={dropdownRef}
           className={`absolute z-50 ${dropdownAbove ? 'bottom-full mb-0.5' : 'mt-1'} w-64 max-h-72 rounded-xl border border-gray-200 dark:border-gray-700
-            bg-white dark:bg-gray-900 shadow-xl overflow-y-auto`}
+            bg-white dark:bg-gray-900 shadow-xl chat-scrollbar overflow-y-auto`}
           role="listbox"
           aria-label="Mention a team member"
         >
+          <div ref={listRef}>
           {loading && (
             <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">
               Loading members…
@@ -345,7 +404,7 @@ export default function MentionInput({
             </div>
           )}
           {!loading &&
-            filtered.slice(0, 8).map((mem, i) => (
+            filtered.map((mem, i) => (
               <button
                 key={mem.id}
                 type="button"
@@ -387,6 +446,7 @@ export default function MentionInput({
                 </div>
               </button>
             ))}
+          </div>
         </div>
       )}
     </div>
