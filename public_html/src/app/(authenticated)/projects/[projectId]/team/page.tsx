@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Mail, Trash2, UserPlus, Users, Shield, Crown, UserCheck, Clock, Send, X, RefreshCw, LogOut } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -59,11 +60,107 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
  *  Page
  * ────────────────────────────────────────────────────────────────── */
 
+const ACCENT = '#4F46E5'
+
+
+// ─── Pagination bar ──────────────────────────────────────────────────────────
+function PaginationBar({ page, total, limit, onPage, onLimitChange }: {
+  page: number; total: number; limit: number; onPage: (p: number) => void; onLimitChange: (l: number) => void
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / limit))
+  const start = total === 0 ? 0 : Math.min((page - 1) * limit + 1, total)
+  const end   = Math.min(page * limit, total)
+
+  const getPages = (): (number | '...')[] => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1)
+    const pages: (number | '...')[] = []
+    const showLeft  = page > 3
+    const showRight = page < totalPages - 2
+    pages.push(1, 2)
+    if (showLeft)  pages.push('...')
+    const startPage = showLeft  ? (showRight ? page - 1 : totalPages - 3) : 3
+    const endPage   = showRight ? (showLeft  ? page + 1 : 4)              : totalPages - 1
+    for (let p = startPage; p <= endPage; p++) pages.push(p)
+    if (showRight) pages.push('...')
+    pages.push(totalPages)
+    return [...new Set(pages)].sort((a, b) =>
+      a === '...' || b === '...' ? 0 : (a as number) - (b as number)
+    ) as (number | '...')[]
+  }
+
+  const pages = getPages()
+  const prev  = Math.max(1, page - 1)
+  const next  = Math.min(totalPages, page + 1)
+
+  return (
+    <div className="flex flex-wrap items-start sm:items-center justify-between gap-x-6 gap-y-2 px-4 sm:px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-b-2xl">
+      <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap leading-7">
+        Showing <span className="font-medium text-gray-700 dark:text-gray-200">{start}</span> to{' '}
+        <span className="font-medium text-gray-700 dark:text-gray-200">{end}</span> of{' '}
+        <span className="font-medium text-gray-700 dark:text-gray-200">{total}</span> results
+      </p>
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-400 whitespace-nowrap leading-7">Per page:</span>
+          <div className="relative">
+            <select
+              value={limit}
+              onChange={e => onLimitChange(Number(e.target.value))}
+              className="appearance-none pl-2 pr-6 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer focus:outline-none focus:ring-2 transition"
+              style={{ '--tw-ring-color': ACCENT, colorScheme: 'normal' } as any}
+            >
+              {[10, 20, 30, 50].map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+            <span className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-gray-400">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onPage(prev)} disabled={page <= 1}
+            className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          {pages.map((p, i) =>
+            p === '...' ? (
+              <span key={`ellipsis-${i}`} className="w-8 h-8 flex items-center justify-center text-gray-400">…</span>
+            ) : (
+              <button key={p} onClick={() => onPage(p as number)}
+                className={`w-8 h-8 rounded-lg text-xs font-semibold transition cursor-pointer border ${
+                  page === p
+                    ? 'text-white border-transparent'
+                    : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                }`}
+                style={page === p ? { backgroundColor: ACCENT } : {}}
+              >{p}</button>
+            )
+          )}
+          <button
+            onClick={() => onPage(next)} disabled={page >= totalPages}
+            className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function TeamPage() {
   const params = useParams<{ projectId: string }>()
   const projectId = params.projectId
 
-  const { project, members, loading, error, initialized, refetch, addMember, removeMember, leaveProject, isOwner } = useProjectMembers(projectId)
+  const router = useRouter()
+  const { project, members, loading, error, initialized, refetch, addMember, removeMember, leaveProject, isOwner, canManageTeam } = useProjectMembers(projectId)
   const { invitations, loading: loadingInv, error: invError, refetch: refetchInv, resend, cancel } = useProjectInvitations(projectId)
 
   // "Add member" form state
@@ -93,6 +190,16 @@ export default function TeamPage() {
   const [confirmCancel, setConfirmCancel] = useState<number | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [resendingId, setResendingId] = useState<number | null>(null)
+
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+
+  // Reset to page 1 whenever limit changes
+  useEffect(() => { setPage(1) }, [limit])
+
+  const totalMembers = members.length
+  const paginatedMembers = members.slice((page - 1) * limit, page * limit)
 
   /* ── Picker options ──────────────────────────────────────────── */
 
@@ -205,10 +312,9 @@ export default function TeamPage() {
       if (ok) {
         toast.success('You have left the project')
         setConfirmLeave(false)
-        // Redirect to dashboard after leaving
-        if (typeof window !== 'undefined') {
-          window.location.href = '/dashboard'
-        }
+        // Navigate to dashboard — skip refetch since we just left the project
+        // (calling refetch here would 403 on requireProjectMember and revoke the token)
+        router.push('/projects')
       } else {
         toast.error('Failed to leave project')
       }
@@ -258,23 +364,25 @@ export default function TeamPage() {
           <div>
             <h2 className="text-base font-bold text-gray-900 dark:text-white">Team members</h2>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              {members.length} {members.length === 1 ? 'person' : 'people'} have access to this project
+              {totalMembers} {totalMembers === 1 ? 'person' : 'people'} have access to this project
               {project?.name ? ` · ${project.name}` : ''}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowAdd((v) => !v)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow border-none cursor-pointer"
-          >
-            <UserPlus size={14} strokeWidth={2.5} />
-            {showAdd ? 'Close' : 'Add member'}
-          </button>
+          {canManageTeam && (
+            <button
+              type="button"
+              onClick={() => setShowAdd((v) => !v)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow border-none cursor-pointer"
+            >
+              <UserPlus size={14} strokeWidth={2.5} />
+              {showAdd ? 'Close' : 'Add member'}
+            </button>
+          )}
         </div>
 
         {/* Add-member card */}
         {showAdd && (
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-indigo-200 dark:border-indigo-800 shadow-sm p-4 sm:p-5 space-y-4 animate-fade-in-up">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-indigo-200 dark:border-indigo-800 shadow-sm p-4 sm:p-5 space-y-4">
             <div>
               <h3 className="text-sm font-bold text-gray-900 dark:text-white">Add a member</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
@@ -365,7 +473,7 @@ export default function TeamPage() {
         {loading && !initialized && (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 h-20 animate-pulse" />
+              <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 h-20 animate-shimmer" />
             ))}
           </div>
         )}
@@ -382,9 +490,9 @@ export default function TeamPage() {
         ) : null}
 
         {/* Pending Invitations section */}
-        {initialized && pendingInvitations.length > 0 && (
+        {canManageTeam && initialized && pendingInvitations.length > 0 && (
           <>
-            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-amber-200 dark:border-amber-800 shadow-sm overflow-hidden card-hover">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl border border-amber-200 dark:border-amber-800 shadow-sm overflow-hidden">
               <div className="px-4 sm:px-5 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
                 <Clock size={14} strokeWidth={2.25} className="text-amber-600 dark:text-amber-400" />
                 <h3 className="text-sm font-bold text-gray-900 dark:text-white">Pending invitations</h3>
@@ -450,9 +558,9 @@ export default function TeamPage() {
 
         {/* Members list */}
         {initialized && members.length > 0 && (
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden card-hover">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
             <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-              {members.map((m) => {
+              {paginatedMembers.map((m) => {
                 const ownerFlag = isOwner(m)
                 const display = memberDisplayName(m)
                 const initials = memberInitials(m)
@@ -502,7 +610,7 @@ export default function TeamPage() {
                     </div>
 
                     {/* Action: Owner removes member, OR member leaves project */}
-                    {(() => {
+                    {canManageTeam && (() => {
                       const isSelf = Number(m.user_id) === Number(currentUserId)
                       if (isCurrentUserOwner && !ownerFlag) {
                         // Owner can remove other members (but not themselves)
@@ -536,10 +644,18 @@ export default function TeamPage() {
                 )
               })}
             </ul>
+            <PaginationBar
+              page={page}
+              total={totalMembers}
+              limit={limit}
+              onPage={setPage}
+              onLimitChange={setLimit}
+            />
           </div>
         )}
 
         {/* Error banner */}
+
         {error && members.length > 0 && (
           <div className="bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl px-4 py-2.5 text-xs flex items-center justify-between gap-3">
             <span>{error}</span>

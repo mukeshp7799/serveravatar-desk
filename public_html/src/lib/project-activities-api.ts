@@ -259,7 +259,7 @@ export function useActivities(
     page,
     perPage: data?.perPage ?? perPage,
     totalPages: data?.totalPages ?? 0,
-    perPageOptions: data?.perPageOptions ?? [10, 15, 20, 50],
+    perPageOptions: data?.perPageOptions ?? [10, 20, 30, 50],
     features: data?.features ?? [],
     actors: data?.actors ?? [],
     loading,

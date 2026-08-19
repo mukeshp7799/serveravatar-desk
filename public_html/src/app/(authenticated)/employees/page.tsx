@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import PageLoader from '@/components/PageLoader'
+import PaginationBar from '@/components/project/PaginationBar'
 import PortalModal from '@/components/PortalModal'
 import {
   Search, X, ChevronUp, ChevronDown, ChevronsUpDown,
@@ -66,99 +67,6 @@ const empTypeBadge = (t: string) => {
     }`}>
       {labels[t] || t}
     </span>
-  )
-}
-
-// ─── Pagination ─────────────────────────────────────────────────────────────
-
-function PaginationBar({ page, total, limit, onPage, onLimitChange }: {
-  page: number; total: number; limit: number; onPage: (p: number) => void; onLimitChange: (l: number) => void
-}) {
-  const totalPages = Math.max(1, Math.ceil(total / limit))
-  const start = Math.min((page - 1) * limit + 1, total)
-  const end   = Math.min(page * limit, total)
-
-  const getPages = (): (number | '...')[] => {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1)
-    const pages: (number | '...')[] = []
-    const showLeft  = page > 3
-    const showRight = page < totalPages - 2
-    pages.push(1, 2)
-    if (showLeft)  pages.push('...')
-    const startPage = showLeft  ? (showRight ? page - 1 : totalPages - 3) : 3
-    const endPage   = showRight ? (showLeft  ? page + 1 : 4)              : totalPages - 1
-    for (let p = startPage; p <= endPage; p++) pages.push(p)
-    if (showRight) pages.push('...')
-    pages.push(totalPages)
-    return [...new Set(pages)].sort((a, b) =>
-      a === '...' || b === '...' ? 0 : (a as number) - (b as number)
-    ) as (number | '...')[]
-  }
-
-  const pages = getPages()
-  const prev  = Math.max(1, page - 1)
-  const next  = Math.min(totalPages, page + 1)
-
-  return (
-    <div className="flex flex-wrap items-start sm:items-center justify-between gap-x-6 gap-y-2 px-4 sm:px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-b-2xl">
-      <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap leading-7">
-        Showing <span className="font-medium text-gray-700 dark:text-gray-200">{start}</span> to{' '}
-        <span className="font-medium text-gray-700 dark:text-gray-200">{end}</span> of{' '}
-        <span className="font-medium text-gray-700 dark:text-gray-200">{total}</span> results
-      </p>
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-gray-400 whitespace-nowrap leading-7">Per page:</span>
-          <div className="relative">
-            <select
-              value={limit}
-              onChange={e => onLimitChange(Number(e.target.value))}
-              className="appearance-none pl-2 pr-6 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer focus:outline-none focus:ring-2 transition"
-              style={{ '--tw-ring-color': ACCENT, colorScheme: 'normal' } as any}
-            >
-              {[8, 12, 24, 48].map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
-            <span className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-gray-400">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => onPage(prev)} disabled={page <= 1}
-            className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          {pages.map((p, i) =>
-            p === '...' ? (
-              <span key={`ellipsis-${i}`} className="w-8 h-8 flex items-center justify-center text-gray-400">…</span>
-            ) : (
-              <button key={p} onClick={() => onPage(p as number)}
-                className={`w-8 h-8 rounded-lg text-xs font-semibold transition cursor-pointer border ${
-                  page === p
-                    ? 'text-white border-transparent'
-                    : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                }`}
-                style={page === p ? { backgroundColor: ACCENT } : {}}
-              >{p}</button>
-            )
-          )}
-          <button
-            onClick={() => onPage(next)} disabled={page >= totalPages}
-            className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -689,6 +597,7 @@ export default function EmployeesPage() {
               limit={pagination.limit}
               onPage={p => fetchEmployees(p)}
               onLimitChange={l => { setLimit(l); fetchEmployees(1) }}
+              pageSizeOptions={[8, 12, 24, 48]}
             />
           </>
         )}

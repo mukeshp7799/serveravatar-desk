@@ -7,7 +7,7 @@ const { recordActivity, hydrateActivity, FEATURE_META, FEATURE_KEYS } = require(
 
 const router = express.Router();
 
-const PER_PAGE_OPTIONS = [10, 15, 20, 50];
+const PER_PAGE_OPTIONS = [10, 20, 30, 50];
 const PER_PAGE_DEFAULT = 10;
 const ACTIVITY_MAX_PAGE = 500; // safety cap (500 * 50 = 25k rows per request)
 
@@ -119,7 +119,12 @@ router.get('/:id', auth, requireProjectMember('id'), async (req, res, next) => {
     const ownerId = projects[0].manager_id;
     const enrichedMembers = members.map(m => ({ ...m, is_owner: m.user_id === ownerId }));
 
-    res.json({ project: projects[0], members: enrichedMembers, todoLists, owner_id: ownerId });
+    // canManageTeam: owner OR any active project member can manage team members.
+    // The API routes themselves enforce further authorization (requireProjectMember).
+    const isMember = enrichedMembers.some(m => String(m.user_id) === String(req.user.id))
+    const canManageTeam = Number(proj.manager_id) === Number(req.user.id) || isMember
+
+    res.json({ project: { ...projects[0], canManageTeam }, members: enrichedMembers, todoLists, owner_id: ownerId });
   } catch (err) { next(err); }
 });
 
@@ -372,6 +377,16 @@ router.post('/:id/leave', auth, async (req, res, next) => {
 
     await pool.query('DELETE FROM project_members WHERE project_id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
+    await recordActivity(pool, {
+      projectId: Number(req.params.id),
+      actorId: req.user.id,
+      feature: 'team',
+      action: 'member_left',
+      targetType: 'member',
+      targetId: req.user.id,
+      targetLabel: req.user.email,
+    });
+
     res.json({ message: t(req.lang, 'errors.leftProject') });
   } catch (err) { next(err); }
 });
@@ -404,6 +419,17 @@ router.post('/:id/todolists', auth, async (req, res, next) => {
   try {
     const { name } = req.body;
     const [result] = await pool.query('INSERT INTO todo_lists (project_id, name) VALUES (?, ?)', [req.params.id, name]);
+
+    await recordActivity(pool, {
+      projectId: Number(req.params.id),
+      actorId: req.user.id,
+      feature: 'todos',
+      action: 'list_created',
+      targetType: 'todolist',
+      targetId: result.insertId,
+      targetLabel: name,
+    });
+
     res.status(201).json({ id: result.insertId, name });
   } catch (err) { next(err); }
 });
@@ -412,6 +438,16 @@ router.post('/:id/todolists', auth, async (req, res, next) => {
 router.delete('/:id/todolists/:listId', auth, async (req, res, next) => {
   try {
     await pool.query('DELETE FROM todo_lists WHERE id = ? AND project_id = ?', [req.params.listId, req.params.id]);
+
+    await recordActivity(pool, {
+      projectId: Number(req.params.id),
+      actorId: req.user.id,
+      feature: 'todos',
+      action: 'list_deleted',
+      targetType: 'todolist',
+      targetId: Number(req.params.listId),
+    });
+
     res.json({ message: t(req.lang, 'errors.todoListDeleted') });
   } catch (err) { next(err); }
 });

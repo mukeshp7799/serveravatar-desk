@@ -368,29 +368,39 @@ router.patch('/projects/:projectId/todos/items/:id', async (req, res, next) => {
       }
     }
 
-    // Activity: emit a generic 'updated' if anything else changed, OR a
-    // dedicated 'completed' / 'reopened' if the completion flag flipped.
-    if (completed !== undefined && oldItem && !!oldItem.completed !== !!completed) {
-      await recordActivity(pool, {
-        projectId: Number(req.params.projectId),
-        actorId: req.user.id,
-        feature: 'todos',
-        action: completed ? 'item_completed' : 'item_reopened',
-        targetType: 'todoitem',
-        targetId: req.params.id,
-        targetLabel: oldItem.title,
-      });
-    } else if (oldItem) {
-      await recordActivity(pool, {
-        projectId: Number(req.params.projectId),
-        actorId: req.user.id,
-        feature: 'todos',
-        action: 'item_updated',
-        targetType: 'todoitem',
-        targetId: req.params.id,
-        targetLabel: oldItem.title,
-        meta: { changed: Object.keys(req.body || {}).filter((k) => k !== 'completed') },
-      });
+    // Track all changed fields for the activity log.
+    const changedFields = []
+    if (title !== undefined) changedFields.push('title')
+    if (notes !== undefined) changedFields.push('notes')
+    if (assignee_ids !== undefined) changedFields.push('assignees')
+    if (due_date !== undefined) changedFields.push('due_date')
+    if (completed !== undefined) changedFields.push('completed')
+    if (position !== undefined) changedFields.push('position')
+
+    if (changedFields.length > 0) {
+      if (completed !== undefined && oldItem && !!oldItem.completed !== !!completed) {
+        // Dedicated action for completion flip
+        await recordActivity(pool, {
+          projectId: Number(req.params.projectId),
+          actorId: req.user.id,
+          feature: 'todos',
+          action: completed ? 'item_completed' : 'item_reopened',
+          targetType: 'todoitem',
+          targetId: req.params.id,
+          targetLabel: oldItem.title,
+        });
+      } else {
+        await recordActivity(pool, {
+          projectId: Number(req.params.projectId),
+          actorId: req.user.id,
+          feature: 'todos',
+          action: 'item_updated',
+          targetType: 'todoitem',
+          targetId: req.params.id,
+          targetLabel: oldItem?.title,
+          meta: { changed: changedFields },
+        });
+      }
     }
 
     const data = await loadFull(req.params.projectId);

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import FeaturePage from '@/components/project/FeaturePage'
+import PaginationBar from '@/components/project/PaginationBar'
 import EmptyState from '@/components/project/EmptyState'
 import { fmtRelative } from '@/components/project/format'
 import { useActivities } from '@/lib/project-activities-api'
@@ -127,22 +128,8 @@ export default function ActivityPage() {
                 </select>
               </FilterChip>
 
-              {/* Right-side cluster: per page + refresh */}
+              {/* Right-side cluster: refresh only */}
               <div className="flex items-center gap-2 ml-auto">
-                <FilterChip label="Per page">
-                  <select
-                    value={perPage}
-                    onChange={(e) => setPerPage(Number(e.target.value))}
-                    className="bg-transparent text-xs font-semibold text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer pr-1"
-                    aria-label="Activities per page"
-                  >
-                    {perPageOptions.map((n) => (
-                      <option key={n} value={n}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </FilterChip>
                 <button
                   type="button"
                   onClick={() => refresh()}
@@ -257,54 +244,15 @@ export default function ActivityPage() {
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
 
-        {/* Pagination footer */}
-        {total > 0 && (
-          <div className="flex items-center justify-between gap-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm p-3">
-            <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-              Showing page <span className="font-bold text-gray-900 dark:text-white">{page}</span> of{' '}
-              <span className="font-bold text-gray-900 dark:text-white">{Math.max(1, totalPages)}</span>
-              {' · '}
-              <span className="font-bold text-gray-900 dark:text-white">{total}</span> total
-            </div>
-            <div className="flex items-center gap-1">
-              {/* Buttons only disable at the boundary. We don't disable them
-                  during pagination so the user can flip through pages quickly
-                  without losing a click — the in-list "Loading page…" chip is
-                  the sole indicator that work is in flight. */}
-              <PagerButton
-                disabled={atFirst}
-                onClick={() => setPage(1)}
-                label="First page"
-                icon={<ChevronsLeft size={14} strokeWidth={2.5} />}
-              />
-              <PagerButton
-                disabled={atFirst}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                label="Previous page"
-                icon={<ChevronLeft size={14} strokeWidth={2.5} />}
-              />
-              <span className="text-xs text-gray-700 dark:text-gray-200 font-semibold tabular-nums px-2 inline-flex items-center gap-1.5">
-                {page} / {Math.max(1, totalPages)}
-                {isPaginating && (
-                  <Loader2 size={11} className="animate-spin text-indigo-500" aria-hidden="true" />
-                )}
-              </span>
-              <PagerButton
-                disabled={atLast}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                label="Next page"
-                icon={<ChevronRight size={14} strokeWidth={2.5} />}
-              />
-              <PagerButton
-                disabled={atLast}
-                onClick={() => setPage(totalPages)}
-                label="Last page"
-                icon={<ChevronsRight size={14} strokeWidth={2.5} />}
-              />
-            </div>
+            {/* Pagination footer — inside the card as the card's bottom section */}
+            <PaginationBar
+              page={total === 0 ? 0 : page}
+              total={total}
+              limit={perPage}
+              onPage={setPage}
+              onLimitChange={setPerPage}
+            />
           </div>
         )}
 
@@ -325,37 +273,7 @@ export default function ActivityPage() {
   )
 }
 
-function PagerButton({
-  disabled,
-  onClick,
-  label,
-  icon,
-}: {
-  disabled?: boolean
-  onClick: () => void
-  label: string
-  icon: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      title={label}
-      className="p-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed"
-    >
-      {icon}
-    </button>
-  )
-}
-
-/* ──────────────────────────────────────────────────────────────────
- * Filter chip — a bordered pill with an optional leading icon, a label,
- * and a child element (almost always a <select>). Designed to sit
- * comfortably at h-9 with px-3 padding so the controls read as
- * "weighty" rather than cramped.
- * ──────────────────────────────────────────────────────────────── */
+// ─── Filter chip ──────────────────────────────────────────────────────────
 function FilterChip({
   icon,
   label,

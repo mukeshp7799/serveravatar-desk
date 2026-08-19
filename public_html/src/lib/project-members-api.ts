@@ -53,6 +53,8 @@ export interface ProjectInfo {
   created_at?: string
   updated_at?: string
   archived_at?: string | null
+  /** True when the logged-in user can manage team members (project owner OR has projects.manage_members permission). */
+  canManageTeam?: boolean
 }
 
 export interface ActiveUser {
@@ -129,6 +131,8 @@ interface UseProjectMembersResult {
   leaveProject: () => Promise<boolean>
   /** True for the member row representing the project owner. */
   isOwner: (m: ProjectMember) => boolean
+  /** True when the logged-in user can add/remove members (project owner or has projects.manage_members via role). */
+  canManageTeam: boolean
 }
 
 export function useProjectMembers(projectId: string | number): UseProjectMembersResult {
@@ -189,6 +193,10 @@ export function useProjectMembers(projectId: string | number): UseProjectMembers
     [project]
   )
 
+  // canManageTeam is computed on the backend (owner OR projects.manage_members global permission).
+  // Return project.canManageTeam when available, falling back to false while loading.
+  const canManageTeam = project?.canManageTeam ?? false
+
   const addMember: UseProjectMembersResult['addMember'] = useCallback(
     async ({ userId, roleInProject }) => {
       if (!userId) return null
@@ -234,10 +242,10 @@ export function useProjectMembers(projectId: string | number): UseProjectMembers
     async () => {
       try {
         await api.post(`/projects/${projectId}/leave`)
-        // Notify sibling hook instances.
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('project:updated', { detail: { projectId: String(projectId) } }))
-        }
+        // NOTE: intentionally skip refetch() and project:updated dispatch here.
+        // After leaving, the user will be redirected away from the project page.
+        // Calling refetch() would 403 on requireProjectMember (no longer a member)
+        // which triggers token revocation — logging the user out unexpectedly.
         return true
       } catch (e: any) {
         setError(e?.message || 'Failed to leave project')
@@ -248,8 +256,8 @@ export function useProjectMembers(projectId: string | number): UseProjectMembers
   )
 
   return useMemo(
-    () => ({ project, members, loading, error, initialized, refetch, addMember, removeMember, leaveProject, isOwner }),
-    [project, members, loading, error, initialized, refetch, addMember, removeMember, leaveProject, isOwner]
+    () => ({ project, members, loading, error, initialized, refetch, addMember, removeMember, leaveProject, isOwner, canManageTeam }),
+    [project, members, loading, error, initialized, refetch, addMember, removeMember, leaveProject, isOwner, canManageTeam]
   )
 }
 
