@@ -115,7 +115,7 @@ export default function MultiSelectDropdown({
 
       // Use getBoundingClientRect which gives viewport-relative coordinates.
       // position:fixed anchors to viewport - unaffected by any scrollable ancestor.
-      const panelWidth = Math.max(r.width, 240)
+      const panelWidth = Math.max(r.width, 288)
       const headerHeight = 50
       const footerHeight = 26
       const minListHeight = 140
@@ -220,20 +220,22 @@ export default function MultiSelectDropdown({
         width: pos.width,
         zIndex: 99999,
       }}
-      className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl overflow-hidden"
+      className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl overflow-hidden min-w-[288px]"
     >
       {/* Search header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-        <Search size={13} strokeWidth={2.25} className="text-gray-400 shrink-0" />
-        <input
-          ref={searchRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search…"
-          className="flex-1 bg-transparent border-none outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400"
-        />
-        <div className="flex items-center gap-2 ml-auto">
+      <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Search size={13} strokeWidth={2.25} className="text-gray-400 shrink-0" />
+          <input
+            ref={searchRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search…"
+            className="flex-1 bg-transparent border-none outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400 min-w-0"
+          />
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
           {showSelectAll && filtered.length > 0 && (
             <button
               type="button"
@@ -247,7 +249,7 @@ export default function MultiSelectDropdown({
             <button
               type="button"
               onClick={clearAll}
-              className="text-[10px] font-bold uppercase tracking-wide text-gray-500 hover:text-rose-600 dark:hover:text-rose-400 transition bg-transparent border-none cursor-pointer"
+              className="text-[10px] font-bold uppercase tracking-wide text-gray-500 hover:text-rose-600 dark:hover:text-rose-400 transition bg-transparent border-none cursor-pointer whitespace-nowrap"
             >
               Clear
             </button>
@@ -255,7 +257,7 @@ export default function MultiSelectDropdown({
         </div>
       </div>
       {/* Option list */}
-      <div className="overflow-y-auto" style={{ maxHeight: pos.listHeight }}>
+      <div className="overflow-y-auto pr-2" style={{ maxHeight: pos.listHeight }}>
         {filtered.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-gray-400">
             No matches
@@ -271,7 +273,7 @@ export default function MultiSelectDropdown({
                 role="option"
                 aria-selected={on}
                 disabled={!!o.isDisabled}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition border-none ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 pr-4 text-left transition border-none ${
                   o.isDisabled
                     ? 'opacity-50 cursor-not-allowed bg-gray-50 dark:bg-gray-800/50 text-gray-400 dark:text-gray-500'
                     : on
@@ -308,7 +310,7 @@ export default function MultiSelectDropdown({
       </div>
       {/* Footer count */}
       {selected.length > 0 && (
-        <div className="px-3 py-1.5 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+        <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
           {selected.length} of {options.length} selected
         </div>
       )}
@@ -346,36 +348,37 @@ export default function MultiSelectDropdown({
             {selectedOptions.length} selected
           </span>
         ) : (
-          <span className="flex flex-wrap gap-1 flex-1 min-w-0">
-            {selectedOptions.slice(0, 4).map((o) => (
-              <span
-                key={o.id}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold"
-              >
-                {o.initials && (
-                  <span className="w-3.5 h-3.5 rounded-full bg-indigo-200 dark:bg-indigo-700 text-indigo-700 dark:text-indigo-200 text-[8px] font-bold flex items-center justify-center">
-                    {o.initials.slice(0, 2).toUpperCase()}
-                  </span>
-                )}
-                {o.label}
+          /* Avatar-only stack — mirrors project header avatar group pattern */
+          <span className="flex items-center gap-2 flex-1 min-w-0">
+            {/* Overlapping avatar stack, max 3 visible */}
+            <span className="flex -space-x-2">
+              {selectedOptions.slice(0, 3).map((o) => (
+                <span
+                  key={o.id}
+                  data-tooltip-id="app-tooltip"
+                  data-tooltip-content={o.label}
+                  className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-200 text-[10px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-gray-900 shadow-sm cursor-pointer hover:ring-indigo-300 transition"
+                >
+                  {o.initials?.slice(0, 2).toUpperCase() ?? '?'}
+                </span>
+              ))}
+              {selectedOptions.length > 3 && (
                 <button
                   type="button"
+                  data-tooltip-id="app-tooltip"
+                  data-tooltip-content={selectedOptions.slice(3).map((o) => o.label).join(', ')}
                   onPointerDown={(e) => { e.stopPropagation() }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toggle(o.id)
-                  }}
-                  className="ml-0.5 -mr-0.5 w-3.5 h-3.5 rounded hover:bg-indigo-200 dark:hover:bg-indigo-800 inline-flex items-center justify-center bg-transparent border-none cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); setOpen((v) => !v) }}
+                  className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[10px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-gray-900 shadow-sm cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition"
                 >
-                  <X size={10} strokeWidth={2.5} />
+                  +{selectedOptions.length - 3}
                 </button>
-              </span>
-            ))}
-            {selectedOptions.length > 4 && (
-              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 self-center">
-                +{selectedOptions.length - 4} more
-              </span>
-            )}
+              )}
+            </span>
+            {/* Selected count label */}
+            <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">
+              {selectedOptions.length} selected
+            </span>
           </span>
         )}
         <ChevronDown

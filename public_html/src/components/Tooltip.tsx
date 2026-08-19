@@ -23,11 +23,11 @@ export default function AppTooltip() {
             place="top"
             delayShow={120}
             delayHide={60}
-            className="!rounded-lg !text-xs !font-medium !px-2.5 !py-1.5"
+            className="!rounded-lg !text-xs !font-medium !px-2.5 !py-1.5 !max-w-[260px] !whitespace-normal !break-words !leading-snug"
             style={{
-                backgroundColor: '#1f2937',
+                backgroundColor: '#1e293b',
                 color: '#fff',
-                boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
             }}
         />
     );

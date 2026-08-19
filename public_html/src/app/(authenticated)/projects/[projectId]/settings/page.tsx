@@ -20,7 +20,7 @@ export default function ProjectSettingsPage() {
   })()
   const amOwner = project ? Number(project.manager_id) === Number(currentUserId) : false
 
-  const [tab, setTab] = useState<'general' | 'notifications' | 'danger'>('general')
+  const [tab, setTab] = useState<'general' | 'danger'>('general')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState('active')
@@ -149,7 +149,7 @@ export default function ProjectSettingsPage() {
       <div className="space-y-4">
         {/* Tabs */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm p-1.5 inline-flex gap-1">
-          {(['general', 'notifications', 'danger'] as const).map((t) => (
+          {(['general', 'danger'] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -231,36 +231,6 @@ export default function ProjectSettingsPage() {
               </>
             )}
           </form>
-        )}
-
-        {tab === 'notifications' && (
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm p-5 sm:p-6 space-y-4">
-            <div>
-              <h3 className="text-base font-bold text-gray-900 dark:text-white">Notifications</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Pick which events should ping you for this project.</p>
-            </div>
-            {[
-              { key: 'messages', label: 'New messages on the board', desc: 'Get notified when someone posts in the message board.' },
-              { key: 'todos', label: 'To-do updates', desc: 'When a task is assigned to you or marked complete.' },
-              { key: 'files', label: 'File uploads', desc: 'When a teammate uploads a new file.' },
-              { key: 'mentions', label: 'Mentions', desc: 'When someone @mentions you in a comment or message.' },
-            ].map((row) => (
-              <label key={row.key} className="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  defaultChecked={row.key !== 'files'}
-                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                />
-                <div>
-                  <p className="font-semibold text-gray-900 dark:text-white text-sm">{row.label}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{row.desc}</p>
-                </div>
-              </label>
-            ))}
-            <p className="text-[11px] text-gray-400 dark:text-gray-500 pt-2 border-t border-gray-100 dark:border-gray-800">
-              Per-project notification preferences will be saved to your account profile in a future update.
-            </p>
-          </div>
         )}
 
         {tab === 'danger' && amOwner && (

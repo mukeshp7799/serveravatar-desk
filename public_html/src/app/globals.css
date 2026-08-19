@@ -398,12 +398,22 @@ input, select, textarea, button {
   50% { opacity: 0.5; transform: scale(1.05); }
 }
 @keyframes shimmer {
-  0% { background-position: -1000px 0; }
-  100% { background-position: 1000px 0; }
+  0% { background-position: -800px 0; }
+  100% { background-position: 800px 0; }
 }
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(20px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+.dark .animate-shimmer {
+  background: linear-gradient(90deg, #1f2937 25%, #374151 50%, #1f2937 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
 }
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.9); }
@@ -413,7 +423,7 @@ input, select, textarea, button {
 .animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
 .animate-float-slower { animation: float-slower 12s ease-in-out infinite; }
 .animate-pulse-slow { animation: pulse-slow 6s ease-in-out infinite; }
-.animate-fade-in-up { animation: fadeInUp 0.5s ease-out; }
+.animate-fade-in-up { animation: fadeInUp 0.2s ease-out; }
 .animate-scale-in { animation: scaleIn 0.3s ease-out; }
 
 /* Zoom-in page entrance: fade + scale + slight slide up — visible enough to notice */
@@ -906,6 +916,7 @@ html { scroll-behavior: smooth; }
 .__react-tooltip,
 .core-styles-module_tooltip__3vRRp {
   z-index: 9999 !important;
+  --rt-tooltip-bg: #1e293b;
 }
 .core-styles-module_content__BRKdB {
   z-index: 10000 !important;

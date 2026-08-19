@@ -20,9 +20,18 @@ import {
   AlertTriangle, Calendar, Check, ChevronDown, ChevronUp, Eye, EyeOff, GripVertical,
   ListChecks, MoreVertical, Pencil, Plus, Trash2, User as UserIcon, X,
 } from 'lucide-react'
+import {
+  DndContext, closestCenter, useSensor, MouseSensor, TouchSensor,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext, useSortable, arrayMove, verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import FeaturePage from '@/components/project/FeaturePage'
 import EmptyState from '@/components/project/EmptyState'
 import ConfirmDialog from '@/components/project/ConfirmDialog'
+import MultiSelectDropdown from '@/components/project/MultiSelectDropdown'
 import api from '@/lib/api'
 import { useTodos, type TodoColor, type TodoList, type TodoItem, type UserSummary } from '@/lib/todos-api'
 
@@ -70,7 +79,8 @@ function Avatar({ user, size = 6 }: { user: UserSummary | null; size?: 5 | 6 | 7
   const hue = hash / 233280 * 360
   return (
     <span
-      title={`${user.first_name} ${user.last_name}`.trim()}
+      data-tooltip-id="app-tooltip"
+      data-tooltip-content={`${user.first_name} ${user.last_name}`.trim()}
       className={`${sizeCls} inline-flex items-center justify-center rounded-full font-bold text-white shrink-0`}
       style={{ background: `linear-gradient(135deg, hsl(${hue}, 70%, 50%), hsl(${(hue + 40) % 360}, 70%, 40%))` }}
     >
@@ -91,12 +101,12 @@ function NewListModal({
   const [name, setName] = useState('')
   const [color, setColor] = useState<TodoColor>('indigo')
   const [submitting, setSubmitting] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
+  useEffect(() => { setMounted(true) }, [])
   useEffect(() => {
     if (open) { setName(''); setColor('indigo') }
   }, [open])
-
-  if (!open) return null
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -112,8 +122,10 @@ function NewListModal({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+  if (!mounted || !open) return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
@@ -156,7 +168,8 @@ function NewListModal({
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -168,13 +181,21 @@ function ItemEditModal({
   item: TodoItem
   members: UserSummary[]
   onClose: () => void
-  onSave: (patch: { title: string; notes: string | null; assignee_id: number | null; due_date: string | null }) => Promise<void>
+  onSave: (patch: { title: string; notes: string | null; assignee_ids: number[]; due_date: string | null }) => Promise<void>
 }) {
   const [title, setTitle] = useState(item.title)
   const [notes, setNotes] = useState(item.notes || '')
-  const [assigneeId, setAssigneeId] = useState<string>(item.assignee_id == null ? '' : String(item.assignee_id))
+  const [assigneeIds, setAssigneeIds] = useState<number[]>(item.assignee_ids || [])
   const [dueDate, setDueDate] = useState<string>(item.due_date ? item.due_date.slice(0, 10) : '')
   const [submitting, setSubmitting] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -184,7 +205,7 @@ function ItemEditModal({
       await onSave({
         title: title.trim(),
         notes: notes.trim() || null,
-        assignee_id: assigneeId ? parseInt(assigneeId) : null,
+        assignee_ids: assigneeIds,
         due_date: dueDate || null,
       })
       onClose()
@@ -195,9 +216,27 @@ function ItemEditModal({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <form onClick={(e) => e.stopPropagation()} onSubmit={submit} className="relative z-50 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl p-5 w-full max-w-md space-y-3 animate-fade-in-up">
+  const memberOptions = members.map((m) => ({
+    id: m.id,
+    label: `${m.first_name} ${m.last_name}`.trim(),
+    initials: `${m.first_name?.[0] ?? ''}${m.last_name?.[0] ?? ''}`.toUpperCase() || '?',
+  }))
+
+  const modal = (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm" aria-hidden />
+      {/* Dialog box */}
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+        className="relative bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xl p-5 w-full max-w-md space-y-3 animate-fade-in-up"
+      >
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-gray-900 dark:text-white">Edit to-do</h3>
           <button type="button" onClick={onClose} aria-label="Close" className="w-8 h-8 inline-flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg border-none cursor-pointer">
@@ -220,18 +259,14 @@ function ItemEditModal({
           className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 resize-none"
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Assignee</label>
-            <select
-              value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">Unassigned</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>
-              ))}
-            </select>
+          <div className="pl-3">
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Assignees</label>
+            <MultiSelectDropdown
+              options={memberOptions}
+              selected={assigneeIds}
+              onChange={(ids) => setAssigneeIds(ids as number[])}
+              placeholder="Unassigned"
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Due date</label>
@@ -254,34 +289,32 @@ function ItemEditModal({
       </form>
     </div>
   )
+
+  return mounted ? createPortal(modal, document.body) : null
 }
 
 // ─── Single item row ────────────────────────────────────────────────────────
 
 function ItemRow({
-  item, color, onToggle, onEdit, onRemove, onDragStart, onDragOver, onDrop, onDragEnd, dragging,
+  item, color, onToggle, onEdit, onRemove,
+  listeners, style, isDragging,
 }: {
   item: TodoItem
   color: TodoColor
   onToggle: () => void
   onEdit: () => void
   onRemove: () => void
-  onDragStart: () => void
-  onDragOver: (e: React.DragEvent) => void
-  onDrop: () => void
-  onDragEnd: () => void
-  dragging: boolean
+  listeners?: Record<string, unknown>
+  style?: React.CSSProperties
+  isDragging?: boolean
 }) {
   const overdue = isOverdue(item.due_date, item.completed)
   const barColor = COLOR_CLASSES[color]
   return (
     <li
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
-      className={`group relative px-4 py-2.5 flex items-start gap-2.5 cursor-grab active:cursor-grabbing transition ${dragging ? 'opacity-40' : ''}`}
+      {...listeners}
+      style={style}
+      className={`group relative px-4 py-2.5 flex items-start gap-2.5 cursor-grab active:cursor-grabbing transition ${isDragging ? 'opacity-40 z-50' : ''}`}
     >
       {/* drag handle strip */}
       <span className={`absolute left-0 top-0 bottom-0 w-1 ${item.completed ? 'bg-emerald-500' : barColor.bar} opacity-0 group-hover:opacity-100 transition rounded-r`} />
@@ -298,13 +331,24 @@ function ItemRow({
         {item.completed && <Check size={12} strokeWidth={3} />}
       </button>
       <div className="flex-1 min-w-0">
-        <p className={`text-sm leading-snug ${item.completed ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'}`}>
+        <p className={`text-sm leading-snug antialiased ${item.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-200'}`}>
           {item.title}
         </p>
-        {(item.notes || item.assignee || item.due_date) && (
+        {(item.notes || item.assignees.length > 0 || item.due_date) && (
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
-            {item.assignee && (
-              <span className="inline-flex items-center gap-1"><Avatar user={item.assignee} size={5} /> {item.assignee.first_name}</span>
+            {item.assignees.length > 0 && (
+              <span className="inline-flex items-center -space-x-1">
+                {item.assignees.slice(0, 5).map((a) => <Avatar key={a.id} user={a} size={5} />)}
+                {item.assignees.length > 5 && (
+                  <span
+                    data-tooltip-id="app-tooltip"
+                    data-tooltip-content={item.assignees.slice(5).map((a) => `${a.first_name} ${a.last_name}`.trim()).join(', ')}
+                    className="w-5 h-5 inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-slate-700 dark:text-slate-300 text-[9px] font-medium ring-1 ring-white dark:ring-gray-900 shrink-0 antialiased"
+                  >
+                    +{item.assignees.length - 5}
+                  </span>
+                )}
+              </span>
             )}
             {item.due_date && (
               <span className={`inline-flex items-center gap-1 ${overdue && !item.completed ? 'text-rose-600 dark:text-rose-400 font-semibold' : ''}`}>
@@ -319,14 +363,14 @@ function ItemRow({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0">
+      <div className="flex items-center gap-0.5 shrink-0">
         <button type="button" onClick={onEdit} aria-label="Edit to-do" title="Edit" className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-md transition bg-transparent border-none cursor-pointer">
           <Pencil size={12} />
         </button>
         <button type="button" onClick={onRemove} aria-label="Delete to-do" title="Delete" className="w-7 h-7 inline-flex items-center justify-center text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-md transition bg-transparent border-none cursor-pointer">
           <Trash2 size={12} />
         </button>
-        <span aria-hidden className="w-6 h-7 inline-flex items-center justify-center text-gray-300 dark:text-gray-600 cursor-grab">
+        <span aria-hidden className="w-6 h-7 inline-flex items-center justify-center text-gray-300 dark:text-gray-600 cursor-grab touch-none">
           <GripVertical size={12} />
         </span>
       </div>
@@ -334,14 +378,48 @@ function ItemRow({
   )
 }
 
-// ─── Single list card ───────────────────────────────────────────────────────
+// ─── Sortable item row ───────────────────────────────────────────────────────
+
+function SortableItemRow({
+  item, color, onToggle, onEdit, onRemove,
+}: {
+  item: TodoItem
+  color: TodoColor
+  onToggle: () => void
+  onEdit: () => void
+  onRemove: () => void
+}) {
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({ id: item.id })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    touchAction: 'none',
+  }
+
+  return (
+    <div ref={setNodeRef} {...listeners} {...attributes} style={style}>
+      <ItemRow
+        item={item}
+        color={color}
+        onToggle={onToggle}
+        onEdit={onEdit}
+        onRemove={onRemove}
+        isDragging={isDragging}
+      />
+    </div>
+  )
+}
+
 
 function ListCard({
   list, members, onCreateItem, onUpdateItem, onRemoveItem, onUpdateList, onRemoveList, onReorderItems,
 }: {
   list: TodoList
   members: UserSummary[]
-  onCreateItem: (input: { title: string; notes?: string | null; assignee_id?: number | null; due_date?: string | null }) => Promise<any>
+  onCreateItem: (input: { title: string; notes?: string | null; due_date?: string | null }) => Promise<any>
   onUpdateItem: (id: number, patch: any) => Promise<any>
   onRemoveItem: (id: number) => Promise<any>
   onUpdateList: (id: number, patch: any) => Promise<any>
@@ -364,10 +442,6 @@ function ListCard({
   const total = list.items.length
   const completedCount = done.length
   const progress = total ? Math.round((completedCount / total) * 100) : 0
-
-  // Drag-drop state for items inside this list
-  const dragId = useState<number | null>(null)
-  const [draggingId, setDraggingId] = dragId
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -402,30 +476,26 @@ function ListCard({
     }
   }
 
-  const onDragStartItem = (id: number) => () => setDraggingId(id)
-  const onDragOverItem = (e: React.DragEvent) => e.preventDefault()
-  const onDropItem = (targetId: number) => async (e: React.DragEvent) => {
-    e.preventDefault()
-    if (!draggingId || draggingId === targetId) { setDraggingId(null); return }
-    const ordered = list.items.slice()
-    const from = ordered.findIndex((i) => i.id === draggingId)
-    const to = ordered.findIndex((i) => i.id === targetId)
-    if (from < 0 || to < 0) { setDraggingId(null); return }
-    const [moved] = ordered.splice(from, 1)
-    ordered.splice(to, 0, moved)
-    const next = ordered.map((it, idx) => ({ id: it.id, position: idx }))
-    setDraggingId(null)
+  const activeItems = list.items.filter((i) => !i.completed)
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = activeItems.findIndex((i) => i.id === active.id)
+    const newIndex = activeItems.findIndex((i) => i.id === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    const reordered = arrayMove(activeItems, oldIndex, newIndex)
+    const next = reordered.map((it, idx) => ({ id: it.id, position: idx }))
     try {
-      await onReorderItems(list.id, next)
+      onReorderItems(list.id, next)
     } catch (err: any) {
       toast.error(err.message || 'Reorder failed')
     }
   }
-  const onDragEndItem = () => setDraggingId(null)
 
   return (
     <>
-      <div className={`bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col card-hover`}>
+      <div className={`bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col`}>
         {/* Header */}
         <div className={`${colors.bg} px-4 py-3`}>
           <div className="flex items-center justify-between gap-2">
@@ -512,25 +582,31 @@ function ListCard({
 
         {/* Items */}
         <ul className="flex-1 divide-y divide-gray-100 dark:divide-gray-800">
-          {active.map((item) => (
-            <ItemRow
-              key={item.id}
-              item={item}
-              color={list.color}
-              dragging={draggingId === item.id}
-              onToggle={() => handleToggle(item)}
-              onEdit={() => setEditingItem(item)}
-              onRemove={() => setPendingDeleteItem(item)}
-              onDragStart={onDragStartItem(item.id)}
-              onDragOver={onDragOverItem}
-              onDrop={() => { const fn = onDropItem(item.id); return (e: React.DragEvent) => fn(e) }}
-              onDragEnd={onDragEndItem}
-            />
-          ))}
+          <DndContext
+            sensors={[
+              useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+              useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+            ]}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={activeItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+              {activeItems.map((item) => (
+                <SortableItemRow
+                  key={item.id}
+                  item={item}
+                  color={list.color}
+                  onToggle={() => handleToggle(item)}
+                  onEdit={() => setEditingItem(item)}
+                  onRemove={() => setPendingDeleteItem(item)}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
           {done.length > 0 && (
             <>
               <li className="px-4 py-2 flex items-center justify-between bg-gray-50 dark:bg-gray-800/40 border-y border-gray-100 dark:border-gray-800">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                   Completed ({done.length})
                 </span>
                 <button
@@ -546,14 +622,9 @@ function ListCard({
                   key={item.id}
                   item={item}
                   color={list.color}
-                  dragging={draggingId === item.id}
                   onToggle={() => handleToggle(item)}
                   onEdit={() => setEditingItem(item)}
                   onRemove={() => setPendingDeleteItem(item)}
-                  onDragStart={onDragStartItem(item.id)}
-                  onDragOver={onDragOverItem}
-                  onDrop={() => { const fn = onDropItem(item.id); return (e: React.DragEvent) => fn(e) }}
-                  onDragEnd={onDragEndItem}
                 />
               ))}
             </>
@@ -566,7 +637,7 @@ function ListCard({
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="Add a to-do…"
-                className={`flex-1 px-2 py-1.5 text-sm rounded-lg border border-transparent bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-gray-900 ${colors.ring} focus:ring-2`}
+                className={`flex-1 px-2 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-gray-50 dark:bg-gray-800 text-slate-800 dark:text-slate-100 placeholder-gray-400 antialiased focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:bg-white dark:focus:bg-gray-900`}
               />
               <button
                 type="submit"
@@ -712,7 +783,7 @@ export default function TodosPage() {
         {store.loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 h-64 animate-pulse" />
+              <div key={i} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 h-64 animate-shimmer" />
             ))}
           </div>
         ) : store.lists.length === 0 ? (

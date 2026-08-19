@@ -47,17 +47,40 @@ async function loadFull(projectId) {
   const listIds = lists.map((l) => l.id);
   const [items] = await pool.query(
     `SELECT i.*,
-            a.first_name AS assignee_first_name, a.last_name AS assignee_last_name,
             c.first_name AS completer_first_name, c.last_name AS completer_last_name,
             cr.first_name AS creator_first_name_item, cr.last_name AS creator_last_name_item
        FROM todo_items i
-       LEFT JOIN users a  ON a.id  = i.assignee_id
        LEFT JOIN users c  ON c.id  = i.completed_by
        LEFT JOIN users cr ON cr.id = i.created_by
       WHERE i.list_id IN (?)
       ORDER BY i.completed ASC, i.position ASC, i.id ASC`,
     [listIds]
   );
+
+  // Load all assignee rows for these items.
+  const itemIds = items.map((it) => it.id);
+  const [assigneeRows] = itemIds.length
+    ? await pool.query(
+        `SELECT ta.todo_item_id, ta.user_id, u.first_name, u.last_name
+           FROM todo_item_assignees ta
+           JOIN users u ON u.id = ta.user_id
+          WHERE ta.todo_item_id IN (?)`,
+        [itemIds]
+      )
+    : [];
+
+  // Group assignees by item id.
+  const assigneesByItem = new Map();
+  for (const row of assigneeRows) {
+    if (!assigneesByItem.has(row.todo_item_id)) {
+      assigneesByItem.set(row.todo_item_id, []);
+    }
+    assigneesByItem.get(row.todo_item_id).push({
+      id: row.user_id,
+      first_name: row.first_name,
+      last_name: row.last_name,
+    });
+  }
 
   const byList = new Map(lists.map((l) => [l.id, []]));
   for (const it of items) byList.get(it.list_id).push(it);
@@ -75,34 +98,33 @@ async function loadFull(projectId) {
         first_name: l.creator_first_name,
         last_name: l.creator_last_name,
       } : null,
-      items: byList.get(l.id).map((it) => ({
-        id: it.id,
-        list_id: it.list_id,
-        title: it.title,
-        notes: it.notes,
-        completed: !!it.completed,
-        completed_at: it.completed_at,
-        due_date: it.due_date,
-        assignee_id: it.assignee_id,
-        assignee: it.assignee_id ? {
-          id: it.assignee_id,
-          first_name: it.assignee_first_name,
-          last_name: it.assignee_last_name,
-        } : null,
-        completed_by: it.completed_by ? {
-          id: it.completed_by,
-          first_name: it.completer_first_name,
-          last_name: it.completer_last_name,
-        } : null,
-        position: it.position,
-        created_at: it.created_at,
-        updated_at: it.updated_at,
-        created_by: it.created_by ? {
-          id: it.created_by,
-          first_name: it.creator_first_name_item,
-          last_name: it.creator_last_name_item,
-        } : null,
-      })),
+      items: byList.get(l.id).map((it) => {
+        const assignees = assigneesByItem.get(it.id) || [];
+        return {
+          id: it.id,
+          list_id: it.list_id,
+          title: it.title,
+          notes: it.notes,
+          completed: !!it.completed,
+          completed_at: it.completed_at,
+          due_date: it.due_date,
+          assignee_ids: assignees.map((a) => a.id),
+          assignees,
+          completed_by: it.completed_by ? {
+            id: it.completed_by,
+            first_name: it.completer_first_name,
+            last_name: it.completer_last_name,
+          } : null,
+          position: it.position,
+          created_at: it.created_at,
+          updated_at: it.updated_at,
+          created_by: it.created_by ? {
+            id: it.created_by,
+            first_name: it.creator_first_name_item,
+            last_name: it.creator_last_name_item,
+          } : null,
+        };
+      }),
     })),
   };
 }
@@ -203,7 +225,7 @@ router.delete('/projects/:projectId/todos/lists/:id', async (req, res, next) => 
 // POST — add item
 router.post('/projects/:projectId/todos/lists/:id/items', async (req, res, next) => {
   try {
-    const { title, notes, assignee_id, due_date } = req.body || {};
+    const { title, notes, assignee_ids, due_date } = req.body || {};
     if (!title || !title.trim()) return res.status(400).json({ message: 'Item title is required' });
 
     // Verify the list belongs to this project
@@ -218,14 +240,13 @@ router.post('/projects/:projectId/todos/lists/:id/items', async (req, res, next)
       [req.params.id]
     );
     const [r] = await pool.query(
-      `INSERT INTO todo_items (list_id, project_id, title, notes, assignee_id, due_date, position, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO todo_items (list_id, project_id, title, notes, due_date, position, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         req.params.id,
         req.params.projectId,
         title.trim(),
         notes ? String(notes).trim() : null,
-        assignee_id ? Number(assignee_id) : null,
         due_date || null,
         nextPos,
         req.user.id,
@@ -233,6 +254,15 @@ router.post('/projects/:projectId/todos/lists/:id/items', async (req, res, next)
     );
     const itemId = r.insertId;
     const projectId = Number(req.params.projectId);
+
+    // Insert assignees into junction table.
+    if (Array.isArray(assignee_ids) && assignee_ids.length > 0) {
+      const assigneeValues = assignee_ids.map((id) => [itemId, Number(id)]);
+      await pool.query(
+        'INSERT INTO todo_item_assignees (todo_item_id, user_id) VALUES ?',
+        [assigneeValues]
+      );
+    }
 
     // Process @mentions from notes — store records and send in-app notifications.
     if (notes) {
@@ -265,7 +295,7 @@ router.post('/projects/:projectId/todos/lists/:id/items', async (req, res, next)
 // PATCH — edit item (including complete toggle)
 router.patch('/projects/:projectId/todos/items/:id', async (req, res, next) => {
   try {
-    const { title, notes, assignee_id, due_date, completed, position } = req.body || {};
+    const { title, notes, assignee_ids, due_date, completed, position } = req.body || {};
     const updates = [];
     const params = [];
 
@@ -276,9 +306,19 @@ router.patch('/projects/:projectId/todos/items/:id', async (req, res, next) => {
     if (notes !== undefined) {
       updates.push('notes = ?'); params.push(notes ? String(notes).trim() : null);
     }
-    if (assignee_id !== undefined) {
-      updates.push('assignee_id = ?');
-      params.push(assignee_id === null || assignee_id === '' ? null : Number(assignee_id));
+    if (assignee_ids !== undefined) {
+      // Replace all assignees: delete existing rows then insert new ones.
+      await pool.query(
+        'DELETE FROM todo_item_assignees WHERE todo_item_id = ?',
+        [req.params.id]
+      );
+      if (Array.isArray(assignee_ids) && assignee_ids.length > 0) {
+        const assigneeValues = assignee_ids.map((id) => [Number(req.params.id), Number(id)]);
+        await pool.query(
+          'INSERT INTO todo_item_assignees (todo_item_id, user_id) VALUES ?',
+          [assigneeValues]
+        );
+      }
     }
     if (due_date !== undefined) {
       updates.push('due_date = ?'); params.push(due_date || null);

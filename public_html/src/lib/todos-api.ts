@@ -29,8 +29,8 @@ export interface TodoItem {
   completed: boolean;
   completed_at: string | null;
   due_date: string | null;
-  assignee_id: number | null;
-  assignee: UserSummary | null;
+  assignee_ids: number[];
+  assignees: UserSummary[];
   completed_by: UserSummary | null;
   position: number;
   created_at: string;
@@ -52,7 +52,7 @@ export interface TodoList {
 export interface NewItemInput {
   title: string;
   notes?: string | null;
-  assignee_id?: number | null;
+  assignee_ids?: number[];
   due_date?: string | null;
 }
 
