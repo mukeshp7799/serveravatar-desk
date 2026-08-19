@@ -32,6 +32,7 @@ import {
   Send, MessageCircle, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import ProjectLayout from '@/components/project/ProjectLayout'
+import PortalModal from '@/components/PortalModal'
 import { fmtRelative, fmtDateShort } from '@/components/project/format'
 import MultiSelectDropdown from '@/components/project/MultiSelectDropdown'
 import ConfirmDialog from '@/components/project/ConfirmDialog'
@@ -976,28 +977,28 @@ export default function TaskDetailPage() {
 
       {/* ── Image Lightbox Modal ─────────────────────────────────────── */}
       {lightboxAttachment && (
+        <PortalModal>
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
           onClick={() => setLightboxAttachment(null)}
         >
           {/* Close button */}
           <button
             type="button"
             onClick={() => setLightboxAttachment(null)}
-            className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white border-none cursor-pointer transition-colors"
+            className="absolute top-4 right-4 z-10 w-11 h-11 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition border-none cursor-pointer"
           >
-            <X size={18} strokeWidth={2.5} />
+            <X size={20} strokeWidth={2.5} />
           </button>
 
           {/* Image */}
-          <div className="relative max-w-5xl max-h-[85vh] w-full mx-4 flex flex-col items-center"
+          <div className="relative max-w-[94vw] max-h-[88vh] w-full mx-4 flex flex-col items-center"
             onClick={(e) => e.stopPropagation()}>
             <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-white dark:bg-gray-900">
               <img
                 src={`${typeof window !== 'undefined' ? window.location.origin : ''}${lightboxAttachment.file_url}`}
                 alt={lightboxAttachment.name}
-                className="max-h-[75vh] max-w-full object-contain block rounded-t-2xl"
-                style={{ maxWidth: 'min(90vw, 900px)' }}
+                className="max-h-[88vh] max-w-[94vw] object-contain block rounded-2xl"
                 onClick={(e) => e.stopPropagation()}
               />
               {/* Image name bar */}
@@ -1024,6 +1025,7 @@ export default function TaskDetailPage() {
             </div>
           </div>
         </div>
+        </PortalModal>
       )}
 
       {/* ── Comment Edit Modal ───────────────────────────────────────── */}

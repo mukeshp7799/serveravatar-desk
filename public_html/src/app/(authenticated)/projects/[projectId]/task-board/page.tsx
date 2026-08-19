@@ -21,7 +21,7 @@ import Link from 'next/link'
 import toast from 'react-hot-toast'
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors,
-  pointerWithin, useDroppable,
+  rectIntersection, useDroppable,
   type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from '@dnd-kit/core'
 import {
@@ -270,7 +270,7 @@ function SortableTask({
     id: `task-${task.id}`,
     data: { type: 'task', task },
   })
-  const style = { opacity: isDragging ? 0 : 1, transition: 'opacity 150ms ease' }
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0 : 1 }
   const doneSub = task.subtasks.filter((s) => s.done).length
   const totalSub = task.subtasks.length
   const descText = htmlToText(task.description_html)
@@ -1006,7 +1006,7 @@ export default function TaskBoardPage() {
           onAction={() => setShowAddColumn(true)}
         />
       ) : (
-        <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
           <SortableContext items={tb.board.map((c) => `col-${c.id}`)} strategy={horizontalListSortingStrategy}>
             <div className="flex gap-3 overflow-x-auto pb-4 items-stretch">
               {tb.board.map((col) => (
