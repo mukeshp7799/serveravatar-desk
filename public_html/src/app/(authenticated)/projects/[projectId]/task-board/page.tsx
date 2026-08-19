@@ -4,28 +4,27 @@ import PortalModal from '@/components/PortalModal';
 /**
  * /projects/[projectId]/task-board
  *
- * Kanban-style Task Board. Replaces the old /card-table mock page with
- * a real-API implementation backed by `useTaskBoard` and `useTaskDetail`.
+ * Kanban-style Task Board with drag-and-drop task movement.
  *
  * Structure:
  *   ── Toolbar (header): task count, "Add task" button, "Add column" button
- *   ── Board: horizontally-scrollable list of columns (drag-reorder)
- *   ── Each column: header (rename / delete) + droppable task list (drag-reorder, drag-across)
+ *   ── Board: horizontally-scrollable list of columns
+ *   ── Each column: header (rename / delete) + droppable task list
  *   ── Task cards: priority dot + title + (due date / assignees / subtasks)
  *   ── Click task → drawer with full details (comments, subtasks, attachments, activity)
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import {
-  DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors,
-  rectIntersection, useDroppable,
+  DndContext, DragOverlay, MouseSensor, TouchSensor, useSensor, useSensors, useDroppable, pointerWithin,
   type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from '@dnd-kit/core'
 import {
-  SortableContext, arrayMove, useSortable, verticalListSortingStrategy, horizontalListSortingStrategy,
+  SortableContext, useSortable, verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
@@ -57,7 +56,7 @@ const PRIORITY_LABEL: Record<Priority, string> = { low: 'Low', medium: 'Medium',
  * behavior for free (space/arrows open it, type-ahead works) while we get a
  * clean dropdown UI matching the rest of the modal.
  */
-function PrioritySelect({
+function PrioritySelect ({
   value, onChange,
 }: {
   value: Priority
@@ -81,44 +80,51 @@ function PrioritySelect({
 }
 
 /* ──────────────────────────────────────────────────────────────────
- * Sortable column wrapper
+ * DnD helpers
  * ────────────────────────────────────────────────────────────────── */
-function SortableColumn({
-  column, onRename, onDelete, onAddTask, onOpenTask, activeTaskId, filter,
+
+/** Extracts the task id from a draggable `task-{id}` string. */
+function parseTaskId(id: string): string {
+  return id.replace(/^task-/, '')
+}
+
+/* ──────────────────────────────────────────────────────────────────
+ * Column wrapper with droppable task zone
+ * ────────────────────────────────────────────────────────────────── */
+function DnDColumn ({
+  column, onRename, onDelete, onAddTask, onOpenTask, filter, activeTaskId,
 }: {
   column: BoardColumn
   onRename: (id: string | number, name: string) => void
   onDelete: (id: string | number) => void
   onAddTask: (columnId: string | number) => void
   onOpenTask: (task: BoardTask) => void
-  activeTaskId: string | number | null
-  /** Active due-date filter - tasks that don't match are hidden. */
   filter: DueFilter
+  activeTaskId: string | number | null
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: `col-${column.id}`,
-    data: { type: 'column', column },
-  })
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(column.name)
   const [hovered, setHovered] = useState(false)
   useEffect(() => { setName(column.name) }, [column.name])
 
+  // Droppable zone for the entire task list area
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `col-drop-${column.id}`,
+    data: { type: 'column-drop', columnId: column.id },
+  })
+
+  const visibleTasks = column.tasks.filter(
+    (task) => matchesDueFilter(filter, task.due_date, isColumnCompleted(column.name)),
+  )
+
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      className="group flex flex-col w-72 shrink-0 bg-gray-100 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700 max-h-[calc(100vh-180px)]"
+      className="group flex flex-col w-72 shrink-0 bg-gray-100 dark:bg-gray-800/60 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden max-h-[calc(100vh-180px)]"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Column header (drag handle) */}
-      <div
-        className="flex items-center justify-between px-3 py-2.5 border-b border-gray-200/80 dark:border-gray-700/80 cursor-grab active:cursor-grabbing"
-        {...attributes}
-        {...listeners}
-      >
+      {/* Column header */}
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-200/80 dark:border-gray-700/80">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {editingName ? (
             <input
@@ -130,7 +136,6 @@ function SortableColumn({
                 if (e.key === 'Escape') { setName(column.name); setEditingName(false) }
               }}
               onBlur={() => { if (name.trim() && name !== column.name) onRename(column.id, name.trim()); else setName(column.name); setEditingName(false) }}
-              onPointerDown={(e) => e.stopPropagation()}
               className="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded px-1.5 py-0.5 text-sm font-bold"
             />
           ) : (
@@ -145,11 +150,10 @@ function SortableColumn({
             </h3>
           )}
         </div>
-        {/* Action buttons - hidden by default, appear on column hover */}
+        {/* Action buttons */}
         <div
           className="flex items-center gap-0.5 shrink-0 transition-opacity"
           style={{ opacity: hovered ? 1 : 0 }}
-          onPointerDown={(e) => e.stopPropagation()}
         >
           <button
             type="button"
@@ -172,28 +176,37 @@ function SortableColumn({
         </div>
       </div>
 
-      {/* Tasks list - scrolls internally, column stretches to full board height */}
-      <DroppableColumn columnId={String(column.id)}>
-        <SortableContext items={column.tasks.map((t) => `task-${t.id}`)} strategy={verticalListSortingStrategy}>
-          <div className="flex-1 overflow-y-auto  px-2 py-1.5 min-h-0">
-            {column.tasks.length === 0 ? (
-              <p className="text-xs italic text-gray-400 dark:text-gray-500 text-center py-8 select-none">Drop tasks here</p>
-            ) : (
-              column.tasks
-                .filter((task) => matchesDueFilter(filter, task.due_date, isColumnCompleted(column.name)))
-                .map((task) => (
-                  <SortableTask
-                    key={task.id}
-                    task={task}
-                    columnName={column.name}
-                    onOpen={onOpenTask}
-                    active={activeTaskId === task.id}
-                  />
-                ))
-            )}
-          </div>
+      {/* Droppable task list */}
+      <div
+        ref={setDropRef}
+        data-droppable-id={`col-drop-${column.id}`}
+        className={`flex-1 min-h-0 overflow-y-auto px-2 py-1.5 transition-colors ${
+          isOver
+            ? 'bg-indigo-50/60 dark:bg-indigo-950/30 ring-2 ring-inset ring-indigo-300 dark:ring-indigo-700 rounded-b-2xl'
+            : ''
+        }`}
+      >
+        <SortableContext
+          items={visibleTasks.map((t) => `task-${t.id}`)}
+          strategy={verticalListSortingStrategy}
+        >
+          {visibleTasks.length === 0 ? (
+            <p className="text-xs italic text-gray-400 dark:text-gray-500 text-center py-8 select-none">
+              {isOver ? 'Drop here' : ''}
+            </p>
+          ) : (
+            visibleTasks.map((task) => (
+              <DnDTask
+                key={task.id}
+                task={task}
+                columnName={column.name}
+                onOpen={onOpenTask}
+                active={activeTaskId === task.id}
+              />
+            ))
+          )}
         </SortableContext>
-      </DroppableColumn>
+      </div>
 
       {/* Add task button */}
       <button
@@ -207,30 +220,8 @@ function SortableColumn({
   )
 }
 
-function DroppableColumn({
-  columnId, children,
-}: { columnId: string; children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `col-list-${columnId}`, data: { type: 'column-list', columnId } })
-  return (
-    <div
-      ref={setNodeRef}
-      className={`flex-1 min-h-[80px] overflow-y-auto  p-2 space-y-2 transition ${isOver ? 'bg-indigo-50/50 dark:bg-indigo-900/20 ring-2 ring-indigo-300 dark:ring-indigo-700 ring-inset rounded-xl' : ''}`}
-    >
-      {children}
-    </div>
-  )
-}
-
 /* ──────────────────────────────────────────────────────────────────
- * Sortable task card - Basecamp-style
- *
- * Layout (top to bottom):
- *   ┌─ priority stripe (left edge, 4px) ──────────────────────────┐
- *   │ Title (medium weight, dark, 2 lines max)                    │
- *   │ Description preview (muted, 2 lines max, optional)          │
- *   │ ──────────────────────────────────────────────────────────  │
- *   │ ✓ N/M    ⏰ Jun 24                       👤👤 +N             │
- *   └──────────────────────────────────────────────────────────────┘
+ * Task card — Sortable
  * ────────────────────────────────────────────────────────────────── */
 const PRIORITY_BAR: Record<Priority, string> = {
   high:   'bg-rose-500',
@@ -243,22 +234,13 @@ const PRIORITY_PILL: Record<Priority, string> = {
   low:    'bg-sky-50 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-900/30 dark:text-sky-300 dark:ring-sky-800',
 }
 
-/** Strip HTML tags + collapse whitespace so we can show a plain-text preview. */
+/** Strip HTML tags + collapse whitespace for plain-text preview. */
 function htmlToText(html: string | null | undefined): string {
   if (!html) return ''
   return html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-/** True if `dueDate` (YYYY-MM-DD) is strictly before today (local time). */
-function isOverdue(dueDate: string): boolean {
-  const today = new Date()
-  const [y, m, d] = dueDate.split('-').map(Number)
-  const target = new Date(y, m - 1, d)
-  today.setHours(0, 0, 0, 0)
-  return target < today
-}
-
-function SortableTask({
+function DnDTask ({
   task, columnName, onOpen, active,
 }: {
   task: BoardTask
@@ -266,44 +248,51 @@ function SortableTask({
   onOpen: (task: BoardTask) => void
   active: boolean
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({
     id: `task-${task.id}`,
-    data: { type: 'task', task },
+    data: { type: 'task', task, columnName },
   })
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0 : 1 }
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0 : 1,
+    // Required on touch devices: prevents the browser's default touch-scroll
+    // handling from stealing events from dnd-kit's touch sensor.
+    touchAction: 'none',
+  }
+
   const doneSub = task.subtasks.filter((s) => s.done).length
   const totalSub = task.subtasks.length
   const descText = htmlToText(task.description_html)
   const completed = isColumnCompleted(columnName)
-  const due = buildDueLabel(task.due_date, completed)
-  // Tick state every minute so the "today/tomorrow/overdue" boundaries
-  // roll over without a page reload.
   const [, forceTick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => forceTick((n) => n + 1), 60_000)
     return () => clearInterval(id)
   }, [])
-  // Re-compute due label after each tick so the boundary can roll over.
   const dueLabel = buildDueLabel(task.due_date, completed)
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      onClick={() => onOpen(task)}
-      className={`group relative bg-white dark:bg-gray-900 rounded-xl border shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:shadow-[0_4px_12px_rgba(15,23,42,0.08)] hover:-translate-y-0.5 cursor-grab active:cursor-grabbing transition-all overflow-hidden ${
+      onClick={() => !isDragging && onOpen(task)}
+      className={`group relative bg-white dark:bg-gray-900 rounded-xl border shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:shadow-[0_4px_12px_rgba(15,23,42,0.08)] hover:-translate-y-0.5 transition-all overflow-hidden ${
         dueLabel?.isOverdue
           ? 'border-rose-300 dark:border-rose-800/60 bg-rose-50/30 dark:bg-rose-950/20'
           : 'border-gray-200/80 dark:border-gray-700/80'
       } ${active ? 'ring-2 ring-indigo-500' : ''}`}
+      // Drag handle: entire card is draggable
       {...attributes}
       {...listeners}
     >
-      {/* Priority accent stripe - left edge */}
+      {/* Priority accent stripe */}
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${PRIORITY_BAR[task.priority]}`} aria-hidden />
 
       <div className="pl-4 pr-3.5 pt-3 pb-3">
-        {/* Title row: title + priority pill */}
+        {/* Title + priority pill */}
         <div className="flex items-start gap-2">
           <h4 className={`flex-1 min-w-0 text-[13.5px] font-semibold leading-snug truncate pr-1 ${dueLabel?.isOverdue ? 'text-rose-950 dark:text-rose-100' : 'text-gray-900 dark:text-white'}`}>
             {task.title}
@@ -317,33 +306,25 @@ function SortableTask({
           </span>
         </div>
 
-        {/* Description preview (only if there is one) */}
         {descText && (
           <p className="mt-1.5 text-[12px] leading-snug text-gray-500 dark:text-gray-400 break-words line-clamp-2">
             {descText}
           </p>
         )}
 
-        {/* Footer: metadata + assignees */}
+        {/* Footer */}
         <div className="mt-3 flex items-center justify-between gap-2 min-h-[22px]">
           <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-gray-400 font-medium">
-            {/* Subtask progress */}
             {totalSub > 0 && (
-              <span
-                className={`inline-flex items-center gap-1 ${doneSub === totalSub ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
-                title={`${doneSub} of ${totalSub} subtasks done`}
-              >
+              <span className={`inline-flex items-center gap-1 ${doneSub === totalSub ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
                 <CheckSquare size={11} strokeWidth={2.5} />
                 {doneSub}/{totalSub}
               </span>
             )}
-            {/* Due date - always shown when present, colour-coded by urgency */}
             {dueLabel && (
               <DueDateChip label={dueLabel.label} urgency={dueLabel.urgency} title={dueLabel.title} />
             )}
           </div>
-
-          {/* Assignee stack (right side) */}
           {task.assignees.length > 0 && (
             <div className="flex items-center -space-x-1.5 shrink-0">
               {task.assignees.slice(0, 3).map((a) => (
@@ -370,18 +351,13 @@ function SortableTask({
 
 /**
  * Compact pill showing a task's due-date label, colour-coded by urgency.
- *
- * Used inside the card footer. Kept as a separate component so the
- * colour logic is in one place and the card body stays readable.
  */
-function DueDateChip({
+function DueDateChip ({
   label, urgency, title,
 }: { label: string; urgency: 'overdue' | 'today' | 'tomorrow' | 'soon' | 'far' | 'none'; title: string }) {
   const palette = (() => {
     switch (urgency) {
       case 'overdue':
-        // Slightly bolder + darker rose for emphasis, plus a soft ring so the
-        // chip stands out against the white card background.
         return 'bg-rose-100 text-rose-700 ring-1 ring-rose-300 dark:bg-rose-900/40 dark:text-rose-100 dark:ring-rose-700/60 font-bold tracking-tight'
       case 'today':
         return 'bg-amber-100 text-amber-800 ring-1 ring-amber-200 dark:bg-amber-900/40 dark:text-amber-200 dark:ring-amber-800/60 font-bold'
@@ -405,9 +381,9 @@ function DueDateChip({
 }
 
 /* ──────────────────────────────────────────────────────────────────
- * Task creation modal (add to a column)
+ * Task creation modal
  * ────────────────────────────────────────────────────────────────── */
-function NewTaskModal({
+function NewTaskModal ({
   columnName, members, onClose, onCreate,
 }: {
   columnName: string
@@ -472,8 +448,6 @@ function NewTaskModal({
                       <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                     </div>
                   </div>
-                  {/* Assignees moved up here so the multi-select dropdown has room to
-                      open DOWNWARD without overlapping Title/Description. */}
                   <div>
                     <MultiSelectDropdown
                       label="Assignees"
@@ -505,7 +479,7 @@ function NewTaskModal({
 /* ──────────────────────────────────────────────────────────────────
  * Add column modal
  * ────────────────────────────────────────────────────────────────── */
-function AddColumnModal({
+function AddColumnModal ({
   onClose, onCreate,
 }: { onClose: () => void; onCreate: (name: string) => Promise<void> }) {
   const [name, setName] = useState('')
@@ -544,7 +518,7 @@ function AddColumnModal({
 }
 
 /* ──────────────────────────────────────────────────────────────────
- * Activity helpers (shared with the task detail page)
+ * Activity helpers
  * ────────────────────────────────────────────────────────────────── */
 function humanizeAction(action: string, details: any): string {
   switch (action) {
@@ -570,11 +544,7 @@ function humanizeAction(action: string, details: any): string {
 function truncate(s: string, n = 30) { return s.length > n ? s.slice(0, n - 1) + '...' : s }
 
 /* ──────────────────────────────────────────────────────────────────
- * Filter dropdown - quick filters by due date
- *
- * Lives in the toolbar next to "Archived" and "Add column". Shows the
- * current filter (or "All") and a count badge when a non-default filter
- * is active.
+ * Filter dropdown
  * ────────────────────────────────────────────────────────────────── */
 const FILTER_OPTIONS: ReadonlyArray<{ id: DueFilter; label: string; description: string }> = [
   { id: 'all',       label: 'All',           description: 'Show every task' },
@@ -584,7 +554,7 @@ const FILTER_OPTIONS: ReadonlyArray<{ id: DueFilter; label: string; description:
   { id: 'no-date',   label: 'No Due Date',   description: 'No due date set' },
 ]
 
-function FilterDropdown({
+function FilterDropdown ({
   value, overdueCount, onChange,
 }: {
   value: DueFilter
@@ -594,7 +564,6 @@ function FilterDropdown({
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
-  // Close on outside click + Escape.
   useEffect(() => {
     if (!open) return
     const onDocClick = (e: MouseEvent) => {
@@ -632,16 +601,12 @@ function FilterDropdown({
             <span>{current.label}</span>
           </>
         )}
-        {/* Overdue count badge - always visible when there's any overdue task,
-            even when the current filter isn't "Overdue". */}
         {overdueCount > 0 && (
-          <span
-            className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none ${
-              value === 'overdue'
-                ? 'bg-rose-600 text-white'
-                : 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-200'
-            }`}
-          >
+          <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none ${
+            value === 'overdue'
+              ? 'bg-rose-600 text-white'
+              : 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-200'
+          }`}>
             {overdueCount}
           </span>
         )}
@@ -684,22 +649,10 @@ function FilterDropdown({
 }
 
 /* ──────────────────────────────────────────────────────────────────
- * useFileInput - ref-only helper to wire a hidden <input type="file">
+ * useFileInput helper
  * ────────────────────────────────────────────────────────────────── */
-/**
- * Wires a hidden `<input type="file">` to a handler.
- *
- * The hook attaches a `change` listener to the input once it's mounted
- * and forwards the selected file to `handler`. After the handler settles
- * (success or failure), the input is reset so the same file can be picked
- * again later.
- *
- * Returns a ref to put on the input.
- */
 function useFileInput(handler: (f: File) => Promise<void>) {
   const ref = useRef<HTMLInputElement>(null)
-  // Keep the latest handler in a ref so we don't have to re-bind the
-  // listener every time the parent re-renders with a new closure.
   const handlerRef = useRef(handler)
   useEffect(() => { handlerRef.current = handler }, [handler])
   useEffect(() => {
@@ -711,7 +664,6 @@ function useFileInput(handler: (f: File) => Promise<void>) {
       try {
         await handlerRef.current(file)
       } finally {
-        // Reset so the same file can be selected again
         el.value = ''
       }
     }
@@ -730,35 +682,16 @@ export default function TaskBoardPage() {
   const projectId = params.projectId
   const tb = useTaskBoard(projectId)
 
-  // Optional debug hook for E2E tests (?debug=1 in URL). Exposes the
-  // mutation callbacks on window so tests can drive the same code paths
-  // the drag handler invokes, without depending on @dnd-kit's pointer
-  // capture in headless mode. Production users hit the drag handlers
-  // directly, so this is a no-op unless ?debug=1 is present.
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('debug') !== '1') return
-    ;(window as any).__tb_moveTask = (taskId: string | number, toColumnId: string | number, newIndex: number) =>
-      tb.moveTask(taskId, toColumnId, newIndex)
-    ;(window as any).__tb_moveTaskToColumn = (taskId: string | number, toColumnId: string | number) =>
-      tb.moveTaskToColumn(taskId, toColumnId)
-    return () => {
-      delete (window as any).__tb_moveTask
-      delete (window as any).__tb_moveTaskToColumn
-    }
-  }, [tb])
-
   const [newTaskCol, setNewTaskCol] = useState<string | number | null>(null)
   const [showAddColumn, setShowAddColumn] = useState(false)
   const [confirmDelCol, setConfirmDelCol] = useState<BoardColumn | null>(null)
-  const [activeDragType, setActiveDragType] = useState<'column' | 'task' | null>(null)
-  const [activeDragId, setActiveDragId] = useState<string | null>(null)
+  const [activeTaskId, setActiveTaskId] = useState<string | number | null>(null)
+  const [activeTaskObj, setActiveTaskObj] = useState<BoardTask | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [archivedCount, setArchivedCount] = useState(0)
   const [dueFilter, setDueFilter] = useState<DueFilter>('all')
-  // Live "today" - re-computed every minute so the overdue boundary
-  // rolls over without a page reload.
+
+  // Live "today" tick
   const [, forceTick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => forceTick((n) => n + 1), 60_000)
@@ -770,23 +703,79 @@ export default function TaskBoardPage() {
     [tb.board, todayYmd()],
   )
 
+  // DnD sensors: small distance to differentiate click from drag
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    // MouseSensor: require 8px of movement to start drag (prevents accidental drags on click)
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    // TouchSensor: 150ms delay + 5px tolerance — prevents accidental drags
+    // during vertical scroll but activates quickly enough for smooth UX.
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
   )
 
-  const currentUserName = useMemo(() => {
-    if (typeof window === 'undefined') return ''
-    try {
-      const u = JSON.parse(localStorage.getItem('user') || '{}') as any
-      return [u?.firstName ?? u?.first_name, u?.lastName ?? u?.last_name].filter(Boolean).join(' ').trim() || u?.email || ''
-    } catch { return '' }
-  }, [])
-  const isProjectOwner = true
+  // Drag handlers
+  const onDragStart = (e: DragStartEvent) => {
+    const data = e.active.data.current
+    if (data?.type === 'task') {
+      setActiveTaskId(parseTaskId(String(e.active.id)))
+      setActiveTaskObj(data.task)
+    }
+  }
 
-  // Poll the archived count for the toolbar badge. Cheap server call
-  // (single COUNT query) \u2014 refreshes whenever the board data changes
-  // (e.g. after a task is archived or restored) so the number stays current.
+  const onDragEnd = async (e: DragEndEvent) => {
+    setActiveTaskId(null)
+    setActiveTaskObj(null)
+    const { active, over } = e
+    if (!over) return
+
+    const activeData = active.data.current
+    const overData = over.data.current
+
+    if (activeData?.type !== 'task') return
+
+    const taskId = parseTaskId(String(active.id))
+
+    let toColumnId: string | number | null = null
+    let newIndex = 0
+
+    if (overData?.type === 'task') {
+      // Dropped on another task — insert before it in that column
+      const overTaskId = parseTaskId(String(over.id))
+      for (const c of tb.board) {
+        const idx = c.tasks.findIndex((t) => String(t.id) === overTaskId)
+        if (idx >= 0) { toColumnId = c.id; newIndex = idx; break }
+      }
+    } else if (overData?.type === 'column-drop') {
+      // Dropped on empty column area or below last task
+      toColumnId = overData.columnId
+      const col = tb.board.find((c) => String(c.id) === String(toColumnId))
+      newIndex = col ? col.tasks.length : 0
+    } else {
+      return
+    }
+
+    if (!toColumnId) return
+
+    // Check if task is already in the same column at the same position
+    const sourceCol = tb.board.find((c) =>
+      c.tasks.some((t) => String(t.id) === String(taskId)),
+    )
+    if (sourceCol && String(sourceCol.id) === String(toColumnId)) {
+      const sameIdx = sourceCol.tasks.findIndex((t) => String(t.id) === String(taskId))
+      if (sameIdx === newIndex) return // no-op
+    }
+
+    try {
+      const result = await tb.moveTask(taskId, toColumnId, newIndex)
+      if (result?.ok && !result.noop && result.toColumnName) {
+        const moved = String(sourceCol?.id ?? '') !== String(toColumnId)
+        toast.success(moved ? `Moved to "${result.toColumnName}"` : `Reordered in "${result.toColumnName}"`)
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to move task')
+    }
+  }
+
+  // Archived count polling
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
@@ -799,124 +788,11 @@ export default function TaskBoardPage() {
         if (!res.ok || cancelled) return
         const data = await res.json()
         if (!cancelled) setArchivedCount(data?.total || 0)
-      } catch {
-        /* ignore \u2014 count is decorative */
-      }
+      } catch { /* ignore */ }
     }
     fetchCount()
     return () => { cancelled = true }
   }, [projectId, tb.board])
-
-  // Active task object for drag overlay
-  const activeTaskObj = useMemo(() => {
-    if (activeDragType !== 'task' || !activeDragId) return null
-    const id = activeDragId.replace(/^task-/, '')
-    for (const c of tb.board) {
-      const t = c.tasks.find((t) => String(t.id) === id)
-      if (t) return t
-    }
-    return null
-  }, [activeDragId, activeDragType, tb.board])
-  const activeColObj = useMemo(() => {
-    if (activeDragType !== 'column' || !activeDragId) return null
-    const id = activeDragId.replace(/^col-/, '')
-    return tb.board.find((c) => String(c.id) === id) || null
-  }, [activeDragId, activeDragType, tb.board])
-
-  /* ── DnD handlers ───────────────────────────────────────────── */
-  const onDragStart = (e: DragStartEvent) => {
-    const data = e.active.data.current
-    if (data?.type === 'task') {
-      setActiveDragType('task')
-      setActiveDragId(String(e.active.id))
-    } else if (data?.type === 'column') {
-      setActiveDragType('column')
-      setActiveDragId(String(e.active.id))
-    }
-  }
-
-  const onDragOver = (e: DragOverEvent) => {
-    // NOTE: Task board moves happen ONLY in onDragEnd (at drop time).
-    // During drag we only track which column is under the cursor for the
-    // DragOverlay visual — the board state is never mutated here.
-    const { active, over } = e
-    if (!over) return
-    const activeId = String(active.id)
-    const overId = String(over.id)
-    const activeData = active.data.current
-    const overData = over.data.current
-
-    // ── Column reorder ─────────────────────────────────
-    if (activeData?.type === 'column') {
-      const ids = tb.board.map((c) => String(c.id))
-      const from = ids.indexOf(activeId.replace(/^col-/, ''))
-      const to = ids.indexOf(overId.replace(/^col-/, ''))
-      if (from < 0 || to < 0 || from === to) return
-      const next = arrayMove(ids, from, to)
-      tb.reorderColumns(next as Array<string | number>)
-    }
-    // ── Task cross-column: NO-OP during drag ───────────
-    // Tasks are only moved on drop (onDragEnd) so the dragged card
-    // stays visually associated with its original column until released.
-  }
-
-  const onDragEnd = async (e: DragEndEvent) => {
-    const { active, over } = e
-    setActiveDragType(null)
-    setActiveDragId(null)
-    if (!over) return
-    const activeId = String(active.id)
-    const overId = String(over.id)
-    const activeData = active.data.current
-    const overData = over.data.current
-
-    // ─── Column reorder ─────────────────────────────────
-    if (activeData?.type === 'column' && activeId !== overId) {
-      const ids = tb.board.map((c) => String(c.id))
-      const from = ids.indexOf(activeId.replace(/^col-/, ''))
-      const to = ids.indexOf(overId.replace(/^col-/, ''))
-      if (from < 0 || to < 0) return
-      try {
-        await tb.reorderColumns(arrayMove(ids, from, to) as Array<string | number>)
-      } catch (e: any) {
-        toast.error('Failed to reorder columns')
-      }
-      return
-    }
-
-    // ─── Task move (onDragOver is NO-OP for tasks — board only changes here) ─
-    if (activeData?.type === 'task') {
-      const taskId = String(activeId.replace(/^task-/, ''))
-      let toColumnId: string | null = null
-      let toIndex = 0
-      if (overData?.type === 'task') {
-        const overTaskId = String(overId.replace(/^task-/, ''))
-        for (const c of tb.board) {
-          const idx = c.tasks.findIndex((t) => String(t.id) === overTaskId)
-          if (idx >= 0) { toColumnId = String(c.id); toIndex = idx; break }
-        }
-      } else if (overData?.type === 'column-list') {
-        toColumnId = String(overData.columnId)
-        const col = tb.board.find((c) => String(c.id) === toColumnId)
-        toIndex = col ? col.tasks.length : 0
-      } else {
-        return
-      }
-      if (!toColumnId) return
-      try {
-        const result = await tb.moveTask(taskId, toColumnId, toIndex)
-        if (result?.ok && !result.noop && result.toColumnName) {
-          if (result.fromColumnId != null && String(result.fromColumnId) !== String(toColumnId)) {
-            toast.success(`Moved to "${result.toColumnName}"`)
-          } else {
-            toast.success(`Reordered in "${result.toColumnName}"`)
-          }
-        }
-      } catch (e: any) {
-        toast.error(e?.message || 'Failed to move task')
-      }
-    }
-  }
 
   /* ── Button handlers ────────────────────────────────────────── */
   const handleAddTask = (columnId: string | number) => setNewTaskCol(columnId)
@@ -1006,49 +882,56 @@ export default function TaskBoardPage() {
           onAction={() => setShowAddColumn(true)}
         />
       ) : (
-        <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}>
-          <SortableContext items={tb.board.map((c) => `col-${c.id}`)} strategy={horizontalListSortingStrategy}>
-            <div className="flex gap-3 overflow-x-auto pb-4 items-stretch">
-              {tb.board.map((col) => (
-                <SortableColumn
-                  key={col.id}
-                  column={col}
-                  onRename={(id, n) => tb.renameColumn(id, n).then(() => toast.success('Renamed')).catch(() => toast.error('Rename failed'))}
-                  onDelete={(id) => setConfirmDelCol(tb.board.find((c) => c.id === id) || null)}
-                  onAddTask={handleAddTask}
-                  onOpenTask={(t) => router.push(`/projects/${projectId}/task-board/${t.id}`)}
-                  activeTaskId={activeDragType === 'task' ? String(activeDragId || '').replace(/^task-/, '') || null : null}
-                  filter={dueFilter}
-                />
-              ))}
-            </div>
-          </SortableContext>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={pointerWithin}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          // Explicitly enable and tune dnd-kit autoScroll for both axes.
+          // threshold: start scrolling when the pointer is within 15% of the
+          //   container edge — works on both desktop and touch viewports.
+          // acceleration: 5 gives smooth ramping without sudden jumps.
+          // interval: 5ms polling gives responsive feel.
+          autoScroll={{
+            threshold: { x: 0.15, y: 0.15 },
+            acceleration: 5,
+            interval: 5,
+          }}
+        >
+          <div className="flex gap-3 overflow-x-auto pb-4 items-stretch">
+            {tb.board.map((col) => (
+              <DnDColumn
+                key={col.id}
+                column={col}
+                onRename={(id, n) => tb.renameColumn(id, n).then(() => toast.success('Renamed')).catch(() => toast.error('Rename failed'))}
+                onDelete={(id) => setConfirmDelCol(tb.board.find((c) => c.id === id) || null)}
+                onAddTask={handleAddTask}
+                onOpenTask={(t) => router.push(`/projects/${projectId}/task-board/${t.id}`)}
+                filter={dueFilter}
+                activeTaskId={activeTaskId}
+              />
+            ))}
+          </div>
 
-          <DragOverlay>
-            {activeColObj ? (
-              <div className="w-72 flex flex-col bg-gray-100 dark:bg-gray-800/60 rounded-2xl border border-indigo-400 shadow-xl max-h-[80vh] overflow-hidden">
-                <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700">
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-white truncate">{activeColObj.name}</h3>
-                  <span className="text-[10px] text-gray-400">{activeColObj.tasks.length}</span>
+          {/* DragOverlay renders a floating clone of the dragged task.
+           * portal-rendered to document.body to escape position:relative /
+           * overflow:hidden contexts in column containers that would
+           * otherwise clip or offset the overlay. */}
+          {createPortal(
+            <DragOverlay dropAnimation={null} modifiers={[]}>
+              {activeTaskObj ? (
+                <div className="w-64 bg-white dark:bg-gray-900 rounded-xl border-2 border-indigo-400 shadow-xl p-3 opacity-95 pointer-events-none">
+                  <div className="flex items-start gap-2">
+                    <div className={`w-1.5 h-1.5 mt-1.5 rounded-full shrink-0 ${PRIORITY_COLOR[activeTaskObj.priority]}`} />
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-3 leading-snug">
+                      {activeTaskObj.title}
+                    </p>
+                  </div>
                 </div>
-                <div className="p-2 space-y-2 overflow-hidden">
-                  {activeColObj.tasks.slice(0, 4).map((t) => (
-                    <div key={t.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-2 shadow-sm">
-                      <p className="text-xs font-semibold text-gray-900 dark:text-white line-clamp-2">{t.title}</p>
-                    </div>
-                  ))}
-                  {activeColObj.tasks.length > 4 && <p className="text-[10px] text-gray-500 text-center">+{activeColObj.tasks.length - 4} more</p>}
-                </div>
-              </div>
-            ) : activeTaskObj ? (
-              <div className="w-64 bg-white dark:bg-gray-900 rounded-xl border border-indigo-400 shadow-xl p-3">
-                <div className="flex items-start gap-2">
-                  <div className={`w-1.5 h-1.5 mt-1.5 rounded-full ${PRIORITY_COLOR[activeTaskObj.priority]}`} />
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-3">{activeTaskObj.title}</p>
-                </div>
-              </div>
-            ) : null}
-          </DragOverlay>
+              ) : null}
+            </DragOverlay>,
+            document.body,
+          )}
         </DndContext>
       )}
 
@@ -1082,9 +965,6 @@ export default function TaskBoardPage() {
         open={showArchived}
         onClose={() => {
           setShowArchived(false)
-          // The modal may have changed the archive count (restored or
-          // permanently-deleted tasks). Re-fetch so the toolbar badge is
-          // always accurate when the modal closes.
           const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
           fetch(`/api/projects/${projectId}/tasks?status=archived&limit=1`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -1094,9 +974,6 @@ export default function TaskBoardPage() {
             .catch(() => { /* ignore */ })
         }}
         onRestored={() => {
-          // The hook already filtered the task out of the archive list;
-          // refresh the live board so the restored task reappears in its
-          // original column.
           tb.refresh()
           setArchivedCount((n) => Math.max(0, n - 1))
         }}
