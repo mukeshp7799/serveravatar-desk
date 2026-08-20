@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
 import PageLoader from '@/components/PageLoader'
+import PaginationBar from '@/components/project/PaginationBar'
 import { useDateSettings, useCompanySettings } from '@/contexts/CompanySettingsContext'
 import {
   CheckCircle, Coffee, Clock, Edit2, Eye, LogIn,
@@ -536,6 +537,7 @@ export default function AttendancePage() {
   const [timeline, setTimeline] = useState<TimelineDay[]>([])
   const [tlPage, setTlPage] = useState(1)
   const [tlLimit, setTlLimit] = useState(15)
+  const [tlTotal, setTlTotal] = useState(0)
   const [tlEmpInfo, setTlEmpInfo] = useState<any>(null)
 
   // Lookups
@@ -730,6 +732,7 @@ export default function AttendancePage() {
       const params = new URLSearchParams({ user_id: targetId, date_from: dateFrom, date_to: dateTo })
       const r = await api.get(`/attendance/analytics/timeline?${params.toString()}`)
       setTimeline(r.timeline || [])
+      setTlTotal(r.timeline?.length || 0)
       setTlEmpInfo(r.employee || null)
     } catch (err: any) {
       toast.error(err.message || 'Failed to load timeline')
@@ -1275,55 +1278,14 @@ export default function AttendancePage() {
             </div>
 
             {/* Pagination */}
-            {histTotal > histLimit && (
-              <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-500">
-                    Showing <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min((histPage - 1) * histLimit + 1, histTotal)}</span>
-                    {' '}to{' '}
-                    <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min(histPage * histLimit, histTotal)}</span>
-                    {' '}of{' '}
-                    <span className="font-semibold text-gray-700 dark:text-gray-200">{histTotal}</span>
-                  </span>
-                  <select
-                    value={histLimit}
-                    onChange={e => { const l = Number(e.target.value); setHistLimit(l); setHistPage(1); loadHistory(1, l) }}
-                    className="px-2 py-1 border border-gray-300 dark:border-gray-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-                  >
-                    {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
-                <div className="flex items-center gap-1 flex-wrap">
-                  <button
-                    onClick={() => { const p = Math.max(1, histPage - 1); setHistPage(p); loadHistory(p) }}
-                    disabled={histPage <= 1}
-                    className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
-                  >
-                    ‹
-                  </button>
-                  {Array.from({ length: Math.ceil(histTotal / histLimit) }, (_, i) => i + 1).map(p => (
-                    <button
-                      key={p}
-                      onClick={() => { setHistPage(p); loadHistory(p) }}
-                      className={`min-w-[32px] h-8 flex items-center justify-center rounded-md text-xs font-medium transition cursor-pointer border-0 ${
-                        histPage === p
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => { const p = Math.min(Math.ceil(histTotal / histLimit), histPage + 1); setHistPage(p); loadHistory(p) }}
-                    disabled={histPage >= Math.ceil(histTotal / histLimit)}
-                    className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
-                  >
-                    ›
-                  </button>
-                </div>
-              </div>
-            )}
+            <PaginationBar
+              page={histPage}
+              total={histTotal}
+              limit={histLimit}
+              onPage={(p) => { setHistPage(p); loadHistory(p) }}
+              onLimitChange={(l) => { setHistLimit(l); setHistPage(1); loadHistory(1, l) }}
+              pageSizeOptions={[10, 20, 30, 50]}
+            />
           </div>
         </div>
       )}
@@ -1570,103 +1532,14 @@ export default function AttendancePage() {
                     )}
 
                     {/* Pagination footer */}
-                    <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 flex flex-wrap items-center justify-between gap-3">
-                      {/* Left: results count + per-page */}
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span className="text-xs text-gray-500">
-                          Showing <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min((summPage - 1) * summLimit + 1, summTotal)}</span>
-                          {' '}to{' '}
-                          <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min(summPage * summLimit, summTotal)}</span>
-                          {' '}of{' '}
-                          <span className="font-semibold text-gray-700 dark:text-gray-200">{summTotal}</span>
-                          {' '}results
-                        </span>
-                        <select
-                          value={summLimit}
-                          onChange={e => { const newLimit = Number(e.target.value); setSummLimit(newLimit); setSummPage(1); loadSummary(1, newLimit) }}
-                          className="px-2 py-1 border border-gray-300 dark:border-gray-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-                        >
-                          {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
-                        </select>
-                      </div>
-
-                      {/* Right: page number buttons */}
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {/* Prev arrow */}
-                        <button
-                          onClick={() => { const p = Math.max(1, summPage - 1); setSummPage(p); loadSummary(p) }}
-                          disabled={summPage <= 1}
-                          className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
-                        >
-                          &lsaquo;
-                        </button>
-
-                        {/* Page 1 button — always shown when totalPages >= 1 */}
-                        <button
-                          onClick={() => { setSummPage(1); loadSummary(1) }}
-                          className={`min-w-[32px] h-8 flex items-center justify-center rounded-md text-xs font-medium transition cursor-pointer border-0 ${
-                            summPage === 1
-                              ? 'bg-indigo-600 text-white shadow-sm'
-                              : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                          }`}
-                        >
-                          1
-                        </button>
-
-                        {/* Ellipsis after first page */}
-                        {summPage > 3 && totalPages > 4 && (
-                          <span className="px-1 text-gray-400 text-xs select-none">...</span>
-                        )}
-
-                        {/* Middle pages */}
-                        {Array.from({ length: Math.min(totalPages - 2, 7) }, (_, i) => {
-                          const pageNum = Math.max(2, Math.min(totalPages - 1, summPage - 3 + i))
-                          if (pageNum < 2 || pageNum > totalPages - 1) return null
-                          if (pageNum === 1 || pageNum === totalPages) return null
-                          return (
-                            <button
-                              key={pageNum}
-                              onClick={() => { setSummPage(pageNum); loadSummary(pageNum) }}
-                              className={`min-w-[32px] h-8 flex items-center justify-center rounded-md text-xs font-medium transition cursor-pointer border-0 ${
-                                summPage === pageNum
-                                  ? 'bg-indigo-600 text-white shadow-sm'
-                                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                              }`}
-                            >
-                              {pageNum}
-                            </button>
-                          )
-                        })}
-
-                        {/* Ellipsis before last page */}
-                        {summPage < totalPages - 2 && totalPages > 4 && (
-                          <span className="px-1 text-gray-400 text-xs select-none">...</span>
-                        )}
-
-                        {/* Last page button — shown when totalPages > 1 */}
-                        {totalPages > 1 && (
-                          <button
-                            onClick={() => { setSummPage(totalPages); loadSummary(totalPages) }}
-                            className={`min-w-[32px] h-8 flex items-center justify-center rounded-md text-xs font-medium transition cursor-pointer border-0 ${
-                              summPage === totalPages
-                                ? 'bg-indigo-600 text-white shadow-sm'
-                                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                            }`}
-                          >
-                            {totalPages}
-                          </button>
-                        )}
-
-                        {/* Next arrow */}
-                        <button
-                          onClick={() => { const p = Math.min(totalPages, summPage + 1); setSummPage(p); loadSummary(p) }}
-                          disabled={summPage >= totalPages}
-                          className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
-                        >
-                          &rsaquo;
-                        </button>
-                      </div>
-                    </div>
+                    <PaginationBar
+                      page={summPage}
+                      total={summTotal}
+                      limit={summLimit}
+                      onPage={(p) => { setSummPage(p); loadSummary(p) }}
+                      onLimitChange={(l) => { setSummLimit(l); setSummPage(1); loadSummary(1, l) }}
+                      pageSizeOptions={[10, 20, 30, 50]}
+                    />
                   </div>
                 )
           })()}
@@ -1861,65 +1734,14 @@ export default function AttendancePage() {
                     </div>
 
                         {/* Pagination footer */}
-                        {tlTotalPages > 1 && (
-                          <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 flex flex-wrap items-center justify-between gap-3 mt-0">
-                            <div className="flex items-center gap-3 flex-wrap">
-                              <span className="text-xs text-gray-500">
-                                Showing <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min((currentPage - 1) * tlLimit + 1, tlTotal)}</span>
-                                {' '}to{' '}
-                                <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min(currentPage * tlLimit, tlTotal)}</span>
-                                {' '}of{' '}
-                                <span className="font-semibold text-gray-700 dark:text-gray-200">{tlTotal}</span>
-                              </span>
-                              <select
-                                value={tlLimit}
-                                onChange={e => { setTlLimit(Number(e.target.value)); setTlPage(1) }}
-                                className="px-2 py-1 border border-gray-300 dark:border-gray-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-                              >
-                                {[10, 15, 20, 30, 50].map(n => <option key={n} value={n}>{n}</option>)}
-                              </select>
-                            </div>
-                            <div className="flex items-center gap-1 flex-wrap">
-                              <button
-                                onClick={() => { const p = Math.max(1, currentPage - 1); setTlPage(p) }}
-                                disabled={currentPage <= 1}
-                                className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
-                              >
-                                &lsaquo;
-                              </button>
-                              {currentPage > 3 && tlTotalPages > 4 && (
-                                <span className="px-1 text-gray-400 text-xs select-none">...</span>
-                              )}
-                              {(() => {
-                                const start = Math.max(1, Math.min(tlTotalPages - 4, currentPage - 2))
-                                const end = Math.min(tlTotalPages, start + 4)
-                                return Array.from({ length: end - start + 1 }, (_, i) => start + i)
-                              })().map(pageNum => (
-                                <button
-                                  key={pageNum}
-                                  onClick={() => setTlPage(pageNum)}
-                                  className={`min-w-[32px] h-8 flex items-center justify-center rounded-md text-xs font-medium transition cursor-pointer border-0 ${
-                                    currentPage === pageNum
-                                      ? 'bg-indigo-600 text-white shadow-sm'
-                                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                  }`}
-                                >
-                                  {pageNum}
-                                </button>
-                              ))}
-                              {currentPage < tlTotalPages - 2 && tlTotalPages > 4 && (
-                                <span className="px-1 text-gray-400 text-xs select-none">...</span>
-                              )}
-                              <button
-                                onClick={() => { const p = Math.min(tlTotalPages, currentPage + 1); setTlPage(p) }}
-                                disabled={currentPage >= tlTotalPages}
-                                className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
-                              >
-                                &rsaquo;
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                        <PaginationBar
+                          page={tlPage}
+                          total={tlTotal}
+                          limit={tlLimit}
+                          onPage={(p) => setTlPage(p)}
+                          onLimitChange={(l) => { setTlLimit(l); setTlPage(1) }}
+                          pageSizeOptions={[10, 20, 30, 50]}
+                        />
                       </>
                     )
                   })()}
@@ -2090,61 +1912,14 @@ export default function AttendancePage() {
             </div>
 
             {/* Pagination */}
-            {adjTotal > 0 && (
-              <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 flex flex-wrap items-center justify-between gap-3">
-                {/* Left: results count + per-page */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="text-xs text-gray-500">
-                    Showing <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min((adjPage - 1) * adjLimit + 1, adjTotal)}</span>
-                    {' '}to{' '}
-                    <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.min(adjPage * adjLimit, adjTotal)}</span>
-                    {' '}of{' '}
-                    <span className="font-semibold text-gray-700 dark:text-gray-200">{adjTotal}</span>
-                    {' '}results
-                  </span>
-                  <select
-                    value={adjLimit}
-                    onChange={e => { const l = Number(e.target.value); setAdjLimit(l); setAdjPage(1); loadAdjustments(1, adjFilter, l, adjSearch) }}
-                    className="px-2 py-1 border border-gray-300 dark:border-gray-500 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-                  >
-                    {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
-
-                {/* Right: page number buttons */}
-                <div className="flex items-center gap-1 flex-wrap">
-                  <button
-                    onClick={() => { const p = Math.max(1, adjPage - 1); setAdjPage(p); loadAdjustments(p, adjFilter, adjLimit, adjSearch) }}
-                    disabled={adjPage <= 1}
-                    className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
-                  >
-                    ‹
-                  </button>
-
-                  {Array.from({ length: Math.ceil(adjTotal / adjLimit) }, (_, i) => i + 1).map(p => (
-                    <button
-                      key={p}
-                      onClick={() => { setAdjPage(p); loadAdjustments(p, adjFilter, adjLimit, adjSearch) }}
-                      className={`min-w-[32px] h-8 flex items-center justify-center rounded-md text-xs font-medium transition cursor-pointer border-0 ${
-                        adjPage === p
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  ))}
-
-                  <button
-                    onClick={() => { const p = Math.min(Math.ceil(adjTotal / adjLimit), adjPage + 1); setAdjPage(p); loadAdjustments(p, adjFilter, adjLimit, adjSearch) }}
-                    disabled={adjPage >= Math.ceil(adjTotal / adjLimit)}
-                    className="w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700 transition cursor-pointer border-0"
-                  >
-                    ›
-                  </button>
-                </div>
-              </div>
-            )}
+            <PaginationBar
+              page={adjPage}
+              total={adjTotal}
+              limit={adjLimit}
+              onPage={(p) => { setAdjPage(p); loadAdjustments(p, adjFilter, adjLimit, adjSearch) }}
+              onLimitChange={(l) => { setAdjLimit(l); setAdjPage(1); loadAdjustments(1, adjFilter, l, adjSearch) }}
+              pageSizeOptions={[10, 20, 30, 50]}
+            />
           </div>
         </div>
       )}

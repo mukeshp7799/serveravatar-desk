@@ -25,6 +25,7 @@ import PortalModal from '@/components/PortalModal';
  *   - Image lightbox, drag-and-drop, clipboard paste for attachments
  */
 
+import ReactDOM from 'react-dom'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -33,12 +34,13 @@ import {
   AlertCircle, ChevronLeft, ChevronRight, ClipboardCheck, FileIcon, Folder, MoreVertical,
   Pencil, Plus, Search, Send, Trash2, Upload, User as UserIcon, X, Paperclip,
   MessageCircle, CheckCircle2, ListChecks, Tag, Calendar as CalIcon, Hash, Image as ImageIcon,
-  UserCircle, Info, Layers, SkipForward,
+  UserCircle, Info, Layers, SkipForward, RotateCw,
 } from 'lucide-react'
 import ProjectLayout from '@/components/project/ProjectLayout'
 import { fmtRelative, fmtDateShort } from '@/components/project/format'
 import ConfirmDialog from '@/components/project/ConfirmDialog'
 import ReactionBar from '@/components/project/ReactionBar'
+import PaginationBar from '@/components/project/PaginationBar'
 import { useTaskBoard, type BoardUser } from '@/lib/task-board-api'
 import {
   useProjectTestCases, useTestCaseDetail,
@@ -90,32 +92,59 @@ const PRIORITIES: TestPriority[] = ['low', 'medium', 'high', 'critical']
 
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * PortalDropdown — renders dropdown at document.body level to escape overflow clipping
+/* ─────────────────────────────────────────────────────────────────────────────
+ * FloatingMenu — portal-based dropdown rendered at document.body level.
+ * Uses position:fixed anchored to the trigger button via getBoundingClientRect(),
+ * so it escapes all overflow:hidden/auto ancestors (tables, sidebars, etc.).
+ *
+ * Uses the same mounted-delay pattern as PortalModal to ensure the portal
+ * is NEVER rendered at position (0,0) — position is calculated in
+ * useLayoutEffect (synchronous, before paint) and the portal is only
+ * created after that calculation completes.
  * ───────────────────────────────────────────────────────────────────────────── */
-function PortalDropdown({
-  children, buttonRef, onClose,
+function FloatingMenu({
+  children,
+  anchorRef,
+  onClose,
+  offsetY = 4,
 }: {
   children: React.ReactNode
-  buttonRef: React.RefObject<HTMLButtonElement | null>
+  anchorRef: React.RefObject<HTMLElement | null>
   onClose: () => void
+  offsetY?: number
 }) {
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
-  const [mounted, setMounted] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  // Track whether the menu is positioned (visible). Starts invisible.
+  const [positioned, setPositioned] = useState(false)
 
-  // Synchronous initial measurement to avoid flickering
+  // Sync position synchronously before paint via direct DOM manipulation.
+  // This avoids the render → setPos → re-render cycle that can cause a
+  // brief portal flash at (0,0) in React 18 concurrent mode + StrictMode.
+  // Runs whenever anchor changes to ensure correct positioning even on first render.
   useLayoutEffect(() => {
-    const rect = buttonRef.current?.getBoundingClientRect()
-    if (rect) {
-      setPos({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX })
-    }
-    setMounted(true)
-  }, [buttonRef])
+    const el = anchorRef.current
+    const menu = menuRef.current
+    if (!el || !menu) return
+    // Guard: only show the menu if the anchor has actual dimensions.
+    // This prevents duplicate portals from off-screen/detail-panel dropdowns.
+    const rect = el.getBoundingClientRect()
+    if (!rect || rect.width === 0 || rect.height === 0) return
+    // Apply position directly to the DOM element — no state re-render needed.
+    menu.style.top = `${rect.bottom + window.scrollY + offsetY}px`
+    menu.style.left = `${rect.left + window.scrollX}px`
+    menu.style.visibility = 'visible'
+    setPositioned(true)
+  }, [anchorRef, offsetY])
 
+  // Keep position updated on scroll/resize (runs after paint, updates DOM directly)
   useEffect(() => {
-    if (!mounted) return
+    const el = anchorRef.current
+    const menu = menuRef.current
+    if (!el || !menu) return
     const update = () => {
-      const rect = buttonRef.current?.getBoundingClientRect()
-      if (rect) setPos({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX })
+      const rect = el.getBoundingClientRect()
+      menu.style.top = `${rect.bottom + window.scrollY + offsetY}px`
+      menu.style.left = `${rect.left + window.scrollX}px`
     }
     update()
     window.addEventListener('scroll', update, true)
@@ -124,20 +153,45 @@ function PortalDropdown({
       window.removeEventListener('scroll', update, true)
       window.removeEventListener('resize', update)
     }
-  }, [buttonRef, mounted])
+  }, [anchorRef, offsetY])
 
-  if (!pos) return null
+  // Click-outside and Escape to close
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node) && !anchorRef.current?.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [anchorRef, onClose])
 
-  return (
-    <>
-      <div className="fixed inset-0 z-[9998]" onClick={onClose} />
-      <div
-        className="fixed z-[9999] bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xl py-2 min-w-[160px] animate-dropdown-fade"
-        style={{ top: pos.top, left: pos.left }}
-      >
-        {children}
-      </div>
-    </>
+  // Portal is ALWAYS rendered (no early return) — starts invisible at origin,
+  // then useLayoutEffect makes it visible at the correct coordinates in the
+  // same commit phase, so it never appears at (0,0).
+  // Guard: only show the portal if the anchor has actual dimensions.
+  // This prevents duplicate portals from detail-panel dropdowns that mount
+  // with left=0/top=0 (off-screen) from appearing at the origin.
+  const anchorRect = anchorRef.current?.getBoundingClientRect()
+  const anchorHasSize = anchorRect && anchorRect.width > 0 && anchorRect.height > 0
+
+  return ReactDOM.createPortal(
+    <div
+      ref={menuRef}
+      className="fixed z-[9999] bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 py-1.5 min-w-[160px] focus:outline-none"
+      style={{ top: 0, left: 0, visibility: positioned && anchorHasSize ? 'visible' : 'hidden', pointerEvents: positioned && anchorHasSize ? 'auto' : 'none' }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {children}
+    </div>,
+    document.body,
   )
 }
 
@@ -149,8 +203,9 @@ function Avatar({ user, size = 8 }: { user: BoardUser | SuiteUser | null | undef
   const initials = user.name?.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase() || '?'
   return (
     <span
-      title={user.name}
-      className="inline-flex items-center justify-center rounded-full bg-gradient-to-br from-teal-100 to-emerald-100 dark:from-teal-900/50 dark:to-emerald-900/50 text-teal-700 dark:text-teal-300 font-bold shrink-0 select-none"
+      data-tooltip-id="app-tooltip"
+      data-tooltip-content={user.name}
+      className="inline-flex items-center justify-center rounded-full bg-gradient-to-br from-teal-100 to-emerald-100 dark:from-teal-900/50 dark:to-emerald-900/50 text-teal-700 dark:text-teal-300 font-bold shrink-0 select-none cursor-default"
       style={{ width: size * 4, height: size * 4, fontSize: Math.max(size * 4 * 0.35, 8) }}
     >
       {initials}
@@ -165,6 +220,7 @@ function AvatarStack({ users, max = 4, size = 6, showPassed = false }: { users: 
   if (!users.length) return <span className="text-xs text-gray-400 italic">Unassigned</span>
   const shown = users.slice(0, max)
   const extra = users.length - max
+
   return (
     <div className="flex items-center -space-x-1.5">
       {shown.map((u) => (
@@ -173,12 +229,14 @@ function AvatarStack({ users, max = 4, size = 6, showPassed = false }: { users: 
           {showPassed && 'passed' in u && (
             <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-gray-900 ${
               u.passed ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'
-            }`} title={u.passed ? 'Passed' : 'Not passed'} />
+            }`} />
           )}
         </div>
       ))}
       {extra > 0 && (
         <span
+          data-tooltip-id="app-tooltip"
+          data-tooltip-content={users.slice(max).map((u) => u.name).join(', ')}
           className="inline-flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold ring-2 ring-white dark:ring-gray-900"
           style={{ width: size * 4, height: size * 4, fontSize: Math.max(size * 4 * 0.3, 7) }}
         >
@@ -190,38 +248,75 @@ function AvatarStack({ users, max = 4, size = 6, showPassed = false }: { users: 
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * Inline status dropdown (table cell) — uses PortalDropdown to escape overflow clipping
+ * Inline status dropdown — anchored directly below the trigger button.
+ * Works in two modes:
+ *  - With rowId + openDropdownId/openDropdownType: controlled, shared state (table cells)
+ *  - Without rowId: uncontrolled, own local state (detail panel)
  * ───────────────────────────────────────────────────────────────────────────── */
-function InlineStatusSelect({ status, onChange }: { status: TestStatus; onChange: (s: TestStatus) => void }) {
-  const [open, setOpen] = useState(false)
-  const btnRef = useRef<HTMLButtonElement>(null)
+function InlineStatusSelect({
+  status, onChange,
+  rowId, openDropdownId, openDropdownType, onOpen, onClose,
+}: {
+  status: TestStatus; onChange: (s: TestStatus) => void
+  rowId?: string | number; openDropdownId?: string | number | null; openDropdownType?: 'status' | 'priority' | null
+  onOpen?: (id: string | number, type: 'status' | 'priority') => void; onClose?: () => void
+}) {
+  const [localOpen, setLocalOpen] = useState(false)
+  const hasControlledState = rowId !== undefined
+  const isOpen = hasControlledState
+    ? openDropdownId === rowId && openDropdownType === 'status'
+    : localOpen
 
-  // Always render the button so btnRef stays valid when portal opens
+  // Ref to detect if the document mousedown listener already closed the dropdown
+  // (prevents button's own click handler from re-opening it)
+  const didDocumentClose = useRef(false)
+
+  const handleOpen = () => {
+    didDocumentClose.current = false
+    if (hasControlledState && onOpen) onOpen(rowId!, 'status')
+    else setLocalOpen(true)
+  }
+  const handleClose = () => {
+    // NOTE: do NOT set didDocumentClose.current = true here.
+    // didDocumentClose.current is only set by the document mousedown listener
+    // (to prevent trigger click from immediately reopening after outside-click close).
+    // When handleClose is called (e.g., clicking an option), we want the next
+    // trigger click to reopen the dropdown normally.
+    if (hasControlledState && onClose) onClose()
+    else setLocalOpen(false)
+  }
+
+  const triggerRef = useRef<HTMLButtonElement>(null)
+
   return (
-    <>
+    <div className="relative inline-block text-left">
       <button
-        ref={btnRef}
+        ref={triggerRef}
         type="button"
-        onClick={(e) => { e.stopPropagation(); setOpen(true) }}
+        onClick={(e) => {
+          e.stopPropagation()
+          // Reset flag at start of handler — allows dropdown to reopen on next trigger click
+          // regardless of whether it was closed by document mousedown or by clicking an option
+          if (didDocumentClose.current) didDocumentClose.current = false
+          else isOpen ? handleClose() : handleOpen()
+        }}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-bold cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm hover:shadow-md ${STATUS_BG[status]}`}
       >
         <span className={`w-2 h-2 rounded-full ${STATUS_COLOR[status]} ring-1 ring-black/10`} />
         {STATUS_LABEL[status]}
         <svg className="w-3 h-3 opacity-60" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
-      {open && (
-        <PortalDropdown buttonRef={btnRef} onClose={() => setOpen(false)}>
+      {isOpen && (
+        <FloatingMenu anchorRef={triggerRef} onClose={handleClose}>
           <div className="px-2 pb-1">
             <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400 px-2 pt-1 pb-2">Change Status</p>
             {STATUSES.map((s) => (
               <button
                 key={s}
                 type="button"
-                onClick={(e) => { e.stopPropagation(); onChange(s); setOpen(false) }}
+                onMouseDown={(e) => { e.stopPropagation(); onChange(s); handleClose() }}
                 className={`w-full text-left px-2 py-2 text-sm font-semibold flex items-center gap-3 bg-transparent border-none cursor-pointer rounded-xl mb-0.5 transition-colors ${
-                  s === status
-                    ? `${STATUS_BG[s]} font-bold`
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  s === status ? `${STATUS_BG[s]} font-bold` : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}
               >
                 <span className={`w-3 h-3 rounded-full ${STATUS_COLOR[s]} ring-1 ring-black/10`} />
@@ -232,45 +327,82 @@ function InlineStatusSelect({ status, onChange }: { status: TestStatus; onChange
               </button>
             ))}
           </div>
-        </PortalDropdown>
+        </FloatingMenu>
       )}
-    </>
+    </div>
   )
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
- * Inline priority dropdown (table cell) — uses PortalDropdown to escape overflow clipping
+ * Inline priority dropdown — anchored directly below the trigger button.
+ * Works in two modes:
+ *  - With rowId + openDropdownId/openDropdownType: controlled, shared state (table cells)
+ *  - Without rowId: uncontrolled, own local state (detail panel)
  * ───────────────────────────────────────────────────────────────────────────── */
-function InlinePrioritySelect({ priority, onChange }: { priority: TestPriority; onChange: (p: TestPriority) => void }) {
-  const [open, setOpen] = useState(false)
-  const btnRef = useRef<HTMLButtonElement>(null)
+function InlinePrioritySelect({
+  priority, onChange,
+  rowId, openDropdownId, openDropdownType, onOpen, onClose,
+}: {
+  priority: TestPriority; onChange: (p: TestPriority) => void
+  rowId?: string | number; openDropdownId?: string | number | null; openDropdownType?: 'status' | 'priority' | null
+  onOpen?: (id: string | number, type: 'status' | 'priority') => void; onClose?: () => void
+}) {
+  const [localOpen, setLocalOpen] = useState(false)
+  const hasControlledState = rowId !== undefined
+  const isOpen = hasControlledState
+    ? openDropdownId === rowId && openDropdownType === 'priority'
+    : localOpen
 
-  // Always render the button so btnRef stays valid when portal opens
+  // Ref to detect if the document mousedown listener already closed the dropdown
+  // (prevents button's own click handler from re-opening it)
+  const didDocumentClose = useRef(false)
+
+  const handleOpen = () => {
+    didDocumentClose.current = false
+    if (hasControlledState && onOpen) onOpen(rowId!, 'priority')
+    else setLocalOpen(true)
+  }
+  const handleClose = () => {
+    // NOTE: do NOT set didDocumentClose.current = true here.
+    // didDocumentClose.current is only set by the document mousedown listener
+    // (to prevent trigger click from immediately reopening after outside-click close).
+    // When handleClose is called (e.g., clicking an option), we want the next
+    // trigger click to reopen the dropdown normally.
+    if (hasControlledState && onClose) onClose()
+    else setLocalOpen(false)
+  }
+
+  const triggerRef = useRef<HTMLButtonElement>(null)
+
   return (
-    <>
+    <div className="relative inline-block text-left">
       <button
-        ref={btnRef}
+        ref={triggerRef}
         type="button"
-        onClick={(e) => { e.stopPropagation(); setOpen(true) }}
+        onClick={(e) => {
+          e.stopPropagation()
+          // Reset flag at start of handler — allows dropdown to reopen on next trigger click
+          // regardless of whether it was closed by document mousedown or by clicking an option
+          if (didDocumentClose.current) didDocumentClose.current = false
+          else isOpen ? handleClose() : handleOpen()
+        }}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-bold cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm hover:shadow-md ${PRIORITY_BG[priority]}`}
       >
         <span className={`w-2 h-2 rounded-full ${PRIORITY_COLOR[priority]} ring-1 ring-black/10`} />
         {PRIORITY_LABEL[priority]}
         <svg className="w-3 h-3 opacity-60" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
-      {open && (
-        <PortalDropdown buttonRef={btnRef} onClose={() => setOpen(false)}>
+      {isOpen && (
+        <FloatingMenu anchorRef={triggerRef} onClose={handleClose}>
           <div className="px-2 pb-1">
             <p className="text-[10px] uppercase tracking-widest font-bold text-gray-400 px-2 pt-1 pb-2">Change Priority</p>
             {PRIORITIES.map((p) => (
               <button
                 key={p}
                 type="button"
-                onClick={(e) => { e.stopPropagation(); onChange(p); setOpen(false) }}
+                onMouseDown={(e) => { e.stopPropagation(); onChange(p); handleClose() }}
                 className={`w-full text-left px-2 py-2 text-sm font-semibold flex items-center gap-3 bg-transparent border-none cursor-pointer rounded-xl mb-0.5 transition-colors ${
-                  p === priority
-                    ? `${PRIORITY_BG[p]} font-bold`
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  p === priority ? `${PRIORITY_BG[p]} font-bold` : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}
               >
                 <span className={`w-3 h-3 rounded-full ${PRIORITY_COLOR[p]} ring-1 ring-black/10`} />
@@ -281,9 +413,9 @@ function InlinePrioritySelect({ priority, onChange }: { priority: TestPriority; 
               </button>
             ))}
           </div>
-        </PortalDropdown>
+        </FloatingMenu>
       )}
-    </>
+    </div>
   )
 }
 
@@ -412,8 +544,8 @@ function SuiteItem({
           >
             <MoreVertical size={13} />
           </button>
-          {menuOpen && (
-            <PortalDropdown buttonRef={menuBtnRef} onClose={() => setMenuOpen(false)}>
+          {menuOpen && menuBtnRef.current && (
+            <FloatingMenu anchorRef={menuBtnRef} onClose={() => setMenuOpen(false)}>
               <button
                 type="button"
                 onClick={() => { setMenuOpen(false); setEditing(true) }}
@@ -428,7 +560,7 @@ function SuiteItem({
               >
                 <Trash2 size={13} /> Delete
               </button>
-            </PortalDropdown>
+            </FloatingMenu>
           )}
         </div>
       )}
@@ -514,7 +646,7 @@ interface DraftStep { description: string; expected_result: string }
  * ────────────────────────────────────────────────────────────────── */
 function LabelWithTooltip({ label, tooltip, htmlFor }: { label: string; tooltip: string; htmlFor?: string }) {
   return (
-    <label htmlFor={htmlFor} className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500 mb-1.5 cursor-help">
+    <label htmlFor={htmlFor} className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500 mb-1.5 cursor-help z-[999999]">
       <span>{label}</span>
       <span
         data-tooltip-id="app-tooltip"
@@ -957,38 +1089,59 @@ function DetailPanel({
   }
 
   const handleInlineStatusChange = useCallback(async (newStatus: TestStatus) => {
+    if (!tc) return
     try {
+      // Call API — detail.updateStatus also updates its local testCase state on success
       await detail.updateStatus(newStatus)
       toast.success(`Status updated to ${STATUS_LABEL[newStatus]}`)
-      doPatch(detail.testCase!)
-    } catch (e: any) { toast.error(e?.message || 'Failed to update status') }
+      // Refetch the single case from the server to confirm the latest state for the slideover
+      await detail.refresh()
+      // Construct the updated object directly (avoid stale detail.testCase closure)
+      const updated = { ...detail.testCase!, status: newStatus, effective_status: newStatus }
+      doPatch(updated)
+      // Dispatch refresh event so any other listeners (e.g. table rows) pick up the change
+      window.dispatchEvent(new CustomEvent('test-cases:refresh'))
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to update status')
+    }
   }, [detail])
 
   const handleAssigneeStatusChange = useCallback(async (userId: number | string, newStatus: ExecutionStatus) => {
+    if (!tc) return
     try {
       await detail.updateAssigneeStatus(userId, newStatus)
-      doPatch(detail.testCase!)
+      // detail.testCase now holds the freshly updated assignee state; use it for parent sync
+      doPatch({ ...detail.testCase!, effective_status: detail.testCase!.effective_status ?? detail.testCase!.status })
+      window.dispatchEvent(new CustomEvent('test-cases:refresh'))
     } catch { /* error toast is handled inside updateAssigneeStatus */ }
-  }, [detail])
+  }, [detail, tc])
 
-  const handleInlinePriorityChange = async (newPriority: TestPriority) => {
+  const handleInlinePriorityChange = useCallback(async (newPriority: TestPriority) => {
+    if (!tc) return
     try {
       await detail.updatePriority(newPriority)
       toast.success(`Priority updated to ${PRIORITY_LABEL[newPriority]}`)
-      doPatch(detail.testCase!)
+      // Refetch to confirm latest state, then build updated object from fresh detail.testCase
+      await detail.refresh()
+      const updated = { ...detail.testCase!, priority: newPriority }
+      doPatch(updated)
+      window.dispatchEvent(new CustomEvent('test-cases:refresh'))
     } catch (e: any) { toast.error(e?.message || 'Failed to update priority') }
-  }
+  }, [detail])
 
-  const handleAssigneeSave = async (assigneeIds: (number | string)[]) => {
+  const handleAssigneeSave = useCallback(async (assigneeIds: (number | string)[]) => {
     setSavingAssignees(true)
     try {
       await detail.updateFields({ assignee_ids: assigneeIds })
       toast.success('Assignees updated')
       setAssigneeEditorOpen(false)
+      // Refresh detail then patch parent list to ensure sync
+      await detail.refresh()
       doPatch(detail.testCase!)
+      window.dispatchEvent(new CustomEvent('test-cases:refresh'))
     } catch (e: any) { toast.error(String(e?.message || e?.response?.data?.message || 'Failed to update assignees')) }
     finally { setSavingAssignees(false) }
-  }
+  }, [detail])
 
   if (!open) return null
 
@@ -998,22 +1151,16 @@ function DetailPanel({
         <ImageLightbox src={lightboxSrc} alt="Attachment preview" onClose={() => setLightboxSrc(null)} />
       )}
       {/* Backdrop */}
-      <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       {/* Panel */}
-      <aside className="fixed top-0 right-0 z-50 h-screen w-full md:w-[700px] max-w-full bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-800 flex flex-col animate-slide-in-right">
+      <aside className="fixed top-0 right-0 z-[99999] h-screen w-full md:w-[700px] max-w-full bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden animate-slide-in-right">
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-teal-600 dark:text-teal-300 inline-flex items-center gap-1.5">
                 <Hash size={11} strokeWidth={2.5} /> TC-{tc?.id}
               </span>
-              {tc && (
-                <InlineStatusSelect
-                  status={tc.effective_status as TestStatus || tc.status}
-                  onChange={handleInlineStatusChange}
-                />
-              )}
             </div>
             <h2 className="text-lg sm:text-xl font-extrabold text-gray-900 dark:text-white break-words leading-tight">
               {tc?.title || 'Loading…'}
@@ -1025,7 +1172,7 @@ function DetailPanel({
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 px-5 pt-3 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
+        <div className="flex flex-wrap items-center gap-2 px-5 pt-3 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
           {(['overview', 'steps', 'comments', 'attachments'] as const).map((t) => {
             const label = t.charAt(0).toUpperCase() + t.slice(1)
             const count = t === 'steps' ? tc?.steps?.length
@@ -1049,8 +1196,8 @@ function DetailPanel({
           })}
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Body — scrollable with custom scrollbar */}
+        <div className="flex-1 overflow-y-auto scroll-smooth hover:scroll-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
           {detail.loading && !tc && (
             <div className="flex flex-col items-center justify-center py-24 gap-3">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 animate-pulse" />
@@ -1201,7 +1348,7 @@ function OverviewTab({
   return (
     <div className="space-y-3 p-5">
       {/* Priority + Status inline edit row */}
-      <div className="flex items-center gap-4 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
         <div className="flex items-center gap-2">
           <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400">Priority</span>
           <InlinePrioritySelect priority={tc.priority} onChange={onPriorityChange} />
@@ -1809,6 +1956,29 @@ export default function TestCasesPage() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [newSuiteOpen, setNewSuiteOpen] = useState(false)
   const [newCaseOpen, setNewCaseOpen] = useState(false)
+  const [pageLimit, setPageLimit] = useState(tc.perPage)
+  const [openDropdownId, setOpenDropdownId] = useState<string | number | null>(null)
+  const [openDropdownType, setOpenDropdownType] = useState<'status' | 'priority' | null>(null)
+
+  const openDropdown = (id: string | number, type: 'status' | 'priority') => {
+    setOpenDropdownId(id)
+    setOpenDropdownType(type)
+  }
+  const closeDropdown = () => {
+    setOpenDropdownId(null)
+    setOpenDropdownType(null)
+  }
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!openDropdownId) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Element
+      if (!target.closest('[data-dropdown-cell]')) closeDropdown()
+    }
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [openDropdownId])
 
   // Compute filtered list (re-applies the suite sidebar filter on top of the hook's filters)
   const filteredTestCases = useMemo(() => {
@@ -1859,6 +2029,10 @@ export default function TestCasesPage() {
   }
 
   // Inline status/priority update in table
+  // Note: tc.updateStatus / tc.updatePriority already perform an in-place optimistic
+  // update via setTestCases((cs) => cs.map(...)), so no full list refresh is needed.
+  // Dispatching test-cases:refresh here would trigger a server refetch that re-sorts
+  // the list by updatedAt, causing the edited row to jump position unnecessarily.
   const handleTableStatusChange = async (caseId: string | number, newStatus: TestStatus) => {
     try {
       await tc.updateStatus(caseId, newStatus)
@@ -1974,57 +2148,75 @@ export default function TestCasesPage() {
             </div>
           )}
 
-          {/* Filter Bar */}
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-3">
-            <div className="flex flex-col gap-2.5">
-              <div className="flex items-center gap-2 w-full">
-                <div className="relative flex-1">
-                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search test cases…"
-                    className="w-full pl-8 pr-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-gray-400 dark:focus:border-gray-600 transition-colors"
-                  />
-                </div>
+          {/* Filter Toolbar */}
+          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 px-3 py-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
+
+              {/* Search Bar */}
+              <div className="relative flex-1 min-w-[180px]">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search test cases…"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs sm:text-sm bg-white dark:bg-gray-800 border border-slate-200 dark:border-slate-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 transition-colors"
+                />
+              </div>
+
+              {/* Filter Group */}
+              <select value={filterSuite ?? ''} onChange={(e) => { const v = e.target.value; setFilterSuite(v ? Number(v) : null); setActiveSuiteId(v ? Number(v) : null) }}
+                className="appearance-none border border-slate-200 dark:border-slate-700 bg-white hover:bg-slate-50 dark:bg-gray-800 dark:hover:bg-gray-700 text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg shadow-sm cursor-pointer text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 transition-all">
+                <option value="">All Suites</option>
+                {tc.suites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as TestStatus | '')}
+                className="appearance-none border border-slate-200 dark:border-slate-700 bg-white hover:bg-slate-50 dark:bg-gray-800 dark:hover:bg-gray-700 text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg shadow-sm cursor-pointer text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 transition-all">
+                <option value="">All Status</option>
+                {FILTER_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+              </select>
+              <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value as TestPriority | '')}
+                className="appearance-none border border-slate-200 dark:border-slate-700 bg-white hover:bg-slate-50 dark:bg-gray-800 dark:hover:bg-gray-700 text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg shadow-sm cursor-pointer text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 transition-all">
+                <option value="">All Priority</option>
+                {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+              </select>
+
+              {/* My Cases Toggle */}
+              <button
+                type="button"
+                onClick={() => setFilterAssignedToMe((v) => !v)}
+                className={`inline-flex items-center gap-1.5 border text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer ${
+                  filterAssignedToMe
+                    ? 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300'
+                    : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 hover:bg-slate-50 dark:hover:bg-gray-700'
+                }`}
+              >
+                <UserCircle size={12} />
+                <span className="hidden sm:inline">My Cases</span>
+                <span className="sm:hidden">Mine</span>
+              </button>
+
+              {/* Clear Filters */}
+              {hasFilters && (
                 <button
                   type="button"
-                  onClick={() => setFilterAssignedToMe((v) => !v)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors cursor-pointer shrink-0 ${
-                    filterAssignedToMe
-                      ? 'bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white'
-                      : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-400'
-                  }`}
+                  onClick={() => { setSearch(''); setFilterSuite(null); setFilterStatus(''); setFilterPriority(''); setFilterAssignedToMe(false); setActiveSuiteId(null) }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700 hover:border-gray-400 dark:hover:border-gray-600 cursor-pointer transition-all"
                 >
-                  <UserCircle size={12} /> My Cases
+                  <X size={10} /> Clear
                 </button>
-                {hasFilters && (
-                  <button
-                    type="button"
-                    onClick={() => { setSearch(''); setFilterSuite(null); setFilterStatus(''); setFilterPriority(''); setFilterAssignedToMe(false); setActiveSuiteId(null) }}
-                    className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg border border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 cursor-pointer transition-colors"
-                  >
-                    <X size={10} /> Clear
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <select value={filterSuite ?? ''} onChange={(e) => { const v = e.target.value; setFilterSuite(v ? Number(v) : null); setActiveSuiteId(v ? Number(v) : null) }}
-                  className="appearance-none px-3 py-1.5 text-xs font-medium bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer">
-                  <option value="">All Suites</option>
-                  {tc.suites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as TestStatus | '')}
-                  className="appearance-none px-3 py-1.5 text-xs font-medium bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer">
-                  <option value="">All Status</option>
-                  {FILTER_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-                </select>
-                <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value as TestPriority | '')}
-                  className="appearance-none px-3 py-1.5 text-xs font-medium bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 focus:outline-none cursor-pointer">
-                  <option value="">All Priority</option>
-                  {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
-                </select>
-              </div>
+              )}
+
+              {/* Refresh Button */}
+              <button
+                type="button"
+                onClick={() => tc.refresh()}
+                disabled={tc.loading}
+                className="p-2 bg-white hover:bg-slate-50 border border-slate-200 dark:border-slate-700 dark:bg-gray-800 dark:hover:bg-gray-700 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg shadow-sm transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                aria-label="Refresh test cases"
+              >
+                <RotateCw size={14} className={tc.loading ? 'animate-spin' : ''} />
+              </button>
+
             </div>
           </div>
 
@@ -2092,10 +2284,30 @@ export default function TestCasesPage() {
                           </td>
                           <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{c.suite_name || '—'}</td>
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                            <InlinePrioritySelect priority={c.priority} onChange={(p) => handleTablePriorityChange(c.id, p)} />
+                            <div data-dropdown-cell className="relative inline-block">
+                              <InlinePrioritySelect
+                                priority={c.priority}
+                                onChange={(p) => handleTablePriorityChange(c.id, p)}
+                                rowId={c.id}
+                                openDropdownId={openDropdownId}
+                                openDropdownType={openDropdownType}
+                                onOpen={openDropdown}
+                                onClose={closeDropdown}
+                              />
+                            </div>
                           </td>
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                            <InlineStatusSelect status={(c as any).effective_status || c.status} onChange={(s) => handleTableStatusChange(c.id, s)} />
+                            <div data-dropdown-cell className="relative inline-block">
+                              <InlineStatusSelect
+                                status={c.status}
+                                onChange={(s) => handleTableStatusChange(c.id, s)}
+                                rowId={c.id}
+                                openDropdownId={openDropdownId}
+                                openDropdownType={openDropdownType}
+                                onOpen={openDropdown}
+                                onClose={closeDropdown}
+                              />
+                            </div>
                           </td>
                           <td className="px-4 py-3">
                             <AvatarStack users={(c as any).assignees || []} max={3} size={5} />
@@ -2116,11 +2328,31 @@ export default function TestCasesPage() {
                           <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">TC-{c.id}</p>
                           <p className="text-sm font-medium text-gray-900 dark:text-white mt-0.5">{c.title}</p>
                         </div>
-                        <InlinePrioritySelect priority={c.priority} onChange={(p) => handleTablePriorityChange(c.id, p)} />
+                        <div data-dropdown-cell className="relative inline-block">
+                          <InlinePrioritySelect
+                            priority={c.priority}
+                            onChange={(p) => handleTablePriorityChange(c.id, p)}
+                            rowId={c.id}
+                            openDropdownId={openDropdownId}
+                            openDropdownType={openDropdownType}
+                            onOpen={openDropdown}
+                            onClose={closeDropdown}
+                          />
+                        </div>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <InlineStatusSelect status={(c as any).effective_status || c.status} onChange={(s) => handleTableStatusChange(c.id, s)} />
+                          <div data-dropdown-cell className="relative inline-block">
+                            <InlineStatusSelect
+                              status={c.status}
+                              onChange={(s) => handleTableStatusChange(c.id, s)}
+                              rowId={c.id}
+                              openDropdownId={openDropdownId}
+                              openDropdownType={openDropdownType}
+                              onOpen={openDropdown}
+                              onClose={closeDropdown}
+                            />
+                          </div>
                           <span className="text-[11px] text-gray-400 dark:text-gray-500">{c.suite_name || '—'}</span>
                         </div>
                         <AvatarStack users={(c as any).assignees || []} max={3} size={4} />
@@ -2133,24 +2365,14 @@ export default function TestCasesPage() {
 
             {/* Pagination */}
             {tc.total > 0 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex-wrap gap-2">
-                <p className="text-xs text-gray-500">
-                  Page <span className="font-medium text-gray-900 dark:text-white">{tc.page}</span> of <span className="font-medium text-gray-900 dark:text-white">{totalPages}</span>
-                  <span className="mx-1.5">·</span>
-                  <span className="font-medium text-gray-900 dark:text-white">{tc.total}</span> total
-                </p>
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => tc.setPage(Math.max(1, tc.page - 1))} disabled={tc.page <= 1}
-                    className="w-7 h-7 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium transition-colors">
-                    ‹
-                  </button>
-                  <span className="px-2 text-xs font-medium text-gray-700 dark:text-gray-200">{tc.page} / {totalPages}</span>
-                  <button type="button" onClick={() => tc.setPage(Math.min(totalPages, tc.page + 1))} disabled={tc.page >= totalPages}
-                    className="w-7 h-7 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium transition-colors">
-                    ›
-                  </button>
-                </div>
-              </div>
+              <PaginationBar
+                page={tc.page}
+                total={tc.total}
+                limit={pageLimit}
+                onPage={(p) => tc.setPage(p)}
+                onLimitChange={(l) => { setPageLimit(l); tc.setPerPage(l) }}
+                pageSizeOptions={[10, 20, 30, 50]}
+              />
             )}
           </div>
         </main>

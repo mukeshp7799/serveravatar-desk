@@ -288,7 +288,7 @@ export function useProjectTestCases(projectId: string | number) {
   // Inline status update (PATCH)
   const updateStatus = useCallback(async (caseId: string | number, status: TestStatus) => {
     const res = await api.patch(`/projects/${projectId}/test-cases/${caseId}/status`, { status })
-    if (res.ok) {
+    if (res && res.ok) {
       setTestCases((cs) => cs.map((c) => String(c.id) === String(caseId) ? { ...c, status } : c))
     }
     return res
