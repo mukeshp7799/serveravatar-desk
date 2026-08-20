@@ -247,14 +247,16 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
       {/* Sidebar with vibrant gradient */}
       <aside
         className={[
-          'flex flex-col shrink-0 h-screen bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-800',
+          'flex flex-col shrink-0 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100 border-r border-gray-200 dark:border-gray-800',
           'transition-[width] duration-300 ease-out',
           collapsed ? 'w-68' : 'w-280',
           isMobile
             ? mobileMenuOpen
               ? 'fixed inset-y-0 left-0 z-50 translate-x-0'
               : 'fixed inset-y-0 left-0 z-50 -translate-x-full'
-            : 'fixed inset-y-0 left-0 z-30'
+            : user?.emailVerified === false
+              ? 'fixed top-[52px] bottom-0 left-0 z-30 h-[calc(100vh-52px)]'
+              : 'fixed inset-y-0 left-0 z-30'
         ].join(' ')}
       >
         {/* Header */}

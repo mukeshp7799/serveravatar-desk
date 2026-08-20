@@ -1,5 +1,6 @@
 'use client'
 import PortalModal from '@/components/PortalModal';
+import Scroll from '@/components/Scroll';
 
 /**
  * /projects/[projectId]/test-cases
@@ -1151,9 +1152,9 @@ function DetailPanel({
         <ImageLightbox src={lightboxSrc} alt="Attachment preview" onClose={() => setLightboxSrc(null)} />
       )}
       {/* Backdrop */}
-      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm pointer-events-none" onClick={onClose} />
       {/* Panel */}
-      <aside className="fixed top-0 right-0 z-[99999] h-screen w-full md:w-[700px] max-w-full bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden animate-slide-in-right">
+      <aside className="fixed top-0 right-0 z-[99999] h-screen w-full md:w-[600px] max-w-full bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden animate-slide-in-right">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
           <div className="flex-1 min-w-0">
@@ -1196,8 +1197,12 @@ function DetailPanel({
           })}
         </div>
 
-        {/* Body — scrollable with custom scrollbar */}
-        <div className="flex-1 overflow-y-auto scroll-smooth hover:scroll-auto pr-1 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent">
+        {/* Body — scrollable via Scroll/PerfectScrollbar */}
+        <Scroll
+          containerClassName="flex-1 min-h-0"
+          className="h-full"
+          watch={tab}
+        >
           {detail.loading && !tc && (
             <div className="flex flex-col items-center justify-center py-24 gap-3">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 animate-pulse" />
@@ -1259,7 +1264,7 @@ function DetailPanel({
               onImageClick={(src) => setLightboxSrc(src)}
             />
           )}
-        </div>
+        </Scroll>
 
         <ConfirmDialog
           open={confirmDelCase}
