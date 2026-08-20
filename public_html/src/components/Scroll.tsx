@@ -67,7 +67,7 @@ export default function Scroll({
   }, [])
 
   return (
-    <div className={containerClassName} style={{ position: 'relative' }}>
+    <div className={containerClassName} style={{ position: 'relative', height: '100%' }}>
       <PerfectScrollbar
         ref={ref}
         options={{ ...DEFAULT_OPTIONS, ...options }}

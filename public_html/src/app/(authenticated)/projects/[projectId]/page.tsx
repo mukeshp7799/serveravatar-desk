@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import ProjectLayout from '@/components/project/ProjectLayout'
 import ProjectDashboardCard, { type CardSummaryData } from '@/components/project/ProjectDashboardCard'
-import ProjectStats from '@/components/project/ProjectStats'
 import { FEATURE_CARDS } from '@/lib/project-config'
 import {
   useProjectAndMembers,
@@ -29,7 +28,23 @@ import {
   summarizeTestCases,
 } from '@/lib/dashboard-summaries'
 import { useProjectTestCases } from '@/lib/test-cases-api'
-import type { ProjectStat } from '@/types/project'
+import type { FeatureCardConfig } from '@/types/project'
+
+// Desired card display order for the project tools grid.
+// Row 1: Team Members → Files & Documents → Task Board
+// Row 2: Message Board → To-do Lists → Test Cases
+// Row 3: Schedule → Chat → Activity Timeline
+const CARD_ORDER: FeatureCardConfig[] = [
+  FEATURE_CARDS.find((c) => c.key === 'team')!,
+  FEATURE_CARDS.find((c) => c.key === 'files')!,
+  FEATURE_CARDS.find((c) => c.key === 'task-board')!,
+  FEATURE_CARDS.find((c) => c.key === 'message-board')!,
+  FEATURE_CARDS.find((c) => c.key === 'todos')!,
+  FEATURE_CARDS.find((c) => c.key === 'test-cases')!,
+  FEATURE_CARDS.find((c) => c.key === 'schedule')!,
+  FEATURE_CARDS.find((c) => c.key === 'chat')!,
+  FEATURE_CARDS.find((c) => c.key === 'activity')!,
+]
 
 /**
  * /projects/[projectId] — the Basecamp-style project hub dashboard.
@@ -104,51 +119,8 @@ export default function ProjectDashboardPage() {
     'test-cases':    testCasesRes.refresh,
   }), [msgsRes.refetch, todosRes.refetch, boardRes.refetch, docsRes.refetch, schedRes.refetch, projRes.refetch, chatRes.refetch, actRes.refetch, testCasesRes.refresh])
 
-  // ── Derived data (memoized so we don't recompute on every render) ─
+  // ── Derived data (used in breadcrumb) ───────────────────────────
   const project = projRes.data?.project ?? null
-  const memberCount = projRes.data?.members.length ?? 0
-
-  const stats: ProjectStat[] = useMemo(() => [
-    {
-      key: 'messages',
-      label: 'Messages',
-      value: msgsRes.data?.length ?? 0,
-      trend: msgsRes.data && msgsRes.data.length > 0 ? 'up' : 'flat',
-      trendValue: '—',
-      iconName: 'MessageSquare',
-      tone: 'indigo',
-    },
-    {
-      key: 'todos',
-      label: 'Open to-dos',
-      value: (todosRes.data ?? []).reduce(
-        (sum, l) => sum + (l.items || []).filter((it) => !it.is_completed).length,
-        0,
-      ),
-      trend: 'flat',
-      trendValue: '—',
-      iconName: 'ListChecks',
-      tone: 'emerald',
-    },
-    {
-      key: 'members',
-      label: 'Members',
-      value: memberCount,
-      trend: 'flat',
-      trendValue: '—',
-      iconName: 'Users',
-      tone: 'amber',
-    },
-    {
-      key: 'velocity',
-      label: 'Active tasks',
-      value: (boardRes.data ?? []).reduce((sum, c) => sum + (c.tasks || []).length, 0),
-      trend: 'flat',
-      trendValue: '—',
-      iconName: 'BarChart3',
-      tone: 'sky',
-    },
-  ], [msgsRes.data, todosRes.data, memberCount, boardRes.data])
 
   // ── Render branches ──────────────────────────────────────────────
   // (Hooks above must all run on every render — branches below are fine
@@ -215,9 +187,6 @@ export default function ProjectDashboardPage() {
         </button>
       </div>
 
-      {/* Stats */}
-      <ProjectStats stats={stats} loading={projRes.loading} />
-
       {/* Project tools grid */}
       <div className="grid grid-cols-1 gap-4 sm:gap-5">
         <div>
@@ -228,7 +197,7 @@ export default function ProjectDashboardPage() {
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {FEATURE_CARDS.map((config) => (
+            {CARD_ORDER.map((config) => (
               <ProjectDashboardCard
                 key={config.key}
                 config={config}

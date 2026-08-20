@@ -28,6 +28,65 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '@/lib/api'
 
 /* ──────────────────────────────────────────────────────────────────
+ * Friendly action helpers — reusable across all components that render
+ * activity records.
+ * ────────────────────────────────────────────────────────────────── */
+
+/**
+ * Map raw/lowercase action strings to user-friendly title-case labels.
+ * Covers the most common actions. Falls back to capitalizing whatever
+ * the backend sends.
+ */
+const FRIENDLY_ACTION: Record<string, string> = {
+  created:           'Create',
+  updated:           'Update',
+  edited:            'Edit',
+  moved:             'Move',
+  deleted:           'Delete',
+  completed:         'Complete',
+  archived:          'Archive',
+  restored:          'Restore',
+  posted:            'Post',
+  commented:         'Comment',
+  uploaded:          'Upload',
+  added:             'Add',
+  removed:           'Remove',
+  reopened:          'Reopen',
+  clocked_in:        'Clock In',
+  clocked_out:       'Clock Out',
+  applied:           'Apply',
+  approved:          'Approve',
+  rejected:          'Reject',
+}
+
+export function getFriendlyAction(action: string): string {
+  const lower = action.toLowerCase()
+  return FRIENDLY_ACTION[lower] ?? (action.charAt(0).toUpperCase() + action.slice(1))
+}
+
+/**
+ * Combines the action verb (e.g. "created task") and the target label
+ * (e.g. "Fix bug") into a single, readable activity label.
+ *
+ * Examples:
+ *   ("created task",   "Fix bug") → "Created Fix bug"
+ *   ("posted a message", "Hi everyone") → "Posted Hi everyone"
+ *   ("created task",   null)     → "Created task"
+ */
+export function formatActivityLabel(actionVerb: string, targetLabel: string | null): string {
+  if (!actionVerb) return '—'
+  // Strip any trailing target already embedded in actionVerb, then append
+  // the actual targetLabel so we never double-suffix.
+  const normalised = actionVerb.toLowerCase()
+
+  if (!targetLabel) return getFriendlyAction(normalised.replace(/\s+/g, '_'))
+
+  // Capitalize first letter of the friendly action
+  const friendly = getFriendlyAction(normalised)
+  return `${friendly} ${targetLabel}`
+}
+
+/* ──────────────────────────────────────────────────────────────────
  * Types
  * ────────────────────────────────────────────────────────────────── */
 

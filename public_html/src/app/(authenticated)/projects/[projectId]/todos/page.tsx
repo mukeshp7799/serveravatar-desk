@@ -114,11 +114,11 @@ function NewListModal({
     setSubmitting(true)
     try {
       await onCreate(name.trim(), color)
-      onClose()
     } catch (err: any) {
       toast.error(err.message || 'Failed to create list')
     } finally {
       setSubmitting(false)
+      onClose()
     }
   }
 
@@ -208,11 +208,12 @@ function ItemEditModal({
         assignee_ids: assigneeIds,
         due_date: dueDate || null,
       })
-      onClose()
+      toast.success('To-do updated')
     } catch (err: any) {
       toast.error(err.message || 'Failed to save')
     } finally {
       setSubmitting(false)
+      onClose()
     }
   }
 
@@ -449,9 +450,10 @@ function ListCard({
     if (!t) return
     try {
       await onCreateItem({ title: t })
+      toast.success('To-do added')
       setNewTitle('')
     } catch (err: any) {
-      toast.error(err.message || 'Failed to add')
+      toast.error(err.message || 'Failed to add to-do')
     }
   }
 
@@ -736,6 +738,17 @@ export default function TodosPage() {
     }).catch(() => {/* non-fatal */})
     return () => { cancelled = true }
   }, [projectId])
+
+  // Toast on API load errors (initial or refetch)
+  const prevErrorRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (store.error && store.error !== prevErrorRef.current) {
+      prevErrorRef.current = store.error
+      toast.error(store.error)
+    } else if (!store.error) {
+      prevErrorRef.current = null
+    }
+  }, [store.error])
 
   // Memoised handlers for ListCard so each card's identity is stable
   const handlers = useMemo(() => ({

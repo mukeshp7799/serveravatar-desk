@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import FeaturePage from '@/components/project/FeaturePage'
 import PaginationBar from '@/components/project/PaginationBar'
 import EmptyState from '@/components/project/EmptyState'
 import { fmtRelative } from '@/components/project/format'
-import { useActivities } from '@/lib/project-activities-api'
-import { Activity, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter, Loader2, RefreshCcw, User as UserIcon } from 'lucide-react'
+import { useActivities, getFriendlyAction } from '@/lib/project-activities-api'
+import { TruncatedActivity } from '@/components/project/TruncatedActivity'
+import { Activity, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter, Loader2, RefreshCcw, User as UserIcon } from 'lucide-react'
 
 const FEATURE_LABEL: Record<string, string> = {
   'message-board': 'Message Board',
@@ -55,6 +56,19 @@ export default function ActivityPage() {
   // feels responsive instead of "stuck for a second after each click".
   const atFirst = page <= 1
   const atLast = page >= totalPages
+
+  // Ref for the table card — used to scroll back to the table top on page/limit change.
+  const tableCardRef = useRef<HTMLDivElement>(null)
+
+  // Scroll to the table card whenever page or perPage changes after initial mount.
+  const hasMounted = useRef(false)
+  useEffect(() => {
+    if (!hasMounted.current) {
+      hasMounted.current = true
+      return
+    }
+    tableCardRef.current?.scrollIntoView({ block: 'start' })
+  }, [page, perPage])
 
 
   return (
@@ -162,7 +176,10 @@ export default function ActivityPage() {
             }
           />
         ) : (
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+          <div
+            ref={tableCardRef}
+            className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden"
+          >
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -181,8 +198,8 @@ export default function ActivityPage() {
                     </th>
                     <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400">
                       <span className="inline-flex items-center gap-1.5">
-                        <ArrowUpDown size={12} />
-                        Target
+                        <Activity size={12} />
+                        Activity
                       </span>
                     </th>
                     <th className="text-left px-4 py-3 text-xs uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400">
@@ -212,15 +229,23 @@ export default function ActivityPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-xs">
-                        <span className="text-gray-600 dark:text-gray-400">
-                          {e.actionVerb || e.action}
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 whitespace-nowrap">
+                          {getFriendlyAction(e.actionVerb)}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         {e.targetLabel ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800 whitespace-nowrap">
-                            {e.targetLabel}
+                          <span
+                            data-tooltip-id="app-tooltip"
+                            data-tooltip-content={e.targetLabel}
+                            className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800"
+                          >
+                            <TruncatedActivity
+                              value={e.targetLabel}
+                              maxChars={36}
+                              showTitle={false}
+                            />
                           </span>
                         ) : (
                           <span className="text-gray-400 dark:text-gray-600 text-xs italic">—</span>

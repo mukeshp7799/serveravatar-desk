@@ -202,20 +202,28 @@ function FloatingMenu({
 function Avatar({ user, size = 8 }: { user: BoardUser | SuiteUser | null | undefined; size?: number }) {
   if (!user) return null
   const initials = user.name?.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase() || '?'
+  const hash = (typeof user.id === 'number' ? user.id : Number(user.id) || 1) * 9301 + 49297
+  const hue = (hash % 233280) / 233280 * 360
   return (
     <span
       data-tooltip-id="app-tooltip"
       data-tooltip-content={user.name}
-      className="inline-flex items-center justify-center rounded-full bg-gradient-to-br from-teal-100 to-emerald-100 dark:from-teal-900/50 dark:to-emerald-900/50 text-teal-700 dark:text-teal-300 font-bold shrink-0 select-none cursor-default"
-      style={{ width: size * 4, height: size * 4, fontSize: Math.max(size * 4 * 0.35, 8) }}
+      className="inline-flex items-center justify-center rounded-full ring-2 ring-white dark:ring-gray-900 font-bold shrink-0 select-none cursor-default"
+      style={{
+        width: size * 4,
+        height: size * 4,
+        fontSize: Math.max(size * 4 * 0.35, 8),
+        background: `linear-gradient(135deg, hsl(${hue}, 70%, 50%), hsl(${(hue + 40) % 360}, 70%, 40%))`,
+      }}
     >
-      {initials}
+      <span className="text-white drop-shadow-sm">{initials}</span>
     </span>
   )
 }
 
 /* ──────────────────────────────────────────────────────────────────
  * Avatar stack for multiple assignees
+ * Matches the avatar group styling from the Todo list and project header.
  * ────────────────────────────────────────────────────────────────── */
 function AvatarStack({ users, max = 4, size = 6, showPassed = false }: { users: SuiteUser[]; max?: number; size?: number; showPassed?: boolean }) {
   if (!users.length) return <span className="text-xs text-gray-400 italic">Unassigned</span>
@@ -223,28 +231,27 @@ function AvatarStack({ users, max = 4, size = 6, showPassed = false }: { users: 
   const extra = users.length - max
 
   return (
-    <div className="flex items-center -space-x-1.5">
+    <span className="inline-flex items-center -space-x-1">
       {shown.map((u) => (
-        <div key={u.id} className="relative ring-2 ring-white dark:ring-gray-900 rounded-full">
+        <span key={u.id} className="relative">
           <Avatar user={u} size={size} />
           {showPassed && 'passed' in u && (
             <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-gray-900 ${
               u.passed ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'
             }`} />
           )}
-        </div>
+        </span>
       ))}
       {extra > 0 && (
         <span
           data-tooltip-id="app-tooltip"
           data-tooltip-content={users.slice(max).map((u) => u.name).join(', ')}
-          className="inline-flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 font-bold ring-2 ring-white dark:ring-gray-900"
-          style={{ width: size * 4, height: size * 4, fontSize: Math.max(size * 4 * 0.3, 7) }}
+          className="w-5 h-5 inline-flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-slate-700 dark:text-slate-300 text-[9px] font-medium ring-1 ring-white dark:ring-gray-900 shrink-0 antialiased"
         >
           +{extra}
         </span>
       )}
-    </div>
+    </span>
   )
 }
 
@@ -1152,7 +1159,7 @@ function DetailPanel({
         <ImageLightbox src={lightboxSrc} alt="Attachment preview" onClose={() => setLightboxSrc(null)} />
       )}
       {/* Backdrop */}
-      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm pointer-events-none" onClick={onClose} />
+      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       {/* Panel */}
       <aside className="fixed top-0 right-0 z-[99999] h-screen w-full md:w-[600px] max-w-full bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden animate-slide-in-right">
         {/* Header */}
@@ -2219,7 +2226,7 @@ export default function TestCasesPage() {
                 className="p-2 bg-white hover:bg-slate-50 border border-slate-200 dark:border-slate-700 dark:bg-gray-800 dark:hover:bg-gray-700 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-lg shadow-sm transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                 aria-label="Refresh test cases"
               >
-                <RotateCw size={14} className={tc.loading ? 'animate-spin' : ''} />
+                <RotateCw size={14} className={tc.fetching ? 'animate-spin' : ''} />
               </button>
 
             </div>

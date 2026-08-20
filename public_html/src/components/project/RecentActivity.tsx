@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { ArrowRight, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCcw } from 'lucide-react'
 import { fmtRelative } from './format'
-import { useActivities } from '@/lib/project-activities-api'
+import { useActivities, formatActivityLabel } from '@/lib/project-activities-api'
+import { TruncatedActivity } from '@/components/project/TruncatedActivity'
 import { useMemo } from 'react'
 
 interface RecentActivityProps {
@@ -129,15 +130,11 @@ export default function RecentActivity({ projectId, initialPerPage = 10 }: Recen
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-gray-700 dark:text-gray-300 leading-snug">
                       <span className="font-semibold text-gray-900 dark:text-white">{entry.actor}</span>{' '}
-                      {entry.actionVerb || entry.action}
-                      {entry.targetLabel ? (
-                        <>
-                          {' · '}
-                          <span className="font-medium text-indigo-600 dark:text-indigo-300 group-hover:underline">
-                            {entry.targetLabel}
-                          </span>
-                        </>
-                      ) : null}
+                      <TruncatedActivity
+                        value={formatActivityLabel(entry.actionVerb, entry.targetLabel)}
+                        maxChars={36}
+                        className="text-gray-600 dark:text-gray-400"
+                      />
                     </p>
                     <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 font-medium">
                       <span className="uppercase tracking-wider">{entry.featureLabel}</span>

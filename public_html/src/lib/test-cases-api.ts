@@ -141,14 +141,16 @@ export function useProjectTestCases(projectId: string | number) {
   const [testCases, setTestCases] = useState<TestCase[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [perPage, setPerPage] = useState(15)
+  const [perPage, setPerPage] = useState(10)
   const [filters, setFilters] = useState<ProjectTestCaseFilters>({})
   const [loading, setLoading] = useState(true)
+  const [fetching, setFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const alive = useRef(true)
 
   const fetchSuites = useCallback(async () => {
     if (!projectId) return
+    setFetching(true)
     try {
       const res = await api.get(`/projects/${projectId}/test-suites`)
       if (!alive.current) return
@@ -156,11 +158,14 @@ export function useProjectTestCases(projectId: string | number) {
     } catch (e: any) {
       if (!alive.current) return
       setError(e?.message || 'Failed to load suites')
+    } finally {
+      if (alive.current) setFetching(false)
     }
   }, [projectId])
 
   const fetchTestCases = useCallback(async () => {
     if (!projectId) return
+    setFetching(true)
     try {
       const params: string[] = []
       if (filters.search) params.push(`search=${encodeURIComponent(filters.search)}`)
@@ -179,6 +184,8 @@ export function useProjectTestCases(projectId: string | number) {
     } catch (e: any) {
       if (!alive.current) return
       setError(e?.message || 'Failed to load test cases')
+    } finally {
+      if (alive.current) setFetching(false)
     }
   }, [projectId, filters, page, perPage])
 
@@ -358,6 +365,7 @@ export function useProjectTestCases(projectId: string | number) {
     page,
     perPage,
     loading,
+    fetching,
     error,
     refresh,
     createSuite,
