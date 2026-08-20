@@ -67,7 +67,7 @@ async function loadFull(projectId) {
           WHERE ta.todo_item_id IN (?)`,
         [itemIds]
       )
-    : [];
+    : [[]];
 
   // Group assignees by item id.
   const assigneesByItem = new Map();
