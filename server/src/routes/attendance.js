@@ -460,7 +460,8 @@ router.get('/today', async (req, res, next) => {
 
     const wh = computeWorkingHours(today.clock_in_time, today.clock_out_time, today.total_break_minutes);
     const ebToday = Number(today.effective_break_minutes) || 0;
-    const effectiveWH = (wh != null && ebToday > 0) ? Math.round((wh + ebToday / 60) * 100) / 100 : wh;
+    // effective_break_minutes is audit trail only; total_break_minutes is already adjusted
+    const effectiveWH = wh;
 
     // Live hours: compute only when clocked-in but NOT yet clocked-out
     const activeBreak = breaks.find(b => !b.end_time);
@@ -722,7 +723,8 @@ router.get('/my-history', async (req, res, next) => {
           ? computeLiveWorkingHours(att.clock_in_time, att.total_break_minutes || 0)
           : null);
       const ebTimeline = Number(att?.effective_break_minutes) || 0;
-      const effectiveWH = (wh != null && ebTimeline > 0) ? Math.round((wh + ebTimeline / 60) * 100) / 100 : wh;
+      // effective_break_minutes is audit trail only; total_break_minutes is already adjusted
+      const effectiveWH = wh != null ? Math.round(wh * 100) / 100 : wh;
 
       fullTimeline.push({
         date: ds,
@@ -1068,12 +1070,26 @@ router.put('/:id', async (req, res, next) => {
 function formatAttendance(r) {
   const totalBreak = Number(r.total_break_minutes) || 0;
   const effectiveBreak = Number(r.effective_break_minutes) || 0;
-  // working_hours = shift - (total_break_minutes - effective_break_minutes)
-  //                 = shift - total_break_minutes + effective_break_minutes
-  // After adjustment approval: total_break_minutes = original - approved
-  // and effective_break_minutes = approved, so net = original break used
+  // working_hours = shift - total_break_minutes + effective_break_minutes
+  // After adjustment approval: total_break_minutes = original - approved (break deduction removed)
+  // effective_break_minutes = approved (the credited adjustment minutes = additional work time)
+  // Net break deduction = total_break_minutes - effective_break_minutes = original_break - approved - approved = original_break - 2*approved (wait)
+  // Actually: net deduction = total_break_minutes = original_break - approved
+  // effective_break_minutes = approved (extra work time credited)
+  // So working_hours = (shift - (original_break - approved)) + approved = shift - original_break + 2*approved
+  // But wait — total_break_minutes = original_break - approved, so:
+  // working_hours = (shift - total_break_minutes) + effective_break_minutes = (shift - (original_break - approved)) + approved = shift - original_break + 2*approved
+  // That double-counts! Let me re-think...
+  //
+  // SIMPLIFIED VIEW:
+  // The adjustment credits the employee for minutes they spent on break.
+  // These minutes should be ADDED to working hours (they worked but break was counted).
+  // The MySQL working_hours = shift - total_break_minutes (already reduced by adjustment).
+  // effective_break_minutes is an AUDIT TRAIL ONLY — not added to working_hours.
+  // total_break_minutes is the ADJUSTED break (updated by applyAdjustmentToAttendance).
+  // MySQL's STORED GENERATED working_hours = (shift - adjusted_break) / 60 is correct.
   const wh = computeWorkingHours(r.clock_in_time, r.clock_out_time, totalBreak);
-  const effectiveWH = (wh != null && effectiveBreak > 0) ? wh + effectiveBreak / 60 : wh;
+  const effectiveWH = wh;
   return {
     id: r.id,
     user_id: r.user_id,
@@ -1231,7 +1247,8 @@ router.get('/analytics/summary', async (req, res, next) => {
           // Completed day — compute hours using adjusted break minutes
           const wh = computeWorkingHours(dayRec.clock_in_time, dayRec.clock_out_time, Number(dayRec.total_break_minutes) || 0);
           const eb = Number(dayRec.effective_break_minutes) || 0;
-          const effectiveDayWH = (wh != null && eb > 0) ? wh + eb / 60 : wh;
+          // effective_break_minutes is audit trail only; total_break_minutes is already adjusted
+          const effectiveDayWH = wh;
           if (effectiveDayWH != null) totalWH += effectiveDayWH;
         } else if (dayRec.clock_in_time && !dayRec.clock_out_time && ds === today) {
           // Today (incomplete) — compute live hours from clock-in to now, subtract open break
@@ -1461,7 +1478,8 @@ router.get('/analytics/timeline', async (req, res, next) => {
           ? computeLiveWorkingHours(att.clock_in_time, att.total_break_minutes || 0)
           : null);
       const ebTL = Number(att?.effective_break_minutes) || 0;
-      const effectiveWH = (wh != null && ebTL > 0) ? Math.round((wh + ebTL / 60) * 100) / 100 : wh;
+      // effective_break_minutes is audit trail only; total_break_minutes is already adjusted
+      const effectiveWH = wh;
 
       timeline.push({
         date: ds,
@@ -1698,26 +1716,62 @@ async function getApprovedAdjustmentMinutes(attId, connection = pool) {
 }
 
 /**
- * After an adjustment is approved, recalculate effective_break_minutes and
- * update the attendance working_hours (via the STORED GENERATED column).
- * We credit the adjusted minutes back by reducing total_break_minutes,
- * which makes working_hours reflect the correct value automatically.
- */
-/**
  * Apply a break adjustment approval to the attendance record.
- * - total_break_minutes is reduced (the approved minutes count as work time)
- * - effective_break_minutes accumulates the total approved adjustment
- * This keeps working_hours (stored GENERATED column) auto-correct.
- * Returns the recalculated attendance record.
+ *
+ * The adjustment MOVES time from Break Time to Working Hours:
+ *   adjusted_break    = original_break - adjustment_minutes
+ *   working_hours     = (shift - adjusted_break) / 60
+ *
+ * Implementation steps:
+ * 1. Reduce the specific attendance_breaks.duration_minutes by approvedMinutes
+ * 2. Recalculate attendance.total_break_minutes as SUM of all break durations
+ * 3. MySQL auto-updates working_hours via the STORED GENERATED column
+ * 4. Accumulate effective_break_minutes as an AUDIT TRAIL ONLY
+ *
+ * effective_break_minutes is NOT added to working_hours in any formula.
+ * It exists only to preserve a record of all approved adjustments for auditing.
+ *
+ * @param {number} attId       - attendance record id
+ * @param {number} approvedMinutes - approved adjustment minutes
+ * @param {number} breakId     - specific break record being adjusted
+ * @param {object} connection  - db connection (for transaction)
  */
-async function applyAdjustmentToAttendance(attId, approvedMinutes, connection = pool) {
+async function applyAdjustmentToAttendance(attId, approvedMinutes, breakId, connection = pool) {
+  // Step 1: Reduce the specific break record's duration (this IS the adjustment)
+  await connection.query(
+    `UPDATE attendance_breaks
+     SET duration_minutes = GREATEST(0, duration_minutes - ?)
+     WHERE id = ? AND attendance_id = ?`,
+    [approvedMinutes, breakId, attId]
+  );
+
+  // Step 2: Recalculate total_break_minutes as the sum of all break durations for this attendance
+  // This ensures total_break_minutes always equals SUM(attendance_breaks.duration_minutes)
+  await connection.query(
+    `UPDATE attendance a
+     SET total_break_minutes = COALESCE(
+       (SELECT SUM(ab.duration_minutes)
+        FROM attendance_breaks ab
+        WHERE ab.attendance_id = a.id), 0)
+     WHERE a.id = ?`,
+    [attId]
+  );
+
+  // Step 3: Accumulate effective_break_minutes ONLY for audit trail
+  // It is NOT used in any working_hours calculation
   await connection.query(
     `UPDATE attendance
-     SET total_break_minutes = GREATEST(0, total_break_minutes - ?),
-         effective_break_minutes = effective_break_minutes + ?
+     SET effective_break_minutes = effective_break_minutes + ?
      WHERE id = ?`,
-    [approvedMinutes, approvedMinutes, attId]
+    [approvedMinutes, attId]
   );
+
+  // Step 4: MySQL auto-updates working_hours via the STORED GENERATED column:
+  //   working_hours = (shift_hours - total_break_minutes / 60)
+  // Since total_break_minutes = original_break - adjustment,
+  //   working_hours = (shift - (original_break - adjustment)) / 60
+  //                 = original_working_hours + adjustment / 60 ✓
+
   const [[rec]] = await connection.query(
     'SELECT * FROM attendance WHERE id = ?', [attId]
   );
@@ -1730,15 +1784,35 @@ async function applyAdjustmentToAttendance(attId, approvedMinutes, connection = 
  */
 /**
  * Reverse an approved adjustment (admin action — not currently exposed in API).
- * Restores total_break_minutes and reduces effective_break_minutes.
+ * Restores the break record's duration, recalculates total_break_minutes,
+ * reduces effective_break_minutes (audit trail), and MySQL auto-updates working_hours.
  */
-async function reverseAdjustmentFromAttendance(attId, approvedMinutes, connection = pool) {
+async function reverseAdjustmentFromAttendance(attId, approvedMinutes, breakId, connection = pool) {
+  // Step 1: Restore the specific break record's duration
+  await connection.query(
+    `UPDATE attendance_breaks
+     SET duration_minutes = duration_minutes + ?
+     WHERE id = ? AND attendance_id = ?`,
+    [approvedMinutes, breakId, attId]
+  );
+
+  // Step 2: Recalculate total_break_minutes from all break durations
+  await connection.query(
+    `UPDATE attendance a
+     SET total_break_minutes = COALESCE(
+       (SELECT SUM(ab.duration_minutes)
+        FROM attendance_breaks ab
+        WHERE ab.attendance_id = a.id), 0)
+     WHERE a.id = ?`,
+    [attId]
+  );
+
+  // Step 3: Reduce audit trail
   await connection.query(
     `UPDATE attendance
-     SET total_break_minutes = total_break_minutes + ?,
-         effective_break_minutes = GREATEST(0, effective_break_minutes - ?)
+     SET effective_break_minutes = GREATEST(0, effective_break_minutes - ?)
      WHERE id = ?`,
-    [approvedMinutes, approvedMinutes, attId]
+    [approvedMinutes, attId]
   );
 }
 
@@ -2389,7 +2463,8 @@ router.put('/break-adjustments/:id/approve', async (req, res, next) => {
     );
 
     // Apply the adjustment to attendance
-    await applyAdjustmentToAttendance(existing.attendance_id, existing.requested_minutes, pool);
+    // Pass break_id so the specific break record's duration is reduced
+    await applyAdjustmentToAttendance(existing.attendance_id, existing.requested_minutes, existing.break_id, pool);
 
     const [[updated]] = await pool.query(
       'SELECT * FROM break_adjustment_requests WHERE id = ?',

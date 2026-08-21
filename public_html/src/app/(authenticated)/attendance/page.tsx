@@ -12,7 +12,7 @@ import {
   LogOut, PlayCircle, Search, StopCircle, Users, X,
   Calendar, ChevronLeft, ChevronRight, Clock as ClockIcon,
   AlertTriangle, Gift, Globe, Moon, Sun, Coffee as CoffeeIcon,
-  Briefcase, ArrowUpDown, ArrowUp, ArrowDown,
+  Briefcase, ArrowUpDown, ArrowUp, ArrowDown, Hourglass,
 } from 'lucide-react'
 
 // --- Helpers -----------------------------------------------------------------
@@ -556,6 +556,7 @@ export default function AttendancePage() {
       setMyBreaks(r.attendance?.breaks || [])
     } catch (err: any) {
       console.error('[Attendance] loadToday failed:', err?.message)
+      toast.error(err.message || 'Failed to load today')
     }
   }
 
@@ -573,7 +574,9 @@ export default function AttendancePage() {
       setHistSummary(r.summary || null)
       setHistPage(r.pagination?.page || page)
       setHistTotal(r.pagination?.total || 0)
-    } catch {}
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load history")
+    }
   }
 
   const loadTeam = async () => {
@@ -587,14 +590,18 @@ export default function AttendancePage() {
       setTeamRecords(team.records || [])
       setStats(st.stats || {})
       setDepartments(depts.departments || [])
-    } catch {} finally { setTeamLoading(false) }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load team")
+    } finally { setTeamLoading(false) }
   }
 
   const loadAdjustmentStats = async () => {
     try {
       const r = await api.get('/attendance/break-adjustments/stats')
       setAdjStats(r)
-    } catch {}
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load stats")
+    }
   }
 
   const loadAdjustments = async (page = adjPage, status = adjFilter, limit = 10, search = adjSearch) => {
@@ -606,7 +613,9 @@ export default function AttendancePage() {
       const r = await api.get(`/attendance/break-adjustments?${params}`)
       setAdjustments(r.requests || [])
       setAdjTotal(r.pagination?.total || 0)
-    } catch {} finally {
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load adjustments")
+    } finally {
       setAdjLoading(false)
     }
   }
@@ -695,7 +704,9 @@ export default function AttendancePage() {
       ])
       setDepartments(d.departments || [])
       setEmployees(e.employees || e.records || [])
-    } catch {}
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load report data")
+    }
   }
 
   const loadSummary = useCallback(async (page: number, limitOverride?: number) => {
@@ -910,13 +921,13 @@ export default function AttendancePage() {
       )}
 
       {/* Top-level Tabs */}
-      <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 dark:[background-color:#1f2937]">
+      <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 rounded-xl gap-1">
         {topTabs.map(tb => (
           <button key={tb.key} onClick={() => setTab(tb.key)}
-            className={`px-4 sm:px-5 py-2 rounded-lg text-sm font-semibold transition cursor-pointer border-0 ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer border-0 ${
               tab === tb.key
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300'
+                ? 'bg-indigo-600 text-white shadow-sm font-semibold'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
             }`}>
             {tb.label}
           </button>
@@ -1065,19 +1076,19 @@ export default function AttendancePage() {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 dark:bg-gray-700/50">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">#</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Start</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">End</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Duration</th>
+                          <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">#</th>
+                          <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Start</th>
+                          <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">End</th>
+                          <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Duration</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                         {myBreaks.map((b: any, i: number) => (
                           <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                            <td className="px-4 py-3 text-gray-400 dark:text-gray-500">{i + 1}</td>
-                            <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{fmtTime(b.start_time)}</td>
-                            <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{b.end_time ? fmtTime(b.end_time) : <span className="text-amber-500 font-medium">In progress</span>}</td>
-                            <td className="px-4 py-3 font-semibold text-amber-600 dark:text-amber-400">{fmtBreak(b.duration_minutes)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-gray-400 dark:text-gray-500">{i + 1}</td>
+                            <td className="whitespace-nowrap px-4 py-3 font-medium text-gray-900 dark:text-white">{fmtTime(b.start_time)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-400">{b.end_time ? fmtTime(b.end_time) : <span className="text-amber-500 font-medium">In progress</span>}</td>
+                            <td className="whitespace-nowrap px-4 py-3 font-semibold text-amber-600 dark:text-amber-400">{fmtBreak(b.duration_minutes)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1129,7 +1140,7 @@ export default function AttendancePage() {
               </div>
 
               {/* Date inputs */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="date"
                   value={histDateFrom}
@@ -1195,27 +1206,27 @@ export default function AttendancePage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Clock In</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Clock Out</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Break</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Working Hrs</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Late</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Remarks</th>
-                    {perms.includes('attendance.break_adjustment.request') && <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Adjustments</th>}
-                    {perms.includes('attendance.break_adjustment.request') && <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>}
+                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Date</th>
+                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Clock In</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Clock Out</th>
+                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Break</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Working Hrs</th>
+                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Late</th>
+                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Remarks</th>
+                    {perms.includes('attendance.break_adjustment.request') && <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Adjustments</th>}
+                    {perms.includes('attendance.break_adjustment.request') && <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {history.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500 text-sm">No attendance records found.</td>
+                      <td colSpan={9} className="whitespace-nowrap px-4 py-12 text-center text-gray-400 dark:text-gray-500 text-sm">No attendance records found.</td>
                     </tr>
                   ) : history.map((r: any) => (
                     <tr key={r.date} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{fmtDate(r.date)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{fmtDate(r.date)}</td>
+                      <td className="whitespace-nowrap px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                           r.status === 'present' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
                           r.status === 'absent' ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' :
@@ -1227,16 +1238,16 @@ export default function AttendancePage() {
                           {r.status_label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.clock_in_time ? fmtHHMM(r.clock_in_time, companyTz) : '—'}</td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.clock_out_time ? fmtHHMM(r.clock_out_time, companyTz) : '—'}</td>
-                      <td className="px-4 py-3 font-semibold text-amber-600 dark:text-amber-400">{fmtBreak(r.total_break_minutes)}</td>
-                      <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{fmtHours(r.working_hours)}</td>
-                      <td className="px-4 py-3 text-red-500">{r.is_late ? `${r.late_minutes}m` : '—'}</td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs max-w-[150px] truncate">
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap">{r.clock_in_time ? fmtHHMM(r.clock_in_time, companyTz) : '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap">{r.clock_out_time ? fmtHHMM(r.clock_out_time, companyTz) : '—'}</td>
+                      <td className="px-4 py-3 font-semibold text-amber-600 dark:text-amber-400 whitespace-nowrap">{fmtBreak(r.total_break_minutes)}</td>
+                      <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{fmtHours(r.working_hours)}</td>
+                      <td className="px-4 py-3 text-red-500 whitespace-nowrap">{r.is_late ? `${r.late_minutes}m` : '—'}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-gray-500 dark:text-gray-400  text-xs max-w-[150px] truncate">
                         {r.holiday_name ? r.holiday_name : r.leave_reason ? r.leave_reason : r.remarks || '—'}
                       </td>
                       {perms.includes('attendance.break_adjustment.request') && (
-                        <td className="px-4 py-3 text-center">
+                        <td className="whitespace-nowrap px-4 py-3 text-center">
                           {r.adjustments && r.adjustments.length > 0 ? (
                             <button
                               onClick={() => setAdjDetailModal({ date: r.date, adjustments: r.adjustments })}
@@ -1252,9 +1263,9 @@ export default function AttendancePage() {
                         </td>
                       )}
                       {perms.includes('attendance.break_adjustment.request') && (
-                        <td className="px-4 py-3 text-center">
+                        <td className="whitespace-nowrap px-4 py-3 text-center">
                           {r.attendance_id && r.status === 'present' && (
-                            <>
+                            <div className='flex items-center gap-2'>
                               <button
                                 onClick={() => setAdjDetailModal({ date: r.date, adjustments: r.adjustments || [] })}
                                 className="px-2 py-1 text-xs font-medium text-slate-600 dark:text-slate-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600 rounded-lg transition cursor-pointer mr-1"
@@ -1267,7 +1278,7 @@ export default function AttendancePage() {
                               >
                                 Adjust
                               </button>
-                            </>
+                            </div>
                           )}
                         </td>
                       )}
@@ -1336,34 +1347,34 @@ export default function AttendancePage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Employee</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Dept</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Clock In</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Clock Out</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Break</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Working Hrs</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Late</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Employee</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Dept</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Clock In</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Clock Out</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Break</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Working Hrs</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Late</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {teamRecords.map((r: any) => (
                   <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                    <td className="px-4 py-3">
+                    <td className="whitespace-nowrap px-4 py-3">
                       <div className="font-medium text-gray-900 dark:text-white">{r.first_name} {r.last_name}</div>
                       <div className="text-xs text-gray-400">{r.email}</div>
                     </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.department_name || '—'}</td>
-                    <td className="px-4 py-3">{statusBadge(r.status)}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{fmtTime(r.clock_in_time)}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{fmtTime(r.clock_out_time)}</td>
-                    <td className="px-4 py-3 font-semibold text-amber-600 dark:text-amber-400">{fmtBreak(r.total_break_minutes)}</td>
-                    <td className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{fmtHours(r.live_working_hours ?? r.working_hours)}</td>
-                    <td className="px-4 py-3 text-red-500">{r.is_late ? `${r.late_minutes}m` : '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-400">{r.department_name || '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-3">{statusBadge(r.status)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-400">{fmtTime(r.clock_in_time)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-400">{fmtTime(r.clock_out_time)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-semibold text-amber-600 dark:text-amber-400">{fmtBreak(r.total_break_minutes)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400">{fmtHours(r.live_working_hours ?? r.working_hours)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-red-500">{r.is_late ? `${r.late_minutes}m` : '—'}</td>
                   </tr>
                 ))}
                 {teamRecords.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400 dark:text-gray-500">No records found.</td></tr>
+                  <tr><td colSpan={8} className="whitespace-nowrap px-4 py-12 text-center text-gray-400 dark:text-gray-500">No records found.</td></tr>
                 )}
               </tbody>
             </table>
@@ -1458,7 +1469,7 @@ export default function AttendancePage() {
                   return (
                     <th
                       onClick={() => handleSort(col)}
-                      className={`px-4 py-3 text-${align} text-xs font-semibold uppercase cursor-pointer select-none whitespace-nowrap ${active ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'} hover:text-indigo-500 dark:hover:text-indigo-300 transition-colors`}
+                      className={`px-4 py-3 text-${align} text-xs font-semibold whitespace-nowrap uppercase cursor-pointer select-none whitespace-nowrap ${active ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'} hover:text-indigo-500 dark:hover:text-indigo-300 transition-colors`}
                     >
                       <span className={`flex items-center gap-1.5 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}`}>
                         {label}
@@ -1497,35 +1508,50 @@ export default function AttendancePage() {
                               <SortTh col="total_break_minutes" label="Total Break" align="center" />
                               <SortTh col="total_break_adjustment_minutes" label="Break Adj" align="center" />
                               <SortTh col="average_working_hours" label="Avg Working Hrs" align="center" />
-                              <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Action</th>
+                              <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Action</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {summaries.map(s => (
-                              <tr key={s.user_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                                <td className="px-4 py-3">
-                                  <div className="font-medium text-gray-900 dark:text-white whitespace-nowrap">{s.first_name} {s.last_name}</div>
-                                  <div className="text-xs text-gray-400">{s.department_name || '—'}</div>
-                                </td>
-                                <td className="px-4 py-3 text-center font-semibold text-gray-900 dark:text-white">{s.total_days}</td>
-                                <td className="px-4 py-3 text-center font-semibold text-blue-600 dark:text-blue-400">{s.working_days}</td>
-                                <td className="px-4 py-3 text-center text-purple-600 dark:text-purple-400">{s.weekends}</td>
-                                <td className="px-4 py-3 text-center text-indigo-600 dark:text-indigo-400">{s.company_holidays}</td>
-                                <td className="px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">{s.present_days}</span></td>
-                                <td className="px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">{s.approved_leave_days}</span></td>
-                                <td className="px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-500 dark:bg-red-900/30 dark:text-red-400">{s.absent_days}</span></td>
-                                <td className="px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">{s.late_checkins}</span></td>
-                                <td className="px-4 py-3 text-center text-teal-600 dark:text-teal-400 font-semibold whitespace-nowrap">{fmtHours(s.total_working_hours)}</td>
-                                <td className="px-4 py-3 text-center text-orange-600 dark:text-orange-400 whitespace-nowrap">{fmtBreak(s.total_break_minutes)}</td>
-                                <td className="px-4 py-3 text-center text-rose-600 dark:text-rose-400 whitespace-nowrap">{fmtBreak(s.total_break_adjustment_minutes)}</td>
-                                <td className="px-4 py-3 text-center text-indigo-600 dark:text-indigo-400 font-semibold whitespace-nowrap">{fmtHours(s.average_working_hours)}</td>
-                                <td className="px-4 py-3 text-center whitespace-nowrap">
-                                  <button onClick={() => viewTimeline(s)} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 rounded-lg transition cursor-pointer border-0">
-                                    <Eye size={12} /> Timeline
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
+                                                        {(
+                              (() => {
+                                const sorted = [...summaries].sort((a, b) => {
+                                  if (!sortKey) return 0
+                                  const dir = sortDir === 'asc' ? 1 : -1
+                                  if (sortKey === 'employee') {
+                                    return dir * (`${a.first_name} ${a.last_name}`).localeCompare(`${b.first_name} ${b.last_name}`)
+                                  }
+                                  const aVal = a[sortKey as keyof typeof a]
+                                  const bVal = b[sortKey as keyof typeof b]
+                                  if (aVal == null || bVal == null) return 0
+                                  return (Number(aVal) - Number(bVal)) * dir
+                                })
+                                return sorted.map(s => (
+                                  <tr key={s.user_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                                    <td className="whitespace-nowrap px-4 py-3">
+                                      <div className="font-medium text-gray-900 dark:text-white whitespace-nowrap">{s.first_name} {s.last_name}</div>
+                                      <div className="text-xs text-gray-400">{s.department_name || '—'}</div>
+                                    </td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-center font-semibold text-gray-900 dark:text-white">{s.total_days}</td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-center font-semibold text-blue-600 dark:text-blue-400">{s.working_days}</td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-center text-purple-600 dark:text-purple-400">{s.weekends}</td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-center text-indigo-600 dark:text-indigo-400">{s.company_holidays}</td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">{s.present_days}</span></td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">{s.approved_leave_days}</span></td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-500 dark:bg-red-900/30 dark:text-red-400">{s.absent_days}</span></td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-center"><span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">{s.late_checkins}</span></td>
+                                    <td className="px-4 py-3 text-center text-teal-600 dark:text-teal-400 font-semibold whitespace-nowrap">{fmtHours(s.total_working_hours)}</td>
+                                    <td className="px-4 py-3 text-center text-orange-600 dark:text-orange-400 whitespace-nowrap">{fmtBreak(s.total_break_minutes)}</td>
+                                    <td className="px-4 py-3 text-center text-rose-600 dark:text-rose-400 whitespace-nowrap">{fmtBreak(s.total_break_adjustment_minutes)}</td>
+                                    <td className="px-4 py-3 text-center text-indigo-600 dark:text-indigo-400 font-semibold whitespace-nowrap">{fmtHours(s.average_working_hours)}</td>
+                                    <td className="px-4 py-3 text-center whitespace-nowrap">
+                                      <button onClick={() => viewTimeline(s)} className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 rounded-lg transition cursor-pointer border-0">
+                                        <Eye size={12} /> Timeline
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))
+                              })()
+                            )}
                           </tbody>
                         </table>
                       </div>
@@ -1630,7 +1656,7 @@ export default function AttendancePage() {
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Breaks</th>
                             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Wrk Hrs</th>
                             <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Late</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Remarks</th>
+                            <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Remarks</th>
                             {isHRAdmin && (
                               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide whitespace-nowrap">Action</th>
                             )}
@@ -1644,7 +1670,7 @@ export default function AttendancePage() {
                             return (
                               <tr key={day.date} className={`${isOdd ? 'bg-gray-50/60 dark:bg-gray-700/20' : ''} hover:bg-indigo-50/40 dark:hover:bg-indigo-900/20 transition-colors`}>
                                 {/* Date */}
-                                <td className="px-4 py-3">
+                                <td className="whitespace-nowrap px-4 py-3">
                                   <span className="font-semibold text-gray-900 dark:text-white text-xs whitespace-nowrap">{fmtDate(day.date)}</span>
                                   {day.holiday_name && (
                                     <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium mt-0.5">🎉 {day.holiday_name}</div>
@@ -1654,19 +1680,19 @@ export default function AttendancePage() {
                                   )}
                                 </td>
                                 {/* Day of week */}
-                                <td className="px-4 py-3">
+                                <td className="whitespace-nowrap px-4 py-3">
                                   <span className={`text-xs font-medium ${day.day_of_week === 0 || day.day_of_week === 6 ? 'text-amber-500' : 'text-gray-500 dark:text-gray-400'}`}>
                                     {DAY_LABELS[day.day_of_week]}
                                   </span>
                                 </td>
                                 {/* Status badge */}
-                                <td className="px-4 py-3">
+                                <td className="whitespace-nowrap px-4 py-3">
                                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${meta.bg} ${meta.color} border-0 whitespace-nowrap`}>
                                     {meta.label}
                                   </span>
                                 </td>
                                 {/* Clock In */}
-                                <td className="px-4 py-3">
+                                <td className="whitespace-nowrap px-4 py-3">
                                   {day.status === 'present' && day.clock_in_time ? (
                                     <div className="flex items-center gap-1.5">
                                       <LogIn size={11} className="text-emerald-500 shrink-0" />
@@ -1676,7 +1702,7 @@ export default function AttendancePage() {
                                   ) : <span className="text-xs text-gray-300 dark:text-gray-600">—</span>}
                                 </td>
                                 {/* Clock Out */}
-                                <td className="px-4 py-3">
+                                <td className="whitespace-nowrap px-4 py-3">
                                   {day.status === 'present' && day.clock_out_time ? (
                                     <div className="flex items-center gap-1.5">
                                       <LogOut size={11} className="text-indigo-500 shrink-0" />
@@ -1685,7 +1711,7 @@ export default function AttendancePage() {
                                   ) : <span className="text-xs text-gray-300 dark:text-gray-600">—</span>}
                                 </td>
                                 {/* Breaks */}
-                                <td className="px-4 py-3">
+                                <td className="whitespace-nowrap px-4 py-3">
                                   {day.breaks.length > 0 ? (
                                     <div className="space-y-0.5">
                                       {day.breaks.map(br => (
@@ -1698,26 +1724,26 @@ export default function AttendancePage() {
                                   ) : <span className="text-xs text-gray-300 dark:text-gray-600">—</span>}
                                 </td>
                                 {/* Working Hours */}
-                                <td className="px-4 py-3 text-center">
+                                <td className="whitespace-nowrap px-4 py-3 text-center">
                                   <span className={`text-xs font-bold ${day.working_hours != null ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-300 dark:text-gray-600'}`}>
                                     {day.working_hours != null ? fmtHours(day.working_hours) : '—'}
                                   </span>
                                 </td>
                                 {/* Late */}
-                                <td className="px-4 py-3 text-center">
+                                <td className="whitespace-nowrap px-4 py-3 text-center">
                                   {day.is_late ? (
                                     <span className="text-xs font-bold text-red-500">{day.late_minutes}m</span>
                                   ) : <span className="text-xs text-gray-300 dark:text-gray-600">—</span>}
                                 </td>
                                 {/* Remarks */}
-                                <td className="px-4 py-3 max-w-[160px]">
+                                <td className="whitespace-nowrap px-4 py-3 max-w-[160px]">
                                   <span className="text-xs text-gray-500 dark:text-gray-400 italic truncate block" title={day.remarks || ''}>
                                     {day.remarks || <span className="text-gray-300 dark:text-gray-600">—</span>}
                                   </span>
                                 </td>
                                 {/* Action */}
                                 {isHRAdmin && (
-                                  <td className="px-4 py-3 text-center">
+                                  <td className="whitespace-nowrap px-4 py-3 text-center">
                                     {isEditable ? (
                                       <button onClick={() => setEditDay(day)}
                                         className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition cursor-pointer bg-transparent border-0">
@@ -1757,77 +1783,90 @@ export default function AttendancePage() {
       {/* ====================================================================== */}
       {tab === 'adjustments' && isHRAdmin && (
         <div className="space-y-4">
-          {/* Header */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-              {isHRAdmin ? 'Break Adjustment Requests' : 'My Adjustments'}
-            </h2>
-          </div>
+          {/* Row 1 — Title (left) + Stat Cards (right) */}
+          <div className="">
+            {/* Left: title + controls below it */}
+              <h2 className="text-lg mb-5 font-bold  dark:text-white tracking-tight">
+                {isHRAdmin ? 'Break Adjustment Requests' : 'My Adjustments'}
+              </h2>
+            <div className='flex flex-wrap justify-between items-center gap-5 gap-y-3'>
+              {/* Controls — below title, right-aligned to title */}
+              <div className="flex items-center flex-wrap  gap-2">
+                {/* Search field */}
+                <div className="relative">
+                  <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m21 21-4.35-4.35"/></svg>
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={adjSearch}
+                    onChange={e => { setAdjSearch(e.target.value); debouncedLoadAdjustments(e.target.value) }}
+                    className="h-10 pl-8 pr-7 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-400 w-44"
+                  />
+                  {adjSearch && (
+                    <button
+                      onClick={() => { setAdjSearch(''); setAdjPage(1); loadAdjustments(1, adjFilter, 10, '') }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-200 transition cursor-pointer border-0 bg-transparent"
+                      title="Clear"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                  )}
+                </div>
 
-          {/* Stats cards */}
-          <div className="flex gap-3 flex-wrap">
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-2 text-center">
-              <div className="text-xl font-bold text-amber-600">{adjStats.pending_count}</div>
-              <div className="text-xs text-amber-500">Pending</div>
-            </div>
-            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-2 text-center">
-              <div className="text-xl font-bold text-emerald-600">{adjStats.approved_today}</div>
-              <div className="text-xs text-emerald-500">Approved Today</div>
-            </div>
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-2 text-center">
-              <div className="text-xl font-bold text-red-600">{adjStats.rejected_today}</div>
-              <div className="text-xs text-red-500">Rejected Today</div>
-            </div>
-          </div>
-
-          {/* Filter bar: Search → Status → Refresh */}
-          <div className="flex flex-wrap justify-end gap-3 items-center">
-            {/* Search field */}
-            <div className="relative flex-1 min-w-[180px] max-w-xs">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m21 21-4.35-4.35"/></svg>
-              <input
-                type="text"
-                placeholder="Search..."
-                value={adjSearch}
-                onChange={e => { setAdjSearch(e.target.value); debouncedLoadAdjustments(e.target.value) }}
-                className="w-full pl-9 pr-8 py-2.5 border border-gray-300 dark:border-gray-500 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder-gray-400"
-              />
-              {adjSearch && (
-                <button
-                  onClick={() => { setAdjSearch(''); setAdjPage(1); loadAdjustments(1, adjFilter, 10, '') }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition cursor-pointer border-0 bg-transparent"
-                  title="Clear"
+                {/* Status */}
+                <select
+                  value={adjFilter}
+                  onChange={e => { const val = e.target.value as '' | 'Pending' | 'Approved' | 'Rejected'; setAdjFilter(val); setAdjPage(1); loadAdjustments(1, val, 10, adjSearch) }}
+                  className="h-10 px-3 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                  <option value="">All</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+
+                {/* Refresh */}
+                <button
+                  onClick={() => loadAdjustments(adjPage, adjFilter, 10, adjSearch)}
+                  disabled={adjLoading}
+                  className={`h-10 w-10 flex items-center justify-center rounded-lg transition border border-slate-200 dark:border-slate-700 disabled:opacity-60 disabled:cursor-not-allowed ${adjLoading ? 'text-slate-400 bg-white dark:bg-slate-800 cursor-not-allowed' : 'text-slate-500 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer'}`}
+                  title="Refresh"
+                >
+                  <svg className={`w-3.5 h-3.5 ${adjLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 </button>
-              )}
+              </div>
+            
+
+            {/* Stat cards — pill badges, far right */}
+            <div className="flex flex-wrap items-center gap-3 ">
+              {/* Pending */}
+              <div className="relative inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm font-medium px-3 py-2 shadow-sm">
+                <Hourglass size={14} className="text-amber-500 shrink-0" />
+                <span>Pending</span>
+                <span className="absolute -top-2 -right-2 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-amber-500 text-white text-xs font-bold shadow-md">
+                  {adjStats.pending_count}
+                </span>
+              </div>
+
+              {/* Approved Today */}
+              <div className="relative inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm font-medium px-3 py-2 shadow-sm">
+                <CheckCircle size={14} className="text-emerald-500 shrink-0" />
+                <span>Approved Today</span>
+                <span className="absolute -top-2 -right-2 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-emerald-500 text-white text-xs font-bold shadow-md">
+                  {adjStats.approved_today}
+                </span>
+              </div>
+
+              {/* Rejected Today */}
+              <div className="relative inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-sm font-medium px-3 py-2 shadow-sm">
+                <X size={14} className="text-rose-500 shrink-0" />
+                <span>Rejected Today</span>
+                <span className="absolute -top-2 -right-2 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-rose-500 text-white text-xs font-bold shadow-md">
+                  {adjStats.rejected_today}
+                </span>
+              </div>
             </div>
-
-            {/* Status */}
-            <select
-              value={adjFilter}
-              onChange={e => { const val = e.target.value as '' | 'Pending' | 'Approved' | 'Rejected'; setAdjFilter(val); setAdjPage(1); loadAdjustments(1, val, 10, adjSearch) }}
-              className="px-3 py-2.5 border border-gray-300 dark:border-gray-500 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-            >
-              <option value="">All</option>
-              <option value="Pending">Pending</option>
-              <option value="Approved">Approved</option>
-              <option value="Rejected">Rejected</option>
-            </select>
-
-            {/* Refresh */}
-            <button
-              onClick={() => loadAdjustments(adjPage, adjFilter, 10, adjSearch)}
-              disabled={adjLoading}
-              className={`p-2 rounded-lg transition border-0 ${adjLoading ? 'text-gray-400 cursor-not-allowed bg-gray-100 dark:bg-gray-700' : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer'}`}
-              title="Refresh"
-            >
-              {adjLoading ? (
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-              )}
-            </button>
+            </div>
           </div>
 
           {/* Table */}
@@ -1836,59 +1875,59 @@ export default function AttendancePage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
                   <tr>
-                    {isHRAdmin && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Employee</th>}
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Break</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Adj. Mins</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Reason</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Reviewed By</th>
-                    {isHRAdmin && <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>}
+                    {isHRAdmin && <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Employee</th>}
+                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
+                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Break</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap tracking-wider">Adj. Mins</th>
+                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Reason</th>
+                    <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap tracking-wider">Reviewed By</th>
+                    {isHRAdmin && <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {adjustments.length === 0 ? (
-                    <tr><td colSpan={isHRAdmin ? 8 : 7} className="px-4 py-8 text-center text-gray-400 text-sm">No adjustment requests found.</td></tr>
+                    <tr><td colSpan={isHRAdmin ? 8 : 7} className="whitespace-nowrap px-4 py-8 text-center text-gray-400 text-sm">No adjustment requests found.</td></tr>
                   ) : adjustments.map(r => (
                     <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                       {isHRAdmin && (
-                        <td className="px-4 py-3">
+                        <td className="whitespace-nowrap px-4 py-3">
                           <div className="font-medium text-gray-900 dark:text-white text-xs">{r.employee.first_name} {r.employee.last_name}</div>
                           <div className="text-gray-400 text-xs">{r.employee.department_name || '—'}</div>
                         </td>
                       )}
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{fmtDate(r.attendance.date)}</td>
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600 dark:text-gray-300">{fmtDate(r.attendance.date)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
                         <div>{fmtTime(r.break.start_time)} → {fmtTime(r.break.end_time)}</div>
-                        <div className="text-gray-400">({r.break.duration_minutes} min break)</div>
+                        <div className="text-gray-400">({fmtBreak(r.break.duration_minutes)})</div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="whitespace-nowrap px-4 py-3">
                         {r.time_start && r.time_end ? (
                           <div>
                             <span className="font-bold text-indigo-600 text-xs">{fmtHHMM(r.time_start)}</span>
                             <span className="text-gray-400 text-xs mx-1">→</span>
                             <span className="font-bold text-indigo-600 text-xs">{fmtHHMM(r.time_end)}</span>
-                            <div className="text-xs text-gray-400">+{r.requested_minutes} min</div>
+                            <div className="text-xs text-gray-400">{fmtBreak(r.requested_minutes)}</div>
                           </div>
                         ) : (
-                          <span className="font-bold text-indigo-600 text-sm">+{r.requested_minutes} min</span>
+                          <span className="font-bold text-indigo-600 text-sm">{fmtBreak(r.requested_minutes)}</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 max-w-[200px]">
+                      <td className="whitespace-nowrap px-4 py-3 max-w-[200px]">
                         <p className="text-xs text-gray-600 dark:text-gray-300 truncate block" title={r.reason}>{r.reason}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="whitespace-nowrap px-4 py-3">
                         {r.status === 'Pending' && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Pending</span>}
                         {r.status === 'Approved' && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Approved</span>}
                         {r.status === 'Rejected' && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">Rejected</span>}
                         {r.admin_remarks && <p className="text-xs text-gray-400 mt-0.5 italic truncate block max-w-[160px]" title={r.admin_remarks}>"{r.admin_remarks}"</p>}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
                         {r.reviewer ? `${r.reviewer.first_name} ${r.reviewer.last_name}` : '—'}
                         {r.reviewed_at && <div className="text-gray-400">{fmtDate(r.reviewed_at)}</div>}
                       </td>
                       {isHRAdmin && (
-                        <td className="px-4 py-3 text-center">
+                        <td className="whitespace-nowrap px-4 py-3 text-center">
                           {r.status === 'Pending' ? (
                             <div className="flex items-center justify-center gap-2">
                               <button onClick={() => { setReviewModal(r); setReviewAction('approve'); setReviewRemarks(''); setShowRequestModal(false) }}
@@ -2068,8 +2107,8 @@ export default function AttendancePage() {
                   <span className="text-gray-500">Requested</span>
                   <span className="font-bold text-indigo-600">
                     {reviewModal.time_start && reviewModal.time_end
-                      ? fmtHHMM(reviewModal.time_start) + ' – ' + fmtHHMM(reviewModal.time_end) + ' (+' + reviewModal.requested_minutes + ' min)'
-                      : '+' + reviewModal.requested_minutes + ' min as work'
+                      ? fmtHHMM(reviewModal.time_start) + ' – ' + fmtHHMM(reviewModal.time_end) + ' (' + fmtBreak(reviewModal.requested_minutes) + ')'
+                      : fmtBreak(reviewModal.requested_minutes) + ' as work'
                     }
                   </span>
                 </div>
@@ -2134,7 +2173,7 @@ export default function AttendancePage() {
                       }`}>
                         {adj.status}
                       </span>
-                      <span className="text-xs text-gray-400">+{adj.requested_minutes} min</span>
+                      <span className="text-xs text-gray-400">{fmtBreak(adj.requested_minutes)}</span>
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-start gap-2">
