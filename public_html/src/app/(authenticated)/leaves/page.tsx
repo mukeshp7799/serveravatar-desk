@@ -287,7 +287,7 @@ export default function LeavesPage() {
   const user = typeof window !== 'undefined'
     ? JSON.parse(localStorage.getItem('user') || '{}') : {}
   const isHRAdmin = Array.isArray(user.permissions) && (
-    user.permissions.includes('leave.manage_all') || user.permissions.includes('users.edit_all'))
+    user.permissions.includes('leaves.manage') || user.permissions.includes('users.edit_all'))
   const isManager = Array.isArray(user.permissions) && (
     user.permissions.includes('leave.view_team') || isHRAdmin)
 

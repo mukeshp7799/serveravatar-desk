@@ -17,15 +17,15 @@ router.get('/', auth, async (req, res, next) => {
 
     // Pending approvals for managers and HR
     let pendingApprovals = [];
-    if (perms.includes('leave.approve')) {
-      const canManageAll = perms.includes('leave.manage_all');
+    if (perms.includes('leaves.approve')) {
+      const canManageAll = perms.includes('leaves.manage');
       let query = `SELECT lr.*, u.first_name, u.last_name, lt.name as leave_type
                    FROM leave_requests lr JOIN users u ON lr.user_id = u.id
                    JOIN leave_types lt ON lr.leave_type_id = lt.id
                    WHERE lr.status = 'pending'`;
       let params = [];
-      // Managers (without `leave.manage_all`) only see their direct reports'
-      // requests. HR/Admins (with `leave.manage_all`) see all.
+      // Managers (without `leaves.manage`) only see their direct reports'
+      // requests. HR/Admins (with `leaves.manage`) see all.
       if (!canManageAll) {
         query += ' AND (u.reporting_manager_id = ? OR lr.user_id = ?)';
         params = [userId, userId];

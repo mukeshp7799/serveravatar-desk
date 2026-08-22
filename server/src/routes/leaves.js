@@ -289,7 +289,7 @@ router.get('/types', auth, async (req, res, next) => {
 router.post('/types', auth, async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('leave.manage_all') && !perms.includes('users.edit_all')) {
+    if (!perms.includes('leaves.manage') && !perms.includes('users.edit_all')) {
       return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
     }
     const { name, code, description, is_paid, default_days, max_allowed } = req.body;
@@ -315,7 +315,7 @@ router.post('/types', auth, async (req, res, next) => {
 router.put('/types/:id', auth, async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('leave.manage_all') && !perms.includes('users.edit_all')) {
+    if (!perms.includes('leaves.manage') && !perms.includes('users.edit_all')) {
       return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
     }
     const { name, code, description, is_paid, default_days, max_allowed, status } = req.body;
@@ -339,7 +339,7 @@ router.put('/types/:id', auth, async (req, res, next) => {
 router.delete('/types/:id', auth, async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('leave.manage_all') && !perms.includes('users.edit_all')) {
+    if (!perms.includes('leaves.manage') && !perms.includes('users.edit_all')) {
       return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
     }
     // Check for existing approved/pending requests
@@ -373,7 +373,7 @@ router.get('/balance/:userId', auth, async (req, res, next) => {
     const targetId = parseInt(req.params.userId, 10);
     const perms = req.user.permissions || [];
     const isSelf = targetId === req.user.id;
-    const canViewAll = perms.includes('leave.manage_all') || perms.includes('users.edit_all');
+    const canViewAll = perms.includes('leaves.manage') || perms.includes('users.edit_all');
     const canViewTeam = perms.includes('leave.view_team');
     const canView = isSelf || canViewAll || canViewTeam;
     if (!canView) return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
@@ -387,7 +387,7 @@ router.get('/balance/:userId', auth, async (req, res, next) => {
 router.get('/allocations', auth, async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('leave.manage_all') && !perms.includes('users.edit_all')) {
+    if (!perms.includes('leaves.manage') && !perms.includes('users.edit_all')) {
       return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
     }
     const { search, departmentId, leaveTypeId, page = 1, limit = 50 } = req.query;
@@ -449,7 +449,7 @@ router.get('/allocations', auth, async (req, res, next) => {
 router.put('/allocations/:id', auth, async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('leave.manage_all') && !perms.includes('users.edit_all')) {
+    if (!perms.includes('leaves.manage') && !perms.includes('users.edit_all')) {
       return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
     }
     const { allocated_days, remark } = req.body;
@@ -469,7 +469,7 @@ router.put('/allocations/:id', auth, async (req, res, next) => {
 router.post('/allocations/seed', auth, async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('leave.manage_all') && !perms.includes('users.edit_all')) {
+    if (!perms.includes('leaves.manage') && !perms.includes('users.edit_all')) {
       return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
     }
     const { userId } = req.body; // if omitted, seed for ALL active users
@@ -561,7 +561,7 @@ router.get('/', auth, async (req, res, next) => {
     }
 
     const perms = req.user.permissions || [];
-    if (perms.includes('leave.manage_all') || perms.includes('users.edit_all')) {
+    if (perms.includes('leaves.manage') || perms.includes('users.edit_all')) {
       // sees everything
     } else if (perms.includes('leave.view_team')) {
       where += ' AND (lr.user_id = ? OR lr.user_id IN (SELECT id FROM users WHERE reporting_manager_id = ?))';
@@ -779,7 +779,7 @@ router.put('/:id/cancel', auth, async (req, res, next) => {
     const lr = rows[0];
 
     const perms = req.user.permissions || [];
-    const isHRAdmin = perms.includes('leave.manage_all') || perms.includes('users.edit_all');
+    const isHRAdmin = perms.includes('leaves.manage') || perms.includes('users.edit_all');
     if (!isHRAdmin && lr.user_id !== req.user.id) {
       return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
     }

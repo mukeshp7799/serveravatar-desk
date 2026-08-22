@@ -445,9 +445,9 @@ function EditModal({ day, onClose, onSave }: {
 export default function AttendancePage() {
   const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
   const perms: string[] = Array.isArray(user.permissions) ? user.permissions : []
-  const isHRAdmin = perms.includes('attendance.manage_all')
+  const isHRAdmin = perms.includes('attendance.manage')
   const canViewTeam = perms.includes('attendance.view_team') || isHRAdmin
-  const canClock = perms.includes('attendance.clock_in_out')
+  const canClock = perms.includes('attendance.clock')
   const { timezone: companyTz } = useDateSettings()
   const { settings } = useCompanySettings()
 
@@ -921,7 +921,7 @@ export default function AttendancePage() {
       )}
 
       {/* Top-level Tabs */}
-      <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 rounded-xl gap-1">
+      <div className="inline-flex flex-wrap items-center bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 rounded-xl gap-1">
         {topTabs.map(tb => (
           <button key={tb.key} onClick={() => setTab(tb.key)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer border-0 ${
@@ -1395,7 +1395,7 @@ export default function AttendancePage() {
         <>
           {/* -- Shared Filters (Summary only) ----------------------------------------- */}
           {reportSubTab === 'summary' && (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 flex flex-wrap gap-3 items-end">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-5 py-4 flex flex-wrap gap-3 items-end">
               {/* Date From */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">From</label>
@@ -1412,7 +1412,7 @@ export default function AttendancePage() {
               <div className="flex-1 min-w-[150px]">
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Department</label>
                 <select value={selDept} onChange={e => setSelDept(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                  className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
                   <option value="">All Departments</option>
                   {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
@@ -1444,7 +1444,7 @@ export default function AttendancePage() {
               <div className="min-w-[140px]">
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Status</label>
                 <select value={selStatus} onChange={e => setSelStatus(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                  className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
                   <option value="">All Statuses</option>
                   <option value="clocked_in">Clocked In</option>
                   <option value="working">Working</option>
@@ -1593,7 +1593,7 @@ export default function AttendancePage() {
                       {tlEmpInfo.department_name || 'No Department'} · {tlEmpInfo.email}
                     </div>
                   </div>
-                  <div className="flex gap-4 text-xs">
+                  <div className="flex gap-4 flex-wrap items-center text-xs">
                     <div className="text-center">
                       <div className="font-bold text-emerald-600">{timeline.filter(d => d.status === 'present').length}</div>
                       <div className="text-gray-500">Present</div>

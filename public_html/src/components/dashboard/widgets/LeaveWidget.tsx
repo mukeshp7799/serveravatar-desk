@@ -6,8 +6,8 @@ import ListWidget from './ListWidget';
 export default function LeaveWidget({ permissions, data }: { permissions: string[]; data: any }) {
   const leaveBalances = data?.leaveBalances || [];
   const pendingApprovals = data?.pendingApprovals || [];
-  const hasApprove = permissions.includes('leave.approve');
-  const hasApply = permissions.includes('leave.apply');
+  const hasApprove = permissions.includes('leaves.approve');
+  const hasApply = permissions.includes('leaves.apply');
 
   const widgets = [];
 

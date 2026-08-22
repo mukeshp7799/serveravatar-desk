@@ -16,11 +16,16 @@ router.get('/', auth, async (req, res, next) => {
 
 router.get('/:id/permissions', auth, async (req, res, next) => {
   try {
-    const [perms] = await pool.query(
-      `SELECT p.* FROM role_permissions rp JOIN permissions p ON rp.permission_id = p.id WHERE rp.role_id = ?`,
+    // Return ALL system permissions, each with an `assigned` flag
+    const [allPerms] = await pool.query(
+      `SELECT p.id, p.name, p.description,
+              IF(rp.permission_id IS NULL, 0, 1) AS assigned
+       FROM permissions p
+       LEFT JOIN role_permissions rp ON p.id = rp.permission_id AND rp.role_id = ?
+       ORDER BY p.name`,
       [req.params.id]
     );
-    res.json({ permissions: perms });
+    res.json({ permissions: allPerms });
   } catch (err) { next(err); }
 });
 

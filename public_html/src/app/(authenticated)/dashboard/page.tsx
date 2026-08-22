@@ -349,11 +349,11 @@ export default function DashboardPage() {
   })();
   const perms = storedUser.permissions || [];
   const has = (p: string) => perms.includes(p);
-  const hasHR = has("hr.view_directory") || has("hr.manage_all") || has("employees.view_all");
-  const hasApprove = has("leave.approve");
-  const hasApply = has("leave.apply");
-  const hasAttendance = has("attendance.view_own") || has("attendance.clock_in_out");
-  const hasAttendanceTeam = has("attendance.view_team") || has("attendance.manage_all");
+  const hasHR = has("users.view_all");
+  const hasApprove = has("leaves.approve");
+  const hasApply = has("leaves.apply");
+  const hasAttendance = has("attendance.view_own") || has("attendance.clock");
+  const hasAttendanceTeam = has("attendance.view_team") || has("attendance.manage");
   const hasCalendar = has("calendar.view");
 
   const userInitials = `${(storedUser.firstName || "")[0] || ""}${(storedUser.lastName || "")[0] || ""}`.toUpperCase() || "U";

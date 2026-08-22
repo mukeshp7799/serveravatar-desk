@@ -57,7 +57,7 @@ function sameMinute(a, b) {
   return ta === tb;
 }
 
-// ─── Middleware: require attendance.clock_in_out ───────────────────────────────
+// ─── Middleware: require attendance.clock ───────────────────────────────
 router.use(auth);
 
 // ─── POST /api/attendance/clock-in ──────────────────────────────────────────
@@ -65,7 +65,7 @@ router.post('/clock-in', async (req, res, next) => {
   try {
     const userId = req.user.id;
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.clock_in_out')) {
+    if (!perms.includes('attendance.clock')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -216,7 +216,7 @@ router.post('/start-break', async (req, res, next) => {
   try {
     const userId = req.user.id;
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.clock_in_out')) {
+    if (!perms.includes('attendance.clock')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -286,7 +286,7 @@ router.post('/end-break', async (req, res, next) => {
   try {
     const userId = req.user.id;
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.clock_in_out')) {
+    if (!perms.includes('attendance.clock')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -346,7 +346,7 @@ router.post('/clock-out', async (req, res, next) => {
   try {
     const userId = req.user.id;
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.clock_in_out')) {
+    if (!perms.includes('attendance.clock')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -445,7 +445,7 @@ router.get('/today', async (req, res, next) => {
     const targetId = req.query.user_id ? parseInt(req.query.user_id) : userId;
 
     // Scope check: can only view own unless view_team or manage_all
-    if (targetId !== userId && !perms.includes('attendance.view_team') && !perms.includes('attendance.manage_all')) {
+    if (targetId !== userId && !perms.includes('attendance.view_team') && !perms.includes('attendance.manage')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -510,7 +510,7 @@ router.get('/history', async (req, res, next) => {
     const offset = (page - 1) * limit;
     const targetId = req.query.user_id ? parseInt(req.query.user_id) : userId;
 
-    if (targetId !== userId && !perms.includes('attendance.view_team') && !perms.includes('attendance.manage_all')) {
+    if (targetId !== userId && !perms.includes('attendance.view_team') && !perms.includes('attendance.manage')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -864,7 +864,7 @@ router.get('/breaks/:attendanceId', async (req, res, next) => {
     const [[att]] = await pool.query('SELECT * FROM attendance WHERE id = ?', [attId]);
     if (!att) return res.status(404).json({ error: 'Attendance record not found' });
 
-    if (att.user_id !== userId && !perms.includes('attendance.view_team') && !perms.includes('attendance.manage_all')) {
+    if (att.user_id !== userId && !perms.includes('attendance.view_team') && !perms.includes('attendance.manage')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -883,7 +883,7 @@ router.get('/stats', async (req, res, next) => {
   try {
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.view_team') && !perms.includes('attendance.manage_all')) {
+    if (!perms.includes('attendance.view_team') && !perms.includes('attendance.manage')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -921,7 +921,7 @@ router.get('/team', async (req, res, next) => {
   try {
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.view_team') && !perms.includes('attendance.manage_all')) {
+    if (!perms.includes('attendance.view_team') && !perms.includes('attendance.manage')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -962,7 +962,7 @@ router.get('/team', async (req, res, next) => {
 router.get('/all', async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.manage_all')) {
+    if (!perms.includes('attendance.manage')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -1016,7 +1016,7 @@ router.get('/all', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.manage_all')) {
+    if (!perms.includes('attendance.manage')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -1129,7 +1129,7 @@ router.get('/analytics/summary', async (req, res, next) => {
   try {
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.manage_all') && !perms.includes('attendance.view_team')) {
+    if (!perms.includes('attendance.manage') && !perms.includes('attendance.view_team')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -1365,7 +1365,7 @@ router.get('/analytics/timeline', async (req, res, next) => {
   try {
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.manage_all') && !perms.includes('attendance.view_team')) {
+    if (!perms.includes('attendance.manage') && !perms.includes('attendance.view_team')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -1513,7 +1513,7 @@ router.get('/analytics/timeline', async (req, res, next) => {
 router.post('/:id/breaks', async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.manage_all')) {
+    if (!perms.includes('attendance.manage')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
     const attId = parseInt(req.params.id);
@@ -1554,7 +1554,7 @@ router.post('/:id/breaks', async (req, res, next) => {
 router.put('/:id/breaks/:breakId', async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.manage_all')) {
+    if (!perms.includes('attendance.manage')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
     const { id, breakId } = req.params;
@@ -1602,7 +1602,7 @@ router.put('/:id/breaks/:breakId', async (req, res, next) => {
 router.delete('/:id/breaks/:breakId', async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.manage_all')) {
+    if (!perms.includes('attendance.manage')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
     const { id, breakId } = req.params;
@@ -1628,7 +1628,7 @@ router.delete('/:id/breaks/:breakId', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('attendance.manage_all')) {
+    if (!perms.includes('attendance.manage')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -2132,7 +2132,7 @@ router.get('/break-adjustments/breaks/:attendanceId', async (req, res, next) => 
     if (!att) return res.status(404).json({ error: 'Attendance record not found' });
 
     // Check access
-    if (att.user_id !== userId && !perms.includes('attendance.view_team') && !perms.includes('attendance.manage_all')) {
+    if (att.user_id !== userId && !perms.includes('attendance.view_team') && !perms.includes('attendance.manage')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 

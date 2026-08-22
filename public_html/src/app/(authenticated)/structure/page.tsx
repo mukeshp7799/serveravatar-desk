@@ -87,25 +87,6 @@ function StructurePageInner() {
         <PageLoader label={t('common.loading')} />
       ) : (
         <>
-          {/* Cards grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {departments.map((item: any, i: number) => {
-              const Icon = ITEM_ICONS[i % ITEM_ICONS.length]
-              return (
-                <div key={item.id} className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer card-hover group">
-                  <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg mb-3"><Icon size={20} strokeWidth={2.25} /></div>
-                  <div className="font-semibold text-gray-900 text-sm mb-3 truncate">{item.name}</div>
-                  {isAdmin && (
-                    <div className="flex gap-3 text-xs font-medium">
-                      <button onClick={() => openEdit(item)} className="text-indigo-600 hover:text-indigo-800 cursor-pointer border-none bg-transparent p-0">{t('common.edit')}</button>
-                      <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800 cursor-pointer border-none bg-transparent p-0">{t('common.delete')}</button>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
           {/* Table */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mt-4">
             <div className="px-5 py-4 border-b border-gray-200 flex items-center gap-2">
