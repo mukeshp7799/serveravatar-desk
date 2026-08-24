@@ -397,10 +397,14 @@ function EmployeesTab({ ch, dateFrom, dateTo }: any) {
     api.get(`/reports/employees?${params.toString()}`).then(r=>setRecent(r.employees||[])).catch(()=>{}).finally(()=>setLoading(false))
   }, [dateFrom,dateTo])
 
-  const empGrowth = (ch?.employee_growth||[]).map((r:any)=>({month:r.month, Employees:r.count}))
-  const deptData = (ch?.department_employees||[]).map((r:any)=>({name:r.name,value:r.count})).filter((r:any)=>r.value>0)
-  const statusData = (ch?.employee_status||[]).map((r:any)=>({name:r.status,value:r.count}))
-  const empTotal = empGrowth.reduce((s:number,r:any)=>s+r.count,0)
+  const empGrowth = (ch?.employee_growth||[]).map((r:any)=>({month:r.month, Employees:Number(r.count)||0}))
+  const deptData = (ch?.department_employees||[]).map((r:any)=>({name:r.name,value:Number(r.count)||0})).filter((r:any)=>r.value>0)
+  const statusData = (ch?.employee_status||[]).map((r:any)=>({name:r.status,value:Number(r.count)||0}))
+  const empTotal = empGrowth.reduce((s:number,r:any)=>s+(r.Employees||0),0)
+  // Calculate total and active from employee_status
+  const empStatusData = ch?.employee_status||[]
+  const totalEmployees = empStatusData.reduce((s:number,r:any)=>s+Number(r.count||0),0)
+  const activeEmployees = Number(empStatusData.find((r:any)=>r.status==='active')?.count)||0
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -457,8 +461,8 @@ function EmployeesTab({ ch, dateFrom, dateTo }: any) {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-        <Kpi label="Total" value={ch?.employees?.total||0} sub="registered" icon={<Users size={12}/>}/>
-        <Kpi label="Active" value={ch?.employees?.active||0} sub="employed" icon={<UserCheck size={12}/>}/>
+        <Kpi label="Total" value={totalEmployees} sub="registered" icon={<Users size={12}/>}/>
+        <Kpi label="Active" value={activeEmployees} sub="employed" icon={<UserCheck size={12}/>}/>
         <Kpi label="Depts" value={deptData.length} sub="with staff" icon={<BarChart3 size={12}/>}/>
         <Kpi label="Growth" value={empTotal} sub={`${empGrowth.length}mo`} icon={<TrendingUp size={12}/>}/>
       </div>
@@ -597,7 +601,7 @@ function AttendanceTab({ ch }: { ch: any }) {
 }
 
 // ─── Leave ────────────────────────────────────────────────────
-function LeaveTab({ ch }: { ch: any }) {
+function LeaveTab({ s, ch }: { s: any; ch: any }) {
   const [recent, setRecent] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -606,7 +610,7 @@ function LeaveTab({ ch }: { ch: any }) {
     api.get('/reports/leaves?page=1&limit=5').then(r=>setRecent(r.records||[])).catch(()=>{}).finally(()=>setLoading(false))
   }, [])
 
-  const statusData=[{name:'Approved',value:+ch?.leaves?.approved||0},{name:'Pending',value:+ch?.leaves?.pending||0},{name:'Rejected',value:+ch?.leaves?.rejected||0}].filter(d=>d.value>0)
+  const statusData=[{name:'Approved',value:+s?.leaves?.approved||0},{name:'Pending',value:+s?.leaves?.pending||0},{name:'Rejected',value:+s?.leaves?.rejected||0},{name:'Cancelled',value:+s?.leaves?.cancelled||0}].filter(d=>d.value>0)
   const typeData=(ch?.leave_type_distribution||[]).map((r:any)=>({name:r.name,value:r.count})).filter((r:any)=>r.value>0)
   const lMonth=ch?.leave_by_month||[]
   const ltm:any={}
@@ -687,7 +691,8 @@ function LeaveTab({ ch }: { ch: any }) {
               sub={`${r.leave_type||'Leave'} · ${fmtDateDefault(r.start_date)} – ${fmtDateDefault(r.end_date)}`}
               badge={<span className={`inline-flex px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold ${
                 r.status==='approved'?'bg-emerald-50 text-emerald-700':
-                r.status==='pending'?'bg-amber-50 text-amber-700':'bg-red-50 text-red-700'
+                r.status==='pending'?'bg-amber-50 text-amber-700':
+                r.status==='cancelled'?'bg-gray-100 text-gray-600':'bg-red-50 text-red-700'
               }`}>{r.status}</span>}
             />
           ))}
@@ -707,16 +712,26 @@ function ProjectsTab({ ch }: { ch: any }) {
     api.get('/reports/projects?page=1&limit=5').then(r=>setRecent(r.records||[])).catch(()=>{}).finally(()=>setLoading(false))
   }, [])
 
-  const statusData=(ch?.project_status||[]).map((r:any)=>({name:r.status,value:r.value||r.count}))
-  const priData=(ch?.project_priority||[]).map((r:any)=>({name:r.priority,value:r.count})).filter((r:any)=>r.value>0)
+  const statusData=(ch?.project_status||[]).map((r:any)=>({name:r.status,value:Number(r.count)||0}))
+  const priData=(ch?.task_priority||[]).map((r:any)=>({name:r.priority,value:Number(r.count)||0})).filter((r:any)=>r.value>0)
+
+  // Calculate project stats from project_status
+  const projectStatusArr = ch?.project_status||[]
+  const totalProjects = projectStatusArr.reduce((s:number,r:any)=>s+(Number(r.count)||0),0)
+  const activeProjects = Number(projectStatusArr.find((r:any)=>r.status==='active')?.count)||0
+  const completedProjects = Number(projectStatusArr.find((r:any)=>r.status==='completed')?.count)||0
+
+  // Calculate task stats from task_status
+  const taskStatusArr = ch?.task_status||[]
+  const totalTasks = taskStatusArr.reduce((s:number,r:any)=>s+(Number(r.count)||0),0)
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-        <Kpi label="Projects" value={ch?.projects?.total_projects||0} sub="registered" icon={<FolderKanban size={12}/>}/>
-        <Kpi label="Active" value={ch?.projects?.active||0} sub="in progress" icon={<PauseCircle size={12}/>}/>
-        <Kpi label="Completed" value={ch?.projects?.completed||0} sub="finished" icon={<CheckCircle2 size={12}/>}/>
-        <Kpi label="Tasks" value={ch?.tasks?.total_tasks||0} sub="across all" icon={<ListChecks size={12}/>}/>
+        <Kpi label="Projects" value={totalProjects} sub="registered" icon={<FolderKanban size={12}/>}/>
+        <Kpi label="Active" value={activeProjects} sub="in progress" icon={<PauseCircle size={12}/>}/>
+        <Kpi label="Completed" value={completedProjects} sub="finished" icon={<CheckCircle2 size={12}/>}/>
+        <Kpi label="Tasks" value={totalTasks} sub="across all" icon={<ListChecks size={12}/>}/>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
@@ -789,15 +804,24 @@ function TasksTab({ ch }: { ch: any }) {
     api.get('/reports/tasks?page=1&limit=5').then(r=>setRecent(r.records||[])).catch(()=>{}).finally(()=>setLoading(false))
   }, [])
 
-  const priData=(ch?.task_priority||[]).map((r:any)=>({name:r.priority,value:r.count})).filter((r:any)=>r.value>0)
-  const colData=(ch?.task_status||[]).map((r:any)=>({name:r.status,value:r.count})).filter((r:any)=>r.value>0)
+  const priData=(ch?.task_priority||[]).map((r:any)=>({name:r.priority,value:Number(r.count)||0})).filter((r:any)=>r.value>0)
+  const colData=(ch?.task_status||[]).map((r:any)=>({name:r.status,value:Number(r.count)||0})).filter((r:any)=>r.value>0)
+
+  // Calculate task stats from task_status
+  const taskStatusArr = ch?.task_status||[]
+  const totalTasks = taskStatusArr.reduce((s:number,r:any)=>s+(Number(r.count)||0),0)
+
+  // Calculate priority stats from task_priority
+  const taskPriorityArr = ch?.task_priority||[]
+  const urgentTasks = Number(taskPriorityArr.find((r:any)=>r.priority?.toLowerCase()==='urgent')?.count)||0
+  const highPriorityTasks = Number(taskPriorityArr.find((r:any)=>r.priority?.toLowerCase()==='high')?.count)||0
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-        <Kpi label="Total Tasks" value={ch?.tasks?.total_tasks||0} sub="open tasks" icon={<ListChecks size={12}/>}/>
-        <Kpi label="Urgent" value={ch?.tasks?.urgent||0} sub="immediate" icon={<AlertTriangle size={12}/>}/>
-        <Kpi label="High Priority" value={ch?.tasks?.high||0} sub="important" icon={<TrendingUp size={12}/>}/>
+        <Kpi label="Total Tasks" value={totalTasks} sub="open tasks" icon={<ListChecks size={12}/>}/>
+        <Kpi label="Urgent" value={urgentTasks} sub="immediate" icon={<AlertTriangle size={12}/>}/>
+        <Kpi label="High Priority" value={highPriorityTasks} sub="important" icon={<TrendingUp size={12}/>}/>
         <Kpi label="Columns" value={colData.length} sub="stages" icon={<BarChart3 size={12}/>}/>
       </div>
 
@@ -898,7 +922,48 @@ export default function ReportsPage() {
       if(dateTo) params.set('date_to',dateTo)
       const qs = params.toString() ? `?${params.toString()}` : ''
       const [sumRes, chartsRes] = await Promise.all([api.get(`/reports/summary${qs}`), api.get(`/reports/charts${qs}`)])
-      setSummary(sumRes); setCharts(chartsRes)
+      
+      // Convert string numeric values from API to proper numbers
+      const normalizedSummary = {
+        employees: {
+          total: Number(sumRes.employees?.total) || 0,
+          active: Number(sumRes.employees?.active) || 0,
+          full_time: Number(sumRes.employees?.full_time) || 0,
+          part_time: Number(sumRes.employees?.part_time) || 0,
+          contract: Number(sumRes.employees?.contract) || 0,
+          intern: Number(sumRes.employees?.intern) || 0,
+        },
+        attendance: {
+          total: Number(sumRes.attendance?.total) || 0,
+          present: Number(sumRes.attendance?.present) || 0,
+          late_checkins: Number(sumRes.attendance?.late_checkins) || 0,
+          avg_working_hours: Number(sumRes.attendance?.avg_working_hours) || 0,
+          avg_break_minutes: Number(sumRes.attendance?.avg_break_minutes) || 0,
+        },
+        leaves: {
+          total_requests: Number(sumRes.leaves?.total_requests) || 0,
+          approved: Number(sumRes.leaves?.approved) || 0,
+          pending: Number(sumRes.leaves?.pending) || 0,
+          rejected: Number(sumRes.leaves?.rejected) || 0,
+          cancelled: Number(sumRes.leaves?.cancelled) || 0,
+        },
+        projects: {
+          total_projects: Number(sumRes.projects?.total_projects) || 0,
+          active: Number(sumRes.projects?.active) || 0,
+          completed: Number(sumRes.projects?.completed) || 0,
+          on_hold: Number(sumRes.projects?.on_hold) || 0,
+        },
+        tasks: {
+          total_tasks: Number(sumRes.tasks?.total_tasks) || 0,
+          urgent: Number(sumRes.tasks?.urgent) || 0,
+          high: Number(sumRes.tasks?.high) || 0,
+        },
+        departments: {
+          total_departments: Number(sumRes.departments?.total_departments) || 0,
+        },
+      }
+      
+      setSummary(normalizedSummary); setCharts(chartsRes)
     } catch {} finally { setLoading(false) }
   }
 
@@ -945,7 +1010,7 @@ export default function ReportsPage() {
           {tab==='overview' && <OverviewTab s={summary} ch={charts} dateFrom={dateFrom} dateTo={dateTo} onDateChange={(f:string,t:string)=>{setDateFrom(f);setDateTo(t)}} onRefresh={loadData} canExport={canExport}/>}
           {tab==='employees' && <EmployeesTab ch={charts} dateFrom={dateFrom} dateTo={dateTo}/>}
           {tab==='attendance' && <AttendanceTab ch={charts}/>}
-          {tab==='leaves' && <LeaveTab ch={charts}/>}
+          {tab==='leaves' && <LeaveTab s={summary} ch={charts}/>}
           {tab==='projects' && <ProjectsTab ch={charts}/>}
           {tab==='tasks' && <TasksTab ch={charts}/>}
         </>
