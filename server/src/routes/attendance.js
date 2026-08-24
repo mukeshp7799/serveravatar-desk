@@ -17,6 +17,7 @@ const {
 } = require('../services/attendanceCalc');
 const { getCompanySetting, nowInTimezone, todayInTimezone, toTimezone, formatDate, formatTime } = require('../utils/timezone');
 const { logActivity } = require('../services/activityService');
+const { isNotificationAllowed } = require('../utils/notificationPreferences');
 
 const router = express.Router();
 
@@ -515,7 +516,7 @@ router.get('/history', async (req, res, next) => {
     }
 
     // Include today if user has break adjustment permission (so they can view their adjustment status)
-    const hasAdjPerm = perms.includes('attendance.break_adjustment.request');
+    const hasAdjPerm = perms.includes('attendance.adjust_break');
     const dateFilter = hasAdjPerm ? 'a.date <= CURDATE()' : 'a.date < CURDATE()';
 
     const [records] = await pool.query(
@@ -540,7 +541,7 @@ router.get('/history', async (req, res, next) => {
       const placeholders = attIds.map(() => '?').join(',');
       const [adjRows] = await pool.query(
         `SELECT bar.*,
-                ab.start_time as break_start, ab.end_time as break_end, ab.duration_minutes as break_duration,
+                ab.start_time as break_start, ab.end_time as break_end, ab.original_duration_minutes, ab.duration_minutes as break_duration,
                 ru.first_name as reviewer_first_name, ru.last_name as reviewer_last_name
          FROM break_adjustment_requests bar
          JOIN attendance_breaks ab ON bar.break_id = ab.id
@@ -555,6 +556,7 @@ router.get('/history', async (req, res, next) => {
           id: adj.id,
           break_id: adj.break_id,
           requested_minutes: adj.requested_minutes,
+          approved_work_minutes: adj.approved_work_minutes,
           start_time: adj.start_time,
           end_time:   adj.end_time,
           time_start: toHHMM(adj.start_time, tz),
@@ -568,6 +570,7 @@ router.get('/history', async (req, res, next) => {
           break_time_start: toHHMM(adj.break_start, tz),
           break_time_end:   toHHMM(adj.break_end,   tz),
           break_duration: adj.break_duration,
+          break_original_duration: adj.original_duration_minutes,
           reviewer: adj.reviewer_first_name
             ? { first_name: adj.reviewer_first_name, last_name: adj.reviewer_last_name }
             : null,
@@ -757,7 +760,7 @@ router.get('/my-history', async (req, res, next) => {
       const placeholders = attIdsInTimeline.map(() => '?').join(',');
       const [adjRows] = await pool.query(
         `SELECT bar.*,
-                ab.start_time as break_start, ab.end_time as break_end, ab.duration_minutes as break_duration,
+                ab.start_time as break_start, ab.end_time as break_end, ab.original_duration_minutes, ab.duration_minutes as break_duration,
                 ru.first_name as reviewer_first_name, ru.last_name as reviewer_last_name
          FROM break_adjustment_requests bar
          JOIN attendance_breaks ab ON bar.break_id = ab.id
@@ -772,6 +775,7 @@ router.get('/my-history', async (req, res, next) => {
           id: adj.id,
           break_id: adj.break_id,
           requested_minutes: adj.requested_minutes,
+          approved_work_minutes: adj.approved_work_minutes,
           start_time: adj.start_time,
           end_time:   adj.end_time,
           time_start: toHHMM(adj.start_time, tz),
@@ -785,6 +789,7 @@ router.get('/my-history', async (req, res, next) => {
           break_time_start: toHHMM(adj.break_start, tz),
           break_time_end:   toHHMM(adj.break_end,   tz),
           break_duration: adj.break_duration,
+          break_original_duration: adj.original_duration_minutes,
           reviewer: adj.reviewer_first_name
             ? { first_name: adj.reviewer_first_name, last_name: adj.reviewer_last_name }
             : null,
@@ -1233,32 +1238,75 @@ router.get('/analytics/summary', async (req, res, next) => {
     const presentStatuses = ['clocked_in', 'working', 'on_break', 'completed'];
     const summaries = employees.map(emp => {
       const totalDays = Math.round((new Date(date_to) - new Date(date_from)) / 86400000) + 1;
-      const weekends  = countWeekends(date_from, date_to);
-      const compHol   = holidaySet.size;
       // Use shared service: respects configured working_days + hire_date
       const empWorkingDays = countWorkingDays(date_from, date_to, emp.hire_date, workingDays, holidaySet);
 
+      // Build full day timeline (all days in range) - same approach as user history
       const empAtt = attByUser[emp.id] || {};
-      let presentDays = 0, lateCheckins = 0, totalWH = 0, totalBreak = 0, totalBreakAdjustment = 0;
-      for (const [ds, dayRec] of Object.entries(empAtt)) {
-        if (presentStatuses.includes(dayRec.status)) presentDays++;
-        if (dayRec.is_late) lateCheckins++;
-        if (dayRec.clock_in_time && dayRec.clock_out_time) {
-          // Completed day — compute hours using adjusted break minutes
-          const wh = computeWorkingHours(dayRec.clock_in_time, dayRec.clock_out_time, Number(dayRec.total_break_minutes) || 0);
-          const eb = Number(dayRec.effective_break_minutes) || 0;
-          // effective_break_minutes is audit trail only; total_break_minutes is already adjusted
-          const effectiveDayWH = wh;
-          if (effectiveDayWH != null) totalWH += effectiveDayWH;
-        } else if (dayRec.clock_in_time && !dayRec.clock_out_time && ds === today) {
-          // Today (incomplete) — compute live hours from clock-in to now, subtract open break
-          const activeBreakStart = activeBreaksMap[emp.id] || null;
-          const liveWH = computeLiveWorkingHours(dayRec.clock_in_time, Number(dayRec.total_break_minutes) || 0, activeBreakStart);
-          if (liveWH != null) totalWH += liveWH;
+      const empLeaves = leaves.filter(lv => lv.user_id === emp.id);
+      const fullTimeline = [];
+      const cur = new Date(date_from);
+      while (cur <= new Date(date_to)) {
+        const ds = toTimezone(cur, tz).toISOString().slice(0, 10);
+        const dayRec = empAtt[ds];
+        const isHoliday = holidaySet.has(ds);
+        const dow = cur.getDay();
+        const isWeekend = !isWorkday(ds, workingDays);
+
+        // Check if on approved leave this day
+        let onLeave = false;
+        for (const lv of empLeaves) {
+          const ls = String(lv.start_date).slice(0, 10);
+          const le = String(lv.end_date).slice(0, 10);
+          if (ds >= ls && ds <= le) { onLeave = true; break; }
         }
-        totalBreak += Number(dayRec.break_minutes) || 0;
-        totalBreakAdjustment += Math.max(0, (Number(dayRec.total_break_minutes) || 0) - (Number(dayRec.effective_break_minutes) || 0));
+
+        // Determine status (same logic as user history)
+        let status;
+        if (isWeekend) {
+          status = 'weekend';
+        } else if (isHoliday) {
+          status = 'holiday';
+        } else if (onLeave) {
+          status = 'leave';
+        } else if (dayRec && presentStatuses.includes(dayRec.status)) {
+          status = 'present';
+        } else {
+          status = 'absent';
+        }
+
+        // Calculate working hours if applicable (same as user history)
+        let wh = null;
+        if (dayRec?.clock_in_time && dayRec?.clock_out_time) {
+          wh = computeWorkingHours(dayRec.clock_in_time, dayRec.clock_out_time, Number(dayRec.total_break_minutes) || 0);
+        } else if (dayRec?.clock_in_time && !dayRec?.clock_out_time && ds === today) {
+          const activeBreakStart = activeBreaksMap[emp.id] || null;
+          wh = computeLiveWorkingHours(dayRec.clock_in_time, Number(dayRec.total_break_minutes) || 0, activeBreakStart);
+        }
+
+        if (wh != null) wh = Math.round(wh * 100) / 100;
+
+        fullTimeline.push({
+          date: ds,
+          status,
+          working_hours: wh,
+          is_late: dayRec ? Boolean(dayRec.is_late) : false,
+          total_break_minutes: dayRec?.total_break_minutes || 0,
+          effective_break_minutes: dayRec ? Number(dayRec.effective_break_minutes) || 0 : 0,
+          break_minutes: dayRec?.break_minutes || 0,
+        });
+
+        cur.setDate(cur.getDate() + 1);
       }
+
+      // Now compute summary from full timeline (same as user history)
+      const presentDays = fullTimeline.filter(d => d.status === 'present').length;
+      const absentDays = fullTimeline.filter(d => d.status === 'absent').length;
+      const lateCheckins = fullTimeline.filter(d => d.is_late).length;
+      const daysWithHours = fullTimeline.filter(d => d.working_hours != null).length;
+      const totalWH = fullTimeline.reduce((s, d) => s + (d.working_hours || 0), 0);
+      const totalBreak = fullTimeline.reduce((s, d) => s + (d.total_break_minutes || 0), 0);
+      const breakAdjustmentMinutes = fullTimeline.reduce((s, d) => s + (d.effective_break_minutes > 0 ? d.effective_break_minutes : 0), 0);
 
       // Approved leave overlapping days
       let approvedLeaveDays = 0;
@@ -1268,11 +1316,12 @@ router.get('/analytics/summary', async (req, res, next) => {
         }
       }
 
-      // non_working_days = total days not counted as working days
-      // (total calendar days minus working days; holidays are already excluded from working_days)
-      const nonWorkingDays = totalDays - empWorkingDays;
-      const absentDays = Math.max(0, empWorkingDays - presentDays - approvedLeaveDays);
-      const avgWH = presentDays > 0 ? totalWH / presentDays : 0;
+      // avgWH: use daysWithHours as denominator (same as user history)
+      const avgWH = daysWithHours > 0 ? Math.round((totalWH / daysWithHours) * 100) / 100 : 0;
+
+      // Calculate weekends and holidays from full timeline (same as user history)
+      const weekends = fullTimeline.filter(d => d.status === 'weekend').length;
+      const compHol = fullTimeline.filter(d => d.status === 'holiday').length;
 
       return {
         user_id: emp.id,
@@ -1283,7 +1332,7 @@ router.get('/analytics/summary', async (req, res, next) => {
         hire_date: emp.hire_date,
         total_days: totalDays,
         working_days: empWorkingDays,
-        weekends: nonWorkingDays,
+        weekends,
         company_holidays: compHol,
         present_days: presentDays,
         approved_leave_days: approvedLeaveDays,
@@ -1291,7 +1340,7 @@ router.get('/analytics/summary', async (req, res, next) => {
         late_checkins: lateCheckins,
         total_working_hours: Math.round(totalWH * 100) / 100,
         total_break_minutes: totalBreak,
-        total_break_adjustment_minutes: totalBreakAdjustment,
+        break_adjustment_minutes: breakAdjustmentMinutes,
         average_working_hours: Math.round(avgWH * 100) / 100,
       };
     });
@@ -1716,37 +1765,51 @@ async function getApprovedAdjustmentMinutes(attId, connection = pool) {
 }
 
 /**
- * Apply a break adjustment approval to the attendance record.
+ * Recalculate effective break duration for a specific break record and its attendance.
+ * Formula: duration_minutes = original_duration_minutes - SUM(approved_work_minutes)
+ * Then recalculates attendance-level totals.
  *
- * The adjustment MOVES time from Break Time to Working Hours:
- *   adjusted_break    = original_break - adjustment_minutes
- *   working_hours     = (shift - adjusted_break) / 60
- *
- * Implementation steps:
- * 1. Reduce the specific attendance_breaks.duration_minutes by approvedMinutes
- * 2. Recalculate attendance.total_break_minutes as SUM of all break durations
- * 3. MySQL auto-updates working_hours via the STORED GENERATED column
- * 4. Accumulate effective_break_minutes as an AUDIT TRAIL ONLY
- *
- * effective_break_minutes is NOT added to working_hours in any formula.
- * It exists only to preserve a record of all approved adjustments for auditing.
- *
- * @param {number} attId       - attendance record id
- * @param {number} approvedMinutes - approved adjustment minutes
- * @param {number} breakId     - specific break record being adjusted
- * @param {object} connection  - db connection (for transaction)
+ * @param {number} breakId    - break record id
+ * @param {object} connection - db connection
  */
-async function applyAdjustmentToAttendance(attId, approvedMinutes, breakId, connection = pool) {
-  // Step 1: Reduce the specific break record's duration (this IS the adjustment)
+async function recalcBreakDuration(breakId, connection = pool) {
+  // Sum all approved work minutes for this break
+  const [[sumRow]] = await connection.query(
+    `SELECT COALESCE(SUM(approved_work_minutes), 0) as total_approved
+     FROM break_adjustment_requests
+     WHERE break_id = ? AND status = 'Approved'`,
+    [breakId]
+  );
+  const totalApproved = Number(sumRow.total_approved);
+
+  // Get original duration
+  const [[br]] = await connection.query(
+    'SELECT original_duration_minutes, attendance_id FROM attendance_breaks WHERE id = ?',
+    [breakId]
+  );
+  if (!br) return;
+  const attId = br.attendance_id;
+  const original = Number(br.original_duration_minutes) || 0;
+  const effectiveBreak = Math.max(0, original - totalApproved);
+
+  // Update break record's current duration
   await connection.query(
-    `UPDATE attendance_breaks
-     SET duration_minutes = GREATEST(0, duration_minutes - ?)
-     WHERE id = ? AND attendance_id = ?`,
-    [approvedMinutes, breakId, attId]
+    'UPDATE attendance_breaks SET duration_minutes = ? WHERE id = ?',
+    [effectiveBreak, breakId]
   );
 
-  // Step 2: Recalculate total_break_minutes as the sum of all break durations for this attendance
-  // This ensures total_break_minutes always equals SUM(attendance_breaks.duration_minutes)
+  // Recalculate attendance totals
+  await recalcAttendanceTotals(attId, connection);
+}
+
+/**
+ * Recalculate attendance-level totals:
+ *   total_break_minutes  = SUM(duration_minutes) across all breaks
+ *   effective_break_minutes = SUM(approved_work_minutes) across all approved requests
+ * Then MySQL auto-updates working_hours via STORED GENERATED column.
+ */
+async function recalcAttendanceTotals(attId, connection = pool) {
+  // total_break_minutes = sum of current break durations
   await connection.query(
     `UPDATE attendance a
      SET total_break_minutes = COALESCE(
@@ -1756,64 +1819,85 @@ async function applyAdjustmentToAttendance(attId, approvedMinutes, breakId, conn
      WHERE a.id = ?`,
     [attId]
   );
-
-  // Step 3: Accumulate effective_break_minutes ONLY for audit trail
-  // It is NOT used in any working_hours calculation
+  // effective_break_minutes = sum of all approved work minutes across all breaks
   await connection.query(
-    `UPDATE attendance
-     SET effective_break_minutes = effective_break_minutes + ?
-     WHERE id = ?`,
-    [approvedMinutes, attId]
+    `UPDATE attendance a
+     SET effective_break_minutes = COALESCE(
+       (SELECT SUM(bar.approved_work_minutes)
+        FROM break_adjustment_requests bar
+        JOIN attendance_breaks ab ON bar.break_id = ab.id
+        WHERE ab.attendance_id = a.id AND bar.status = 'Approved'), 0)
+     WHERE a.id = ?`,
+    [attId]
+  );
+}
+
+/**
+ * Apply a break adjustment approval to the attendance record.
+ *
+ * Formula:
+ *   effective_break = original_break_duration - total approved work minutes for this break
+ *   working_hours  auto-calculated by MySQL: (shift_hours - total_break_minutes/60)
+ *
+ * Steps:
+ * 1. Set approved_work_minutes on the request record
+ * 2. Recalculate this break's duration = original - total approved for this break
+ * 3. Recalculate attendance totals (total_break_minutes + effective_break_minutes)
+ *
+ * @param {number} reqId      - break_adjustment_request id
+ * @param {number} approvedWorkMinutes - minutes approved (may differ from requested)
+ * @param {object} connection  - db connection
+ */
+async function applyAdjustmentToAttendance(reqId, approvedWorkMinutes, connection = pool) {
+  // Get the request details
+  const [[req]] = await connection.query(
+    'SELECT * FROM break_adjustment_requests WHERE id = ?', [reqId]
+  );
+  if (!req) return;
+
+  // Step 1: Store approved minutes on the request
+  await connection.query(
+    'UPDATE break_adjustment_requests SET approved_work_minutes = ? WHERE id = ?',
+    [approvedWorkMinutes, reqId]
   );
 
-  // Step 4: MySQL auto-updates working_hours via the STORED GENERATED column:
-  //   working_hours = (shift_hours - total_break_minutes / 60)
-  // Since total_break_minutes = original_break - adjustment,
-  //   working_hours = (shift - (original_break - adjustment)) / 60
-  //                 = original_working_hours + adjustment / 60 ✓
+  // Step 2: Recalculate this break's effective duration
+  await recalcBreakDuration(req.break_id, connection);
+
+  // Step 3: Recalculate attendance totals (total_break_minutes + effective_break_minutes)
+  await recalcAttendanceTotals(req.attendance_id, connection);
 
   const [[rec]] = await connection.query(
-    'SELECT * FROM attendance WHERE id = ?', [attId]
+    'SELECT * FROM attendance WHERE id = ?', [req.attendance_id]
   );
   return rec;
 }
 
 /**
- * Reverse an approved adjustment (when needed — currently not exposed to admins,
- * but the logic is here for data integrity).
+ * Reverse a previously approved adjustment.
+ * Called when an approved request is rejected/cancelled.
+ * Clears approved_work_minutes and recalculates break + attendance totals.
+ *
+ * @param {number} reqId      - break_adjustment_request id
+ * @param {object} connection - db connection
  */
-/**
- * Reverse an approved adjustment (admin action — not currently exposed in API).
- * Restores the break record's duration, recalculates total_break_minutes,
- * reduces effective_break_minutes (audit trail), and MySQL auto-updates working_hours.
- */
-async function reverseAdjustmentFromAttendance(attId, approvedMinutes, breakId, connection = pool) {
-  // Step 1: Restore the specific break record's duration
+async function reverseAdjustmentFromAttendance(reqId, connection = pool) {
+  const [[req]] = await connection.query(
+    'SELECT * FROM break_adjustment_requests WHERE id = ?', [reqId]
+  );
+  if (!req) return;
+
+  // Clear approved minutes
   await connection.query(
-    `UPDATE attendance_breaks
-     SET duration_minutes = duration_minutes + ?
-     WHERE id = ? AND attendance_id = ?`,
-    [approvedMinutes, breakId, attId]
+    'UPDATE break_adjustment_requests SET approved_work_minutes = NULL WHERE id = ?',
+    [reqId]
   );
 
-  // Step 2: Recalculate total_break_minutes from all break durations
-  await connection.query(
-    `UPDATE attendance a
-     SET total_break_minutes = COALESCE(
-       (SELECT SUM(ab.duration_minutes)
-        FROM attendance_breaks ab
-        WHERE ab.attendance_id = a.id), 0)
-     WHERE a.id = ?`,
-    [attId]
-  );
+  // Recalculate this break's effective duration
+  await recalcBreakDuration(req.break_id, connection);
 
-  // Step 3: Reduce audit trail
-  await connection.query(
-    `UPDATE attendance
-     SET effective_break_minutes = GREATEST(0, effective_break_minutes - ?)
-     WHERE id = ?`,
-    [approvedMinutes, attId]
-  );
+  // Recalculate attendance totals
+  await recalcAttendanceTotals(req.attendance_id, connection);
 }
 
 // ─── POST /api/attendance/break-adjustments ────────────────────────────────────
@@ -1823,7 +1907,7 @@ router.post('/break-adjustments', async (req, res, next) => {
     const userId = req.user.id;
     const perms = req.user.permissions || [];
 
-    if (!perms.includes('attendance.break_adjustment.request')) {
+    if (!perms.includes('attendance.adjust_break')) {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
@@ -1845,6 +1929,10 @@ router.post('/break-adjustments', async (req, res, next) => {
     if (!breakRec.end_time) {
       return res.status(400).json({ error: 'Cannot adjust an ongoing (unfinished) break' });
     }
+
+    // Use original_duration_minutes as the authoritative break duration
+    // (falls back to duration_minutes for breaks created before this schema change)
+    const originalBreakDuration = Number(breakRec.original_duration_minutes ?? breakRec.duration_minutes ?? 0);
 
     // Verify the attendance belongs to this user
     const [[attRec]] = await pool.query(
@@ -1897,51 +1985,67 @@ router.post('/break-adjustments', async (req, res, next) => {
 
     // Window must fall within the break (compare UTC moments)
     if (reqStart < new Date(breakRec.start_time)) {
-      return res.status(400).json({ error: `start_time cannot be before the break start (${formatTime(breakRec.start_time, '24h', tz)})` });
+      return res.status(400).json({ error: `Start time must be after the break start time (${formatTime(breakRec.start_time, '12h', tz)})` });
     }
     if (reqEnd > new Date(breakRec.end_time)) {
-      return res.status(400).json({ error: `end_time cannot be after the break end (${formatTime(breakRec.end_time, '24h', tz)})` });
+      return res.status(400).json({ error: `End time must be before the break end time (${formatTime(breakRec.end_time, '12h', tz)})` });
     }
 
-    // Compute requested_minutes from the window
-    const requested_minutes = Math.round((reqEnd - reqStart) / 60000);
+    // Compute requested_minutes from the window (use floor to match how original break duration is calculated)
+    const requested_minutes = Math.floor((reqEnd - reqStart) / 60000);
     if (requested_minutes <= 0) {
       return res.status(400).json({ error: 'Adjustment window must be at least 1 minute' });
     }
 
-    // ── Prevent duplicate / overlapping pending requests ──────────────────
-    // A pending request for the same break already exists
-    const [[existingPending]] = await pool.query(
-      `SELECT id FROM break_adjustment_requests
-       WHERE break_id = ? AND status = 'Pending' LIMIT 1`,
-      [break_id]
-    );
-    if (existingPending) {
-      return res.status(409).json({ error: 'A pending adjustment request already exists for this break' });
-    }
-
-    // An already-approved request for the same break (no double-dipping)
-    const [[existingApproved]] = await pool.query(
-      `SELECT id, requested_minutes FROM break_adjustment_requests
-       WHERE break_id = ? AND status = 'Approved' LIMIT 1`,
-      [break_id]
-    );
-    if (existingApproved) {
-      return res.status(409).json({
-        error: `An adjustment of ${existingApproved.requested_minutes} minutes has already been approved for this break`,
-      });
-    }
-
-    // Check total requested vs available (no approved + pending > break duration)
-    const [[pendingTotal]] = await pool.query(
-      `SELECT COALESCE(SUM(requested_minutes), 0) as total
+    // ── Prevent overlapping time ranges ─────────────────────────────────────
+    // Check against all Pending/Approved requests for this break (excluding self for edits)
+    // Two ranges overlap if: reqStart < existingEnd AND reqEnd > existingStart
+    const [existingRanges] = await pool.query(
+      `SELECT id, start_time, end_time, status, requested_minutes
        FROM break_adjustment_requests
        WHERE break_id = ? AND status IN ('Pending', 'Approved')`,
       [break_id]
     );
-    if (Number(pendingTotal.total) + Number(requested_minutes) > Number(breakRec.duration_minutes)) {
+    for (const existing of existingRanges || []) {
+      // Skip if same time range (for future edit support)
+      if (existing.start_time === start_time && existing.end_time === end_time) {
+        return res.status(409).json({
+          error: `A ${existing.status.toLowerCase()} request already exists for this exact time range`,
+        });
+      }
+      // Convert existing TIME strings (HH:MM:SS in company-local) to UTC for proper comparison
+      const existStartUtc = parseCompanyTimeToUTC(existing.start_time, new Date(breakRec.start_time));
+      const existEndUtc   = parseCompanyTimeToUTC(existing.end_time,   new Date(breakRec.start_time));
+      if (!existStartUtc || !existEndUtc) continue; // skip malformed
+      // Overlap: newStart < existingEnd AND newEnd > existingStart (UTC-to-UTC comparison)
+      if (reqStart < existEndUtc && reqEnd > existStartUtc) {
+        const fmtT12 = (t) => {
+          const [h, m] = t.split(':').map(Number);
+          const ampm = h < 12 ? 'AM' : 'PM';
+          const h12 = h % 12 || 12;
+          return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+        };
+        return res.status(409).json({
+          error: `This time range overlaps with an existing ${existing.status.toLowerCase()} request (${fmtT12(existing.start_time)} – ${fmtT12(existing.end_time)})`,
+        });
+      }
+    }
+
+    // Check total requested vs available minutes for this break
+    const [[totalRow]] = await pool.query(
+      `SELECT
+         COALESCE(SUM(requested_minutes), 0) as total_pending,
+         COALESCE(SUM(CASE WHEN status = 'Approved' THEN approved_work_minutes ELSE 0 END), 0) as total_approved
+       FROM break_adjustment_requests
+       WHERE break_id = ? AND status IN ('Pending', 'Approved')`,
+      [break_id]
+    );
+    const alreadyUsed = Number(totalRow.total_approved); // approved takes absolute priority
+    const alreadyPending = Number(totalRow.total_pending);
+    const available = originalBreakDuration - alreadyUsed;
+    if (requested_minutes > available) {
       return res.status(409).json({
-        error: `Total requested minutes (${Number(pendingTotal.total) + Number(requested_minutes)}) exceed break duration (${breakRec.duration_minutes} minutes)`,
+        error: `Only ${available} minutes are available for this break (original: ${originalBreakDuration} min, approved: ${alreadyUsed} min)`,
       });
     }
 
@@ -1977,6 +2081,30 @@ router.post('/break-adjustments', async (req, res, next) => {
     });
 
     res.status(201).json({ message: 'Break adjustment request submitted', request: newReq });
+
+    // Notify admins about the new request
+    const [admins] = await pool.query(
+      `SELECT u.id FROM users u
+       JOIN role_permissions rp ON u.role_id = rp.role_id
+       JOIN permissions p ON rp.permission_id = p.id
+       WHERE p.name = 'attendance.manage'
+       AND u.id != ?`,
+      [userId]
+    );
+    for (const admin of admins) {
+      if (await isNotificationAllowed(admin.id, 'attendance')) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)`,
+          [
+            admin.id,
+            'break_adjustment_request',
+            'New Break Adjustment Request',
+            `${req.user.first_name} ${req.user.last_name} requested ${requested_minutes} min work-during-break`,
+            `/attendance?tab=adjustments`,
+          ]
+        );
+      }
+    }
   } catch (err) { next(err); }
 });
 
@@ -1992,7 +2120,7 @@ router.get('/break-adjustments', async (req, res, next) => {
       user_id, status, date_from, date_to, search,
     } = req.query;
 
-    const isAdmin = perms.includes('attendance.break_adjustment.manage');
+    const isAdmin = perms.includes('attendance.manage');
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(5, parseInt(limit)));
     const offset = (pageNum - 1) * limitNum;
@@ -2034,7 +2162,8 @@ router.get('/break-adjustments', async (req, res, next) => {
               a.date, a.clock_in_time, a.clock_out_time,
               u.first_name, u.last_name, u.email,
               d.name as department_name,
-              ab.start_time as break_start, ab.end_time as break_end, ab.duration_minutes as break_duration,
+              ab.start_time as break_start, ab.end_time as break_end,
+              ab.original_duration_minutes, ab.duration_minutes as break_duration,
               rb.first_name as reviewer_first_name, rb.last_name as reviewer_last_name
        FROM break_adjustment_requests bar
        JOIN attendance a ON bar.attendance_id = a.id
@@ -2081,6 +2210,7 @@ router.get('/break-adjustments', async (req, res, next) => {
         break_id: r.break_id,
         user_id: r.user_id,
         requested_minutes: r.requested_minutes,
+        approved_work_minutes: r.approved_work_minutes,
         start_time: r.start_time,
         end_time:   r.end_time,
         time_start: toHHMM(r.start_time, tz),
@@ -2108,6 +2238,7 @@ router.get('/break-adjustments', async (req, res, next) => {
           end_time: r.break_end,
           time_start: toHHMM(r.break_start, tz),
           time_end:   toHHMM(r.break_end,   tz),
+          original_duration_minutes: r.original_duration_minutes,
           duration_minutes: r.break_duration,
         },
         reviewer: r.reviewer_first_name
@@ -2138,31 +2269,71 @@ router.get('/break-adjustments/breaks/:attendanceId', async (req, res, next) => 
 
     // Fetch all breaks for this attendance
     const [breaks] = await pool.query(
-      `SELECT ab.*,
-              bar.id as adjustment_id, bar.requested_minutes, bar.reason, bar.status as adjustment_status,
-              bar.admin_remarks, bar.reviewed_at
+      `SELECT ab.*
        FROM attendance_breaks ab
-       LEFT JOIN break_adjustment_requests bar ON bar.break_id = ab.id
        WHERE ab.attendance_id = ? AND ab.end_time IS NOT NULL
        ORDER BY ab.start_time ASC`,
       [attId]
     );
 
-    // Compute already-adjusted minutes per break
-    const adjustedMap = {};
-    for (const b of breaks) {
-      if (b.adjustment_status === 'Approved') {
-        adjustedMap[b.id] = (adjustedMap[b.id] || 0) + Number(b.requested_minutes);
-      }
-    }
-
     // Helper: convert UTC datetime to company-local HH:MM for display in time inputs
+    // Handles both DATETIME columns (UTC strings) and TIME columns ('HH:MM:SS' strings).
+    // TIME columns are company-local wall-clock times stored directly; return as HH:MM.
+    // DATETIME columns need UTC-to-timezone conversion via toTimezone().
     const toCompanyHHMM = (dt) => {
       if (!dt) return null;
-      // toTimezone returns a Date in the company timezone
+      if (typeof dt === 'string' && /^\d{2}:\d{2}:?\d{0,2}$/.test(dt.trim())) {
+        // TIME column — already company-local wall-clock time
+        const [h, m] = dt.trim().split(':').map(Number);
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+      }
+      // DATETIME column — convert from UTC to company timezone
       const local = toTimezone(new Date(dt), tz);
       return `${String(local.getHours()).padStart(2,'0')}:${String(local.getMinutes()).padStart(2,'0')}`;
     };
+
+    // Fetch all adjustment requests for all these breaks
+    const breakIds = breaks.map(b => b.id);
+    let allRequests = [];
+    if (breakIds.length > 0) {
+      const [reqRows] = await pool.query(
+        `SELECT bar.*,
+                rb.first_name as reviewer_first_name, rb.last_name as reviewer_last_name
+         FROM break_adjustment_requests bar
+         LEFT JOIN users rb ON bar.reviewed_by = rb.id
+         WHERE bar.break_id IN (?)`,
+        [breakIds]
+      );
+      allRequests = reqRows;
+    }
+
+    // Group requests by break_id; compute total approved per break
+    const requestsByBreak = {};
+    const approvedMap = {}; // breakId -> total approved work minutes
+    for (const req of allRequests) {
+      if (!requestsByBreak[req.break_id]) requestsByBreak[req.break_id] = [];
+      requestsByBreak[req.break_id].push({
+        id: req.id,
+        requested_minutes: req.requested_minutes,
+        approved_work_minutes: req.approved_work_minutes,
+        start_time: req.start_time,
+        end_time: req.end_time,
+        time_start: req.start_time ? toCompanyHHMM(req.start_time) : null,
+        time_end: req.end_time ? toCompanyHHMM(req.end_time) : null,
+        reason: req.reason,
+        status: req.status,
+        admin_remarks: req.admin_remarks,
+        reviewed_at: req.reviewed_at,
+        reviewed_by: req.reviewed_by,
+        created_at: req.created_at,
+        reviewer: req.reviewer_first_name
+          ? { first_name: req.reviewer_first_name, last_name: req.reviewer_last_name }
+          : null,
+      });
+      if (req.status === 'Approved' && req.approved_work_minutes != null) {
+        approvedMap[req.break_id] = (approvedMap[req.break_id] || 0) + Number(req.approved_work_minutes);
+      }
+    }
 
     res.json({
       attendance_id: attId,
@@ -2170,31 +2341,38 @@ router.get('/break-adjustments/breaks/:attendanceId', async (req, res, next) => 
       clock_in_time: att.clock_in_time,
       clock_out_time: att.clock_out_time,
       company_tz: tz,
-      breaks: breaks.map(b => ({
-        id: b.id,
-        // Full UTC datetime (for reference)
-        start_time: b.start_time,
-        end_time:   b.end_time,
-        // HH:MM strings in company timezone — safe to send to frontend time inputs
-        time_start: toCompanyHHMM(b.start_time),
-        time_end:   toCompanyHHMM(b.end_time),
-        duration_minutes: b.duration_minutes,
-        adjustable_minutes: Math.max(0, b.duration_minutes - (adjustedMap[b.id] || 0)),
-        adjustment: b.adjustment_id
-          ? {
-              id: b.adjustment_id,
-              requested_minutes: b.requested_minutes,
-              start_time: b.start_time,
-              end_time:   b.end_time,
-              time_start: toCompanyHHMM(b.start_time),
-              time_end:   toCompanyHHMM(b.end_time),
-              reason: b.reason,
-              status: b.adjustment_status,
-              admin_remarks: b.admin_remarks,
-              reviewed_at: b.reviewed_at,
-            }
-          : null,
-      })),
+      breaks: breaks.map(b => {
+        const original = Number(b.original_duration_minutes ?? b.duration_minutes);
+        const totalApproved = approvedMap[b.id] || 0;
+        const available = Math.max(0, original - totalApproved);
+        const lastReq = (requestsByBreak[b.id] || []).slice(-1)[0];
+        return {
+          id: b.id,
+          start_time: b.start_time,
+          end_time:   b.end_time,
+          time_start: toCompanyHHMM(b.start_time),
+          time_end:   toCompanyHHMM(b.end_time),
+          original_duration_minutes: original,
+          duration_minutes: b.duration_minutes,
+          adjustable_minutes: available,
+          existing_requests: requestsByBreak[b.id] || [],
+          adjustment: lastReq
+            ? {
+                id: lastReq.id,
+                requested_minutes: lastReq.requested_minutes,
+                approved_work_minutes: lastReq.approved_work_minutes,
+                start_time: lastReq.start_time,
+                end_time:   lastReq.end_time,
+                time_start: lastReq.time_start,
+                time_end:   lastReq.time_end,
+                reason: lastReq.reason,
+                status: lastReq.status,
+                admin_remarks: lastReq.admin_remarks,
+                reviewed_at: lastReq.reviewed_at,
+              }
+            : null,
+        };
+      }),
     });
   } catch (err) { next(err); }
 });
@@ -2204,7 +2382,7 @@ router.get('/break-adjustments/stats', async (req, res, next) => {
   try {
     const userId = req.user.id;
     const perms = req.user.permissions || [];
-    const isAdmin = perms.includes('attendance.break_adjustment.manage');
+    const isAdmin = perms.includes('attendance.manage');
     const userFilter = isAdmin ? '' : `AND user_id = ${userId}`;
 
     const [[pending]] = await pool.query(
@@ -2233,7 +2411,7 @@ router.get('/break-adjustments/:id', async (req, res, next) => {
     const userId = req.user.id;
     const perms = req.user.permissions || [];
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
-    const isAdmin = perms.includes('attendance.break_adjustment.manage');
+    const isAdmin = perms.includes('attendance.manage');
     const reqId = parseInt(req.params.id);
 
     const [[r]] = await pool.query(
@@ -2241,7 +2419,7 @@ router.get('/break-adjustments/:id', async (req, res, next) => {
               a.date, a.clock_in_time, a.clock_out_time, a.total_break_minutes,
               u.first_name, u.last_name, u.email,
               d.name as department_name,
-              ab.start_time as break_start, ab.end_time as break_end, ab.duration_minutes as break_duration,
+              ab.start_time as break_start, ab.end_time as break_end, ab.original_duration_minutes, ab.duration_minutes as break_duration,
               rb.first_name as reviewer_first_name, rb.last_name as reviewer_last_name
        FROM break_adjustment_requests bar
        JOIN attendance a ON bar.attendance_id = a.id
@@ -2288,6 +2466,7 @@ router.get('/break-adjustments/:id', async (req, res, next) => {
         break_id: r.break_id,
         user_id: r.user_id,
         requested_minutes: r.requested_minutes,
+        approved_work_minutes: r.approved_work_minutes,
         start_time: r.start_time,
         end_time:   r.end_time,
         time_start: toHHMM(r.start_time, tz),
@@ -2315,6 +2494,7 @@ router.get('/break-adjustments/:id', async (req, res, next) => {
           end_time: r.break_end,
           time_start: toHHMM(r.break_start, tz),
           time_end:   toHHMM(r.break_end,   tz),
+          original_duration_minutes: r.original_duration_minutes,
           duration_minutes: r.break_duration,
         },
         reviewer: r.reviewer_first_name
@@ -2332,7 +2512,7 @@ router.get('/break-adjustments/history/:attendanceId', async (req, res, next) =>
   try {
     const userId = req.user.id;
     const perms = req.user.permissions || [];
-    const isAdmin = perms.includes('attendance.break_adjustment.manage');
+    const isAdmin = perms.includes('attendance.manage');
     const attId = parseInt(req.params.attendanceId);
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
 
@@ -2419,52 +2599,72 @@ router.get('/break-adjustments/history/:attendanceId', async (req, res, next) =>
 });
 
 // ─── PUT /api/attendance/break-adjustments/:id/approve ───────────────────────
+// Admin approves a break adjustment request. The approved minutes may differ from requested.
+// recalcBreakDuration is called to recompute: duration = original - totalApprovedForBreak
 router.put('/break-adjustments/:id/approve', async (req, res, next) => {
   try {
     const userId = req.user.id;
     const perms = req.user.permissions || [];
-    const isAdmin = perms.includes('attendance.break_adjustment.manage');
+    const isAdmin = perms.includes('attendance.manage');
 
     if (!isAdmin) {
-      return res.status(403).json({ error: 'Permission denied. Requires attendance.break_adjustment.manage' });
+      return res.status(403).json({ error: 'Permission denied. Requires attendance.manage' });
     }
 
     const reqId = parseInt(req.params.id);
-    const { admin_remarks } = req.body;
+    // approved_work_minutes defaults to requested_minutes if not specified
+    const { admin_remarks, approved_work_minutes } = req.body;
 
     const [[existing]] = await pool.query(
       'SELECT * FROM break_adjustment_requests WHERE id = ?',
       [reqId]
     );
     if (!existing) return res.status(404).json({ error: 'Break adjustment request not found' });
-
     if (existing.status !== 'Pending') {
       return res.status(400).json({ error: `Cannot approve a request that is already ${existing.status}` });
     }
+    if (Number(existing.requested_minutes) <= 0) {
+      return res.status(400).json({ error: 'Requested minutes must be greater than zero' });
+    }
 
-    // Final overlap check
-    const [[pendingTotal]] = await pool.query(
-      `SELECT COALESCE(SUM(requested_minutes), 0) as total
+    // Get break's original duration to validate (fallback to duration_minutes if NULL)
+    const [[br]] = await pool.query(
+      'SELECT original_duration_minutes, duration_minutes FROM attendance_breaks WHERE id = ?',
+      [existing.break_id]
+    );
+    const originalBreak = Number(br?.original_duration_minutes) || Number(br?.duration_minutes) || 0;
+
+    // Get already-approved work minutes for this break (excluding this request)
+    const [[approvedTotal]] = await pool.query(
+      `SELECT COALESCE(SUM(approved_work_minutes), 0) as total
        FROM break_adjustment_requests
-       WHERE break_id = ? AND status IN ('Pending', 'Approved') AND id != ?`,
+       WHERE break_id = ? AND status = 'Approved' AND id != ?`,
       [existing.break_id, reqId]
     );
-    if (Number(pendingTotal.total) + Number(existing.requested_minutes) > Number(existing.requested_minutes)) {
-      // This should not happen since we validated at creation, but double-check
+    const alreadyApproved = Number(approvedTotal.total);
+    const requested = Number(existing.requested_minutes);
+    // approved minutes defaults to requested, capped at available minutes
+    const approvedMinutes = Math.min(
+      approved_work_minutes ?? requested,
+      originalBreak - alreadyApproved
+    );
+
+    if (approvedMinutes <= 0) {
+      return res.status(400).json({ error: 'No available minutes to approve for this break' });
     }
 
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
+    // Update request status + store approved minutes
     await pool.query(
       `UPDATE break_adjustment_requests
-       SET status = 'Approved', reviewed_by = ?, reviewed_at = ?, admin_remarks = ?
+       SET status = 'Approved', approved_work_minutes = ?, reviewed_by = ?, reviewed_at = ?, admin_remarks = ?
        WHERE id = ?`,
-      [userId, now, admin_remarks || null, reqId]
+      [approvedMinutes, userId, now, admin_remarks || null, reqId]
     );
 
-    // Apply the adjustment to attendance
-    // Pass break_id so the specific break record's duration is reduced
-    await applyAdjustmentToAttendance(existing.attendance_id, existing.requested_minutes, existing.break_id, pool);
+    // Recalculate break duration and attendance totals
+    await applyAdjustmentToAttendance(reqId, approvedMinutes, pool);
 
     const [[updated]] = await pool.query(
       'SELECT * FROM break_adjustment_requests WHERE id = ?',
@@ -2475,12 +2675,11 @@ router.put('/break-adjustments/:id/approve', async (req, res, next) => {
       req,
       module: 'Attendance',
       action: 'Break Adjustment Approved',
-      description: `Approved ${existing.requested_minutes} min break adjustment for user ${existing.user_id} (break #${existing.break_id})`,
+      description: `Approved ${approvedMinutes} min work-during-break (requested ${requested} min) for user ${existing.user_id} (break #${existing.break_id})`,
       previousValue: existing,
       newValue: updated,
     });
 
-    // Return updated attendance record with recalculated effective_break_minutes
     const [[attUpdated]] = await pool.query(
       'SELECT * FROM attendance WHERE id = ?',
       [existing.attendance_id]
@@ -2491,18 +2690,33 @@ router.put('/break-adjustments/:id/approve', async (req, res, next) => {
       request: updated,
       attendance: formatAttendance(attUpdated),
     });
+
+    // Notify the employee about approval
+    if (await isNotificationAllowed(existing.user_id, 'attendance')) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)`,
+        [
+          existing.user_id,
+          'break_adjustment_approved',
+          'Break Adjustment Approved',
+          `Your work-during-break request (${approvedMinutes} min) has been approved`,
+          `/attendance?tab=history`,
+        ]
+      );
+    }
   } catch (err) { next(err); }
 });
 
 // ─── PUT /api/attendance/break-adjustments/:id/reject ─────────────────────────
+// Admin rejects a pending request. The requested time range becomes available again.
 router.put('/break-adjustments/:id/reject', async (req, res, next) => {
   try {
     const userId = req.user.id;
     const perms = req.user.permissions || [];
-    const isAdmin = perms.includes('attendance.break_adjustment.manage');
+    const isAdmin = perms.includes('attendance.manage');
 
     if (!isAdmin) {
-      return res.status(403).json({ error: 'Permission denied. Requires attendance.break_adjustment.manage' });
+      return res.status(403).json({ error: 'Permission denied. Requires attendance.manage' });
     }
 
     const reqId = parseInt(req.params.id);
@@ -2513,7 +2727,6 @@ router.put('/break-adjustments/:id/reject', async (req, res, next) => {
       [reqId]
     );
     if (!existing) return res.status(404).json({ error: 'Break adjustment request not found' });
-
     if (existing.status !== 'Pending') {
       return res.status(400).json({ error: `Cannot reject a request that is already ${existing.status}` });
     }
@@ -2527,6 +2740,7 @@ router.put('/break-adjustments/:id/reject', async (req, res, next) => {
       [userId, now, admin_remarks?.trim() || null, reqId]
     );
 
+    // No recalculation needed — rejecting a Pending request restores the available window
     const [[updated]] = await pool.query(
       'SELECT * FROM break_adjustment_requests WHERE id = ?',
       [reqId]
@@ -2542,6 +2756,65 @@ router.put('/break-adjustments/:id/reject', async (req, res, next) => {
     });
 
     res.json({ message: 'Break adjustment rejected', request: updated });
+
+    // Notify the employee about rejection
+    if (await isNotificationAllowed(existing.user_id, 'attendance')) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)`,
+        [
+          existing.user_id,
+          'break_adjustment_rejected',
+          'Break Adjustment Rejected',
+          `Your work-during-break request (${existing.requested_minutes} min) was rejected${admin_remarks?.trim() ? ': ' + admin_remarks.trim() : ''}`,
+          `/attendance?tab=history`,
+        ]
+      );
+    }
+  } catch (err) { next(err); }
+});
+
+// ─── PUT /api/attendance/break-adjustments/:id/cancel ─────────────────────────
+// Employee cancels their own pending request. Makes the time range available again.
+router.put('/break-adjustments/:id/cancel', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const perms = req.user.permissions || [];
+
+    if (!perms.includes('attendance.adjust_break')) {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    const reqId = parseInt(req.params.id);
+
+    const [[existing]] = await pool.query(
+      'SELECT * FROM break_adjustment_requests WHERE id = ?',
+      [reqId]
+    );
+    if (!existing) return res.status(404).json({ error: 'Break adjustment request not found' });
+    if (existing.user_id !== userId) {
+      return res.status(403).json({ error: 'You can only cancel your own requests' });
+    }
+    if (existing.status !== 'Pending') {
+      return res.status(400).json({ error: `Cannot cancel a request that is ${existing.status}` });
+    }
+
+    await pool.query(
+      `UPDATE break_adjustment_requests SET status = 'Cancelled' WHERE id = ?`,
+      [reqId]
+    );
+
+    // Reverse any approved work minutes if they had been approved (shouldn't happen for Pending, but safe)
+    await reverseAdjustmentFromAttendance(reqId, pool);
+
+    logActivity({
+      req,
+      module: 'Attendance',
+      action: 'Break Adjustment Cancelled',
+      description: `Cancelled break adjustment request #${reqId} by employee ${userId}`,
+      previousValue: existing,
+    });
+
+    res.json({ message: 'Break adjustment request cancelled' });
   } catch (err) { next(err); }
 });
 
