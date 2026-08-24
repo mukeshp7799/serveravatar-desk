@@ -1,6 +1,8 @@
 'use client'
 import PageLoader from '@/components/PageLoader'
 import RequirePermission from '@/components/RequirePermission'
+import PortalModal from '@/components/PortalModal'
+import ConfirmDialog from '@/components/project/ConfirmDialog'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
@@ -28,6 +30,11 @@ function RolesPageInner() {
   const [permsRole, setPermsRole] = useState<any>(null)
   const [permsData, setPermsData] = useState<any[]>([])
   const [permsLoading, setPermsLoading] = useState(false)
+  // Edit role state
+  const [editNameError, setEditNameError] = useState('')
+  // Delete confirmation dialog state
+  const [confirmDelete, setConfirmDelete] = useState<{ id: number; name: string } | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const user = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {}
   const isAdmin = Array.isArray(user.permissions) && user.permissions.includes('admin.roles')
 
@@ -66,26 +73,48 @@ function RolesPageInner() {
   }
 
   const handleSaveEditName = async () => {
-    if (!showEdit || !editName.trim()) return
+    if (!showEdit) return
+    const trimmedName = editName.trim()
     setEditNameSaving(true)
+    setEditNameError('')
     try {
-      await api.put(`/roles/${showEdit.id}`, { name: editName.trim() })
-      toast.success('Role updated')
+      const res = await api.put(`/roles/${showEdit.id}`, { name: trimmedName })
+      toast.success(res.data?.message || 'Role updated')
       setShowEditModal(false)
       loadData()
     } catch (err: any) {
-      toast.error(err.message || 'Failed to update role')
+      const msg = err?.response?.data?.error || err?.message || 'Failed to update role'
+      // Validation errors (4xx) show inline, others show toast and close modal
+      if (err?.response?.status >= 400 && err?.response?.status < 500) {
+        setEditNameError(msg)
+      } else {
+        toast.error(msg)
+        setShowEditModal(false)
+      }
     } finally {
       setEditNameSaving(false)
     }
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t('roles.deleteConfirm') || 'Delete this role?')) return
+    const role = roles.find(r => r.id === id)
+    setConfirmDelete({ id, name: role?.name || 'this role' })
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete) return
+    setDeleting(true)
     try {
-      await api.delete(`/roles/${id}`)
-      toast.success(t('roles.roleDeleted') || 'Role deleted'); loadData()
-    } catch (err: any) { toast.error(err.message || t('common.failedToDelete')) }
+      const res = await api.delete(`/roles/${confirmDelete.id}`)
+      setConfirmDelete(null)
+      toast.success(res.data?.message || 'Role deleted')
+      loadData()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err.message || 'Failed to delete role')
+      setConfirmDelete(null)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   // Show permissions in a read-only modal
@@ -190,8 +219,10 @@ function RolesPageInner() {
       )}
 
       {showEditModal && showEdit && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowEditModal(false)}>
-          <div className="bg-white dark:bg-[#1a1d27] rounded-2xl w-full max-w-md shadow-2xl animate-scale-in" onClick={e => e.stopPropagation()}>
+        <PortalModal>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" onClick={() => setShowEditModal(false)} />
+            <div className="relative bg-white dark:bg-[#1a1d27] rounded-2xl w-full max-w-md shadow-2xl animate-scale-in" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 bg-indigo-600 rounded-t-2xl flex items-center gap-2">
               <Pencil size={16} strokeWidth={2} className="text-white" />
               <h3 className="text-white font-bold">Edit Role</h3>
@@ -200,12 +231,18 @@ function RolesPageInner() {
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-2">Role Name *</label>
               <input
                 value={editName}
-                onChange={e => setEditName(e.target.value)}
+                onChange={e => { setEditName(e.target.value); setEditNameError('') }}
                 onKeyDown={e => e.key === 'Enter' && handleSaveEditName()}
-                className="w-full border-2 border-slate-200 dark:border-[#2a2d38] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-4 focus:border-indigo-500 focus:ring-indigo-100 bg-white dark:bg-[#12141c] text-slate-900 dark:text-slate-100"
+                className={`w-full border-2 ${editNameError ? 'border-red-500 dark:border-red-400' : 'border-slate-200 dark:border-[#2a2d38]'} rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-4 ${editNameError ? 'focus:ring-red-100 dark:focus:ring-red-900/30 focus:border-red-500' : 'focus:border-indigo-500 focus:ring-indigo-100'} bg-white dark:bg-[#12141c] text-slate-900 dark:text-slate-100`}
                 placeholder="e.g. Manager"
                 autoFocus
               />
+              {editNameError && (
+                <p className="mt-1.5 text-xs text-red-500 dark:text-red-400 flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx={12} cy={12} r={10} /><line x1={12} y1={8} x2={12} y2={12} /><line x1={12} y1={16} x2={12.01} y2={16} /></svg>
+                  {editNameError}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-3 px-6 py-4 border-t border-slate-100 dark:border-[#2a2d38] bg-slate-50 dark:bg-[#12141c] rounded-b-2xl">
               <button
@@ -223,21 +260,20 @@ function RolesPageInner() {
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        </PortalModal>
       )}
 
       {/* ── Show Permissions Modal ── */}
       {showPermsModal && permsRole && (
-        <div
-          className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-          style={{ minHeight: '100vh' }}
-          onClick={() => setShowPermsModal(false)}
-        >
-          <div
-            className="bg-white dark:bg-[#1a1d27] rounded-2xl w-full max-w-2xl shadow-2xl animate-scale-in border border-slate-200 dark:border-[#2a2d38] flex flex-col overflow-hidden"
-            style={{ maxHeight: 'calc(90vh - 3rem)', margin: 'auto', height: 'auto' }}
-            onClick={e => e.stopPropagation()}
-          >
+        <PortalModal>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" onClick={() => setShowPermsModal(false)} />
+            <div
+              className="relative bg-white dark:bg-[#1a1d27] rounded-2xl w-full max-w-2xl shadow-2xl animate-scale-in border border-slate-200 dark:border-[#2a2d38] flex flex-col overflow-hidden"
+              style={{ maxHeight: 'calc(90vh - 3rem)', height: 'auto' }}
+              onClick={e => e.stopPropagation()}
+            >
             {/* Header */}
             <div className="px-6 py-4 border-b border-slate-100 dark:border-[#2a2d38] shrink-0">
               <div className="flex items-center justify-between">
@@ -299,8 +335,21 @@ function RolesPageInner() {
               </button>
             </div>
           </div>
-        </div>
+          </div>
+        </PortalModal>
       )}
+
+      {/* ── Delete Confirmation Dialog ── */}
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title={`Delete Role "${confirmDelete?.name}"?`}
+        description="This action cannot be undone. The role and all associated data will be permanently removed."
+        confirmLabel="Delete"
+        destructive
+        loading={deleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   )
 }
