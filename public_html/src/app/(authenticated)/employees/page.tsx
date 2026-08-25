@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import PageLoader from '@/components/PageLoader'
+import Scroll from '@/components/Scroll'
 import PaginationBar from '@/components/project/PaginationBar'
 import PortalModal from '@/components/PortalModal'
 import {
@@ -365,7 +366,7 @@ export default function EmployeesPage() {
       </div>
 
       {/* ── Table / Grid ── */}
-      <div className={`rounded-2xl overflow-hidden ${view === 'table' ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700' : ''}`}>
+      <div className={`rounded-2xl w-full ${view === 'table' ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700' : ''}`}>
         {loading ? (
           <div className="flex justify-center py-20"><PageLoader /></div>
         ) : employees.length === 0 ? (
@@ -381,7 +382,7 @@ export default function EmployeesPage() {
         ) : (
           <>
             {view === 'table' ? (
-              <div className="overflow-x-auto">
+              <Scroll containerClassName="w-full min-w-0" className="overflow-auto" options={{ suppressScrollY: false }}>
                 <table className="w-full min-w-[900px]">
                   <thead>
                     <tr className="border-b border-gray-100 dark:border-gray-700">
@@ -505,7 +506,7 @@ export default function EmployeesPage() {
                   })}
                 </tbody>
               </table>
-              </div>
+              </Scroll>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-2">
                 {employees.map((emp: any) => {

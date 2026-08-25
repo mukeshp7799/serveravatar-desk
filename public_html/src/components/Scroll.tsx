@@ -57,10 +57,17 @@ export default function Scroll({
     return () => clearTimeout(t)
   }, [watch])
 
-  // Re-measure on resize
+  // Re-measure on resize and reset scroll position to prevent white space
   useEffect(() => {
     const onResize = () => {
-      if (ref.current && ref.current.update) ref.current.update()
+      if (ref.current) {
+        if (ref.current.update) ref.current.update()
+        // Reset scroll position to top-left when viewport changes
+        if (ref.current.element) {
+          ref.current.element.scrollLeft = 0
+          ref.current.element.scrollTop = 0
+        }
+      }
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
