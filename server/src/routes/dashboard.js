@@ -2,7 +2,7 @@ const express = require('express');
 const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { translateNotifications } = require('../i18n');
-const { getCompanySetting, nowInTimezone, todayInTimezone } = require('../utils/timezone');
+const { getCompanySetting, nowInTimezone, todayInTimezone, toTimezone } = require('../utils/timezone');
 const { computeWorkingHours, computeLiveWorkingHours } = require('../services/attendanceCalc');
 
 const router = express.Router();
@@ -220,9 +220,21 @@ router.get('/', auth, async (req, res, next) => {
       announcements,
       hrStats,
       attendanceStats,
-      myToday: myToday ? {
+      myToday: myToday ? (() => {
+        // Compute current status: if 'clocked_in' and >=1 minute has elapsed since clock_in,
+        // return 'working'. Ensures consistent status across all pages.
+        let currentStatus = myToday.status;
+        if (myToday.status === 'clocked_in' && myToday.clock_in_time) {
+          const clockInDate = new Date(myToday.clock_in_time);
+          const now = new Date();
+          const clockInInTz = toTimezone(clockInDate, tz);
+          const nowInTz = toTimezone(now, tz);
+          const elapsedMinutes = (nowInTz.getTime() - clockInInTz.getTime()) / 60000;
+          if (elapsedMinutes >= 1) currentStatus = 'working';
+        }
+        return {
         id: myToday.id,
-        status: myToday.status,
+        status: currentStatus,
         clock_in_time: myToday.clock_in_time,
         clock_out_time: myToday.clock_out_time,
         total_break_minutes: myToday.total_break_minutes,
@@ -238,7 +250,8 @@ router.get('/', auth, async (req, res, next) => {
         live_working_hours: (!myToday.clock_out_time && myToday.clock_in_time)
           ? computeLiveWorkingHours(myToday.clock_in_time, myToday.total_break_minutes || 0, activeBreakStart)
           : null,
-      } : null,
+        };
+      })() : null,
       recentActivities,
       hasActivityViewAll,
     });

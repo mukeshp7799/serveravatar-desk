@@ -470,9 +470,15 @@ router.get('/today', async (req, res, next) => {
       ? computeLiveWorkingHours(today.clock_in_time, today.total_break_minutes, activeBreak?.start_time || null)
       : null;
 
+    // Compute current status: if 'clocked_in' and >=1 minute has elapsed since clock_in,
+    // return 'working' instead. This ensures status is correct on page refresh.
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
+    const currentStatus = computeCurrentStatus(today, tz);
+
     res.json({
       attendance: {
         ...formatAttendance(today),
+        status: currentStatus,
         live_working_hours: liveWH,
         active_break_start: activeBreak?.start_time || null,
         breaks: breaks.map(b => ({
@@ -951,11 +957,33 @@ router.get('/team', async (req, res, next) => {
       [today]
     );
 
+    // Get active breaks for all team attendance records today
+    const attIds = rows.map(r => r.id);
+    let breaksMap = {};
+    if (attIds.length > 0) {
+      const [allBreaks] = await pool.query(
+        `SELECT * FROM attendance_breaks WHERE attendance_id IN (?)`,
+        [attIds]
+      );
+      for (const b of allBreaks) {
+        if (!breaksMap[b.attendance_id]) breaksMap[b.attendance_id] = [];
+        breaksMap[b.attendance_id].push(b);
+      }
+    }
+
     res.json({
-      records: rows.map(r => ({
-        ...formatAttendance(r),
-        
-      })),
+      records: rows.map(r => {
+        const breaks = breaksMap[r.id] || [];
+        const activeBreak = breaks.find(b => !b.end_time);
+        const liveWH = (!r.clock_out_time && r.clock_in_time)
+          ? computeLiveWorkingHours(r.clock_in_time, r.total_break_minutes, activeBreak?.start_time || null)
+          : null;
+        return {
+          ...formatAttendance(r),
+          status: computeCurrentStatus(r, tz),
+          live_working_hours: liveWH,
+        };
+      }),
       date: today,
       pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
@@ -971,6 +999,7 @@ router.get('/all', async (req, res, next) => {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
+    const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(5, parseInt(req.query.limit) || 30));
     const offset = (page - 1) * limit;
@@ -1010,7 +1039,7 @@ router.get('/all', async (req, res, next) => {
     res.json({
       records: records.map(r => ({
         ...formatAttendance(r),
-        
+        status: computeCurrentStatus(r, tz),
       })),
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
@@ -1114,6 +1143,24 @@ function formatAttendance(r) {
     email: r.email,
     department_name: r.department_name,
   };
+}
+
+/**
+ * Compute the current status for an attendance record.
+ * If status is 'clocked_in' and >= 1 minute has elapsed since clock_in,
+ * returns 'working'. Otherwise returns the stored status.
+ * @param {object} r - attendance record (must have status and clock_in_time)
+ * @param {string} tz - company timezone
+ * @returns {string} computed current status
+ */
+function computeCurrentStatus(r, tz) {
+  if (r.status !== 'clocked_in' || !r.clock_in_time) return r.status;
+  const clockInDate = new Date(r.clock_in_time);
+  const now = new Date();
+  const clockInInTz = toTimezone(clockInDate, tz);
+  const nowInTz = toTimezone(now, tz);
+  const elapsedMinutes = (nowInTz.getTime() - clockInInTz.getTime()) / 60000;
+  return elapsedMinutes >= 1 ? 'working' : r.status;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

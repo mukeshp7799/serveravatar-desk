@@ -278,7 +278,9 @@ function EditModal({ day, onClose, onSave }: {
       window.scrollTo(0, scrollY)
     }
   }, [])
+
   const [newBreakEnd, setNewBreakEnd] = useState('')
+
 
   async function handleSave() {
     setSaving(true)
@@ -470,6 +472,7 @@ export default function AttendancePage() {
 
   // -- History -----------------------------------------------------------------
   const [history, setHistory] = useState<any[]>([])
+  const [histLoading, setHistLoading] = useState(false)
   const [histPage, setHistPage] = useState(1)
   const [histTotal, setHistTotal] = useState(0)
   const [histLimit, setHistLimit] = useState(10)
@@ -573,6 +576,7 @@ export default function AttendancePage() {
 
   const loadHistory = async (page = 1, limit = histLimit) => {
     if (!histDateFrom || !histDateTo) return
+    setHistLoading(true)
     try {
       const params = new URLSearchParams({
         date_from: histDateFrom,
@@ -587,6 +591,8 @@ export default function AttendancePage() {
       setHistTotal(r.pagination?.total || 0)
     } catch (err: any) {
       toast.error(err.message || "Failed to load history")
+    } finally {
+      setHistLoading(false)
     }
   }
 
@@ -1231,6 +1237,21 @@ export default function AttendancePage() {
 
           {/* Table */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">My Attendance History</h2>
+              <button
+                onClick={() => loadHistory(1)}
+                disabled={histLoading}
+                className={`p-2 rounded-lg border-0 transition cursor-pointer ${histLoading ? 'text-gray-400 cursor-not-allowed bg-gray-100 dark:bg-gray-700' : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                title="Refresh"
+              >
+                {histLoading ? (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                )}
+              </button>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -1485,6 +1506,19 @@ export default function AttendancePage() {
               <button onClick={resetReportFilters}
                 className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition cursor-pointer border border-gray-200 dark:border-gray-600">
                 Reset
+              </button>
+              {/* Refresh */}
+              <button
+                onClick={applyReportFilters}
+                disabled={loading}
+                className={`p-2 rounded-lg border border-gray-200 dark:border-gray-600 transition ${loading ? 'text-gray-400 cursor-not-allowed bg-gray-100 dark:bg-gray-700' : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer'}`}
+                title="Refresh"
+              >
+                {loading ? (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                )}
               </button>
             </div>
           )}
