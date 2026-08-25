@@ -364,4 +364,19 @@ router.put('/:id', auth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// DELETE /api/employees/:id — requires `users.delete`
+router.delete('/:id', auth, async (req, res, next) => {
+  try {
+    if (!(req.user.permissions || []).includes('users.delete')) {
+      return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
+    }
+    const [target] = await pool.query('SELECT role_id FROM users WHERE id = ?', [req.params.id]);
+    if (target.length === 0) return res.status(404).json({ error: t(req.lang, 'errors.userNotFound') });
+    if (target[0].role_id === 1) return res.status(403).json({ error: t(req.lang, 'errors.cannotDeleteAdmin') });
+
+    await pool.query('DELETE FROM users WHERE id = ?', [req.params.id]);
+    res.json({ message: t(req.lang, 'errors.userDeleted') });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

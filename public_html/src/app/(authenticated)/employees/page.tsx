@@ -4,12 +4,14 @@ import { useDebouncedCallback } from 'use-debounce'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
+import toast from 'react-hot-toast'
 import PageLoader from '@/components/PageLoader'
 import PaginationBar from '@/components/project/PaginationBar'
+import { DataTable } from '@/components/DataTable'
 import PortalModal from '@/components/PortalModal'
 import {
   Search, X, ChevronUp, ChevronDown, ChevronsUpDown,
-  User, Plus, MoreHorizontal, RefreshCw, Pencil, Trash2, Eye, UserCheck, Ban, LayoutGrid, List,
+  User, Plus, MoreHorizontal, RefreshCw, Pencil, Trash2, Eye, UserCheck, Ban, LayoutGrid, List, Loader2,
 } from 'lucide-react'
 
 const ACCENT = '#4F46E5'
@@ -106,7 +108,7 @@ export default function EmployeesPage() {
   const [employees, setEmployees] = useState<any[]>([])
   const [departments, setDepartments] = useState<any[]>([])
   const [roles, setRoles] = useState<any[]>([])
-  const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 12, totalPages: 0 })
+  const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 10, totalPages: 0 })
 
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
@@ -125,6 +127,7 @@ export default function EmployeesPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const router = useRouter()
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [deletingEmployee, setDeletingEmployee] = useState<any>(null)
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [statusEmployee, setStatusEmployee] = useState<any>(null)
@@ -156,7 +159,7 @@ export default function EmployeesPage() {
       params.set('sortOrder', sortOrder)
       const data = await api.get(`/employees?${params.toString()}`)
       setEmployees(data.employees || [])
-      setPagination(data.pagination || { total: 0, page: 1, limit: 12, totalPages: 0 })
+      setPagination(data.pagination || { total: 0, page: 1, limit: 10, totalPages: 0 })
     } catch (e) { console.error(e) }
     finally { setLoading(false); setIsRefreshing(false) }
   }
@@ -168,11 +171,18 @@ export default function EmployeesPage() {
 
   const confirmDelete = async () => {
     if (!deletingEmployee) return
+    setDeleting(true)
     try {
       await api.delete(`/employees/${deletingEmployee.id}`)
+      toast.success('Employee deleted successfully')
       fetchEmployees(pagination.page)
-    } catch (e: any) { console.error(e?.message || e) }
-    finally { setShowDeleteModal(false); setDeletingEmployee(null) }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || e?.message || 'Failed to delete employee')
+    } finally {
+      setDeleting(false)
+      setShowDeleteModal(false)
+      setDeletingEmployee(null)
+    }
   }
 
   const toggleStatus = (emp: any) => {
@@ -185,9 +195,11 @@ export default function EmployeesPage() {
     const newStatus = statusEmployee.status === 'active' ? 'inactive' : 'active'
     try {
       await api.put(`/employees/${statusEmployee.id}`, { status: newStatus })
+      toast.success(`Employee ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`)
       fetchEmployees(pagination.page)
-    } catch (e: any) { console.error(e?.message || e) }
-    finally { setShowStatusModal(false); setStatusEmployee(null) }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || e?.message || 'Failed to update employee status')
+    } finally { setShowStatusModal(false); setStatusEmployee(null) }
   }
 
   useEffect(() => {
@@ -206,13 +218,9 @@ export default function EmployeesPage() {
   }
   const hasFilters = searchInput || filterDept || filterStatus || filterRole || filterEmpType
 
-  const handleSort = (field: string) => {
-    if (sortBy === field) {
-      setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC')
-    } else {
-      setSortBy(field)
-      setSortOrder('ASC')
-    }
+  const handleSort = (field: string, newOrder: 'ASC' | 'DESC') => {
+    setSortBy(field)
+    setSortOrder(newOrder)
   }
 
   const debouncedSearch = useDebouncedCallback((value: string) => {
@@ -365,7 +373,7 @@ export default function EmployeesPage() {
       </div>
 
       {/* ── Table / Grid ── */}
-      <div className={`rounded-2xl w-full ${view === 'table' ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700' : ''}`}>
+      <div className="w-full overflow-hidden rounded-2xl">
         {loading ? (
           <div className="flex justify-center py-20"><PageLoader /></div>
         ) : employees.length === 0 ? (
@@ -381,131 +389,129 @@ export default function EmployeesPage() {
         ) : (
           <>
             {view === 'table' ? (
-              <div className="w-full min-w-0 overflow-auto scroll-fade touch-pan-x overscroll-contain">
-                <table className="w-full min-w-[900px]">
-                  <thead>
-                    <tr className="border-b border-gray-100 dark:border-gray-700">
-                      {[ { label: 'Employee',      field: 'first_name',        sortable: true  },
-                      { label: 'Employee ID',   field: 'employee_id',        sortable: true  },
-                      { label: 'Department',    field: 'department_name',    sortable: true  },
-                      { label: 'Role',           field: 'role_name',          sortable: true  },
-                      { label: 'Status',         field: 'status',             sortable: true  },
-                      { label: 'Employment Type',field: 'employment_type',   sortable: true  },
-                      { label: 'Join Date',      field: 'hire_date',          sortable: true  },
-                      { label: '',               field: null,                 sortable: false },
-                    ].map(col => (
-                      <th
-                        key={col.label}
-                        onClick={() => col.sortable ? handleSort(col.field) : undefined}
-                        className={`px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap first:pl-5 last:pr-5 ${col.sortable ? 'cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 select-none transition-colors' : ''}`}
-                      >
-                        <span className="flex items-center gap-1">
-                          {col.label}
-                          {col.sortable && (
-                            <span className="inline-flex flex-col">
-                              <ChevronUp
-                                size={10}
-                                className={`-mb-1 ${sortBy === col.field && sortOrder === 'ASC' ? 'text-indigo-500' : 'text-gray-300 dark:text-gray-600'}`}
-                              />
-                              <ChevronDown
-                                size={10}
-                                className={`${sortBy === col.field && sortOrder === 'DESC' ? 'text-indigo-500' : 'text-gray-300 dark:text-gray-600'}`}
-                              />
-                            </span>
-                          )}
-                        </span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50 dark:divide-gray-700/60">
-                  {employees.map((emp: any) => {
-                    const initials = `${emp.first_name?.[0] || ''}${emp.last_name?.[0] || ''}`.toUpperCase()
-                    return (
-                      <tr key={emp.id}
-                        className="hover:bg-slate-50/70 dark:hover:bg-gray-700/30 transition-colors"
-                      >
-                        {/* Employee */}
-                        <td className="px-5 py-3.5">
-                          <Link href={`/employees/${emp.id}`}
-                            className="flex items-center gap-2.5 no-underline hover:opacity-80 transition-opacity">
-                            {emp.avatar_url
-                              ? <img src={emp.avatar_url} alt={initials}
-                                  className="w-9 h-9 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 shrink-0" />
-                              : <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-                                  style={{ background: `linear-gradient(135deg, ${ACCENT}, #7c3aed)` }}>
-                                  {initials}
-                                </div>
-                              }
-                            <div>
-                              <div className="text-sm font-semibold text-gray-900 dark:text-white">{emp.first_name} {emp.last_name}</div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">{emp.designation || '—'}</div>
-                              <div className="text-xs text-gray-400 dark:text-gray-500">{emp.email}</div>
-                            </div>
-                          </Link>
-                        </td>
-                        {/* Employee ID */}
-                        <td className="px-5 py-3.5">
-                          <span className="text-sm font-mono text-gray-600 dark:text-gray-400">{emp.employee_id ? `#${emp.employee_id}` : '—'}</span>
-                        </td>
-                        {/* Department */}
-                        <td className="px-5 py-3.5">
-                          <span className="text-sm text-gray-700 dark:text-gray-300">{emp.department_name || '—'}</span>
-                        </td>
-                        {/* Role */}
-                        <td className="px-5 py-3.5">
-                          <span className="text-sm text-gray-700 dark:text-gray-300">{emp.role_name || '—'}</span>
-                        </td>
-                        {/* Status */}
-                        <td className="px-5 py-3.5">
-                          {statusBadge(emp.status)}
-                        </td>
-                        {/* Employment Type */}
-                        <td className="px-5 py-3.5">
-                          {emp.employment_type ? empTypeBadge(emp.employment_type) : '—'}
-                        </td>
-                        {/* Join Date */}
-                        <td className="px-5 py-3.5">
-                          <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">{fmtDate(emp.hire_date)}</span>
-                        </td>
-                        {/* Actions */}
-                        <td className="px-5 py-3.5">
-                          <div className="flex items-center justify-start gap-1">
-                            <Link
-                              href={`/employees/${emp.id}`}
-                              className="p-2 rounded-lg text-white transition cursor-pointer border-0 no-underline"
-                              style={{ backgroundColor: ACCENT }}
-                              title="View Details"
-                            >
-                              <Eye size={13} />
+              <>
+                <DataTable
+                  columns={[
+                    {
+                      label: 'Employee',
+                      field: 'first_name',
+                      sortable: true,
+                      thClassName: 'w-64',
+                    },
+                    {
+                      label: 'Employee ID',
+                      field: 'employee_id',
+                      sortable: true,
+                    },
+                    {
+                      label: 'Department',
+                      field: 'department_name',
+                      sortable: true,
+                    },
+                    {
+                      label: 'Role',
+                      field: 'role_name',
+                      sortable: true,
+                    },
+                    {
+                      label: 'Status',
+                      field: 'status',
+                      sortable: true,
+                    },
+                    {
+                      label: 'Employment Type',
+                      field: 'employment_type',
+                      sortable: true,
+                    },
+                    {
+                      label: 'Join Date',
+                      field: 'hire_date',
+                      sortable: true,
+                    },
+                    {
+                      label: '',
+                    },
+                  ]}
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onSort={handleSort}
+                  minWidth="900px"
+                  pagination={
+                    <PaginationBar
+                      page={pagination.page}
+                      total={pagination.total}
+                      limit={pagination.limit}
+                      onPage={p => fetchEmployees(p)}
+                      onLimitChange={l => { setLimit(l); fetchEmployees(1) }}
+                      pageSizeOptions={[10, 20, 30, 50]}
+                    />
+                  }
+                >
+                  <tbody className="divide-y divide-gray-50 dark:divide-gray-700/60">
+                    {employees.map((emp: any) => {
+                      const initials = `${emp.first_name?.[0] || ''}${emp.last_name?.[0] || ''}`.toUpperCase()
+                      return (
+                        <tr key={emp.id} className="hover:bg-slate-50/70 dark:hover:bg-gray-700/30 transition-colors">
+                          <td className="px-5 py-3.5 first:pl-5 last:pr-5">
+                            <Link href={`/employees/${emp.id}`}
+                              className="flex items-center gap-2.5 no-underline hover:opacity-80 transition-opacity">
+                              {emp.avatar_url
+                                ? <img src={emp.avatar_url} alt={initials}
+                                    className="w-9 h-9 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600 shrink-0" />
+                                : <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                                    style={{ background: `linear-gradient(135deg, ${ACCENT}, #7c3aed)` }}>
+                                    {initials}
+                                  </div>
+                                }
+                              <div>
+                                <div className="text-sm font-semibold text-gray-900 dark:text-white">{emp.first_name} {emp.last_name}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">{emp.designation || '—'}</div>
+                                <div className="text-xs text-gray-400 dark:text-gray-500">{emp.email}</div>
+                              </div>
                             </Link>
-                            <button
-                              onClick={() => toggleStatus(emp)}
-                              className="p-2 rounded-lg text-white transition cursor-pointer border-0"
-                              style={{ backgroundColor: emp.status === 'active' ? '#d97706' : '#16a34a' }}
-                              title={emp.status === 'active' ? 'Deactivate' : 'Activate'}
-                            >
-                              {emp.status === 'active'
-                                ? <Ban size={13} />
-                                : <UserCheck size={13} />
-                              }
-                            </button>
-                            <button
-                              onClick={() => openDeleteModal(emp)}
-                              className="p-2 rounded-lg text-white transition cursor-pointer border-0"
-                              style={{ backgroundColor: '#dc2626' }}
-                              title="Delete"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              </div>
+                          </td>
+                          <td className="px-5 py-3.5 first:pl-5 last:pr-5">
+                            <span className="text-sm font-mono text-gray-600 dark:text-gray-400">{emp.employee_id ? `#${emp.employee_id}` : '—'}</span>
+                          </td>
+                          <td className="px-5 py-3.5 text-sm text-gray-700 dark:text-gray-300 first:pl-5 last:pr-5">{emp.department_name || '—'}</td>
+                          <td className="px-5 py-3.5 text-sm text-gray-700 dark:text-gray-300 first:pl-5 last:pr-5">{emp.role_name || '—'}</td>
+                          <td className="px-5 py-3.5 first:pl-5 last:pr-5">{statusBadge(emp.status)}</td>
+                          <td className="px-5 py-3.5 first:pl-5 last:pr-5">{emp.employment_type ? empTypeBadge(emp.employment_type) : '—'}</td>
+                          <td className="px-5 py-3.5 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap first:pl-5 last:pr-5">{fmtDate(emp.hire_date)}</td>
+                          <td className="px-5 py-3.5 first:pl-5 last:pr-5">
+                            <div className="flex items-center justify-start gap-1">
+                              <Link
+                                href={`/employees/${emp.id}`}
+                                className="p-2 rounded-lg text-white transition cursor-pointer border-0 no-underline"
+                                style={{ backgroundColor: ACCENT }}
+                                title="View Details"
+                              >
+                                <Eye size={13} />
+                              </Link>
+                              <button
+                                onClick={() => toggleStatus(emp)}
+                                className="p-2 rounded-lg text-white transition cursor-pointer border-0"
+                                style={{ backgroundColor: emp.status === 'active' ? '#d97706' : '#16a34a' }}
+                                title={emp.status === 'active' ? 'Deactivate' : 'Activate'}
+                              >
+                                {emp.status === 'active' ? <Ban size={13} /> : <UserCheck size={13} />}
+                              </button>
+                              <button
+                                onClick={() => openDeleteModal(emp)}
+                                className="p-2 rounded-lg text-white transition cursor-pointer border-0"
+                                style={{ backgroundColor: '#dc2626' }}
+                                title="Delete"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </DataTable>
+              </>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-2">
                 {employees.map((emp: any) => {
@@ -590,15 +596,16 @@ export default function EmployeesPage() {
               </div>
             )}
 
-            {/* Pagination */}
-            <PaginationBar
-              page={pagination.page}
-              total={pagination.total}
-              limit={pagination.limit}
-              onPage={p => fetchEmployees(p)}
-              onLimitChange={l => { setLimit(l); fetchEmployees(1) }}
-              pageSizeOptions={[8, 12, 24, 48]}
-            />
+            {view !== 'table' && (
+              <PaginationBar
+                page={pagination.page}
+                total={pagination.total}
+                limit={pagination.limit}
+                onPage={p => fetchEmployees(p)}
+                onLimitChange={l => { setLimit(l); fetchEmployees(1) }}
+                pageSizeOptions={[10, 20, 30, 50]}
+              />
+            )}
           </>
         )}
       </div>
@@ -625,9 +632,10 @@ export default function EmployeesPage() {
                   </button>
                   <button
                     onClick={confirmDelete}
-                    className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition cursor-pointer border-0"
+                    disabled={deleting}
+                    className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition cursor-pointer border-0 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    Yes, Delete
+                    {deleting ? <><Loader2 size={14} className="animate-spin" /> Deleting…</> : 'Yes, Delete'}
                   </button>
                 </div>
               </div>
