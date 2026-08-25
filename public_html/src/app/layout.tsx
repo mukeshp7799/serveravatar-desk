@@ -4,6 +4,10 @@ import { ThemeProvider } from "../components/ThemeProvider";
 import I18nProvider from "../components/I18nProvider";
 import Toaster from "../components/Toaster";
 import AppTooltip from "../components/Tooltip";
+import { Geist } from "next/font/google";
+import { cn } from "@/lib/utils";
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
   title: "Serveravatar Hub - HR & Project Management",
@@ -22,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={cn("font-sans", geist.variable)}>
       <head>
         <script
           dangerouslySetInnerHTML={{

@@ -648,7 +648,7 @@ router.post('/', auth, async (req, res, next) => {
       half_day_session: halfDaySession,
     };
     const days = calcWorkdays(start_date, end_date, workingDays, holidaySet, leaveSettings, isHalfDay, tz);
-    if (days <= 0) return res.status(400).json({ error: 'No working days in selected date range (check weekends/holidays settings).' });
+    if (days <= 0) return res.status(400).json({ error: 'The selected dates fall on a non-working day (weekend or holiday). Please choose working days.' });
 
     // Check this leave type is active
     const [ltype] = await pool.query('SELECT * FROM leave_types WHERE id = ? AND status = \'active\'', [leave_type_id]);
@@ -675,15 +675,15 @@ router.post('/', auth, async (req, res, next) => {
       });
     }
 
-    // Check no overlapping pending/approved requests
+    // Check no overlapping pending/approved requests (any leave type)
     const [overlap] = await pool.query(
       `SELECT COUNT(*) as c FROM leave_requests
-       WHERE user_id = ? AND leave_type_id = ? AND status IN ('pending','approved')
+       WHERE user_id = ? AND status IN ('pending','approved')
        AND start_date <= ? AND end_date >= ?`,
-      [req.user.id, leave_type_id, end_date, start_date]
+      [req.user.id, end_date, start_date]
     );
     if (overlap[0].c > 0) {
-      return res.status(409).json({ error: 'You already have an overlapping leave request for this leave type.' });
+      return res.status(409).json({ error: 'You already have a leave request for these dates. Please choose different dates or cancel your existing request first.' });
     }
 
     const sessionForDb = isHalfDay ? (half_day_session || halfDaySession || 'first_half') : null;

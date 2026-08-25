@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 import PageLoader from '@/components/PageLoader'
-import Scroll from '@/components/Scroll'
 import PaginationBar from '@/components/project/PaginationBar'
 import PortalModal from '@/components/PortalModal'
 import {
@@ -382,7 +381,7 @@ export default function EmployeesPage() {
         ) : (
           <>
             {view === 'table' ? (
-              <Scroll containerClassName="w-full min-w-0" className="overflow-auto" options={{ suppressScrollY: false }}>
+              <div className="w-full min-w-0 overflow-auto scroll-fade touch-pan-x overscroll-contain">
                 <table className="w-full min-w-[900px]">
                   <thead>
                     <tr className="border-b border-gray-100 dark:border-gray-700">
@@ -506,7 +505,7 @@ export default function EmployeesPage() {
                   })}
                 </tbody>
               </table>
-              </Scroll>
+              </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-2">
                 {employees.map((emp: any) => {

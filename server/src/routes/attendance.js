@@ -707,8 +707,8 @@ router.get('/my-history', async (req, res, next) => {
 
       let leaveInfo = null;
       for (const lv of leaves) {
-        const ls = String(lv.start_date).slice(0, 10);
-        const le = String(lv.end_date).slice(0, 10);
+        const ls = new Date(lv.start_date).toISOString().slice(0, 10);
+        const le = new Date(lv.end_date).toISOString().slice(0, 10);
         if (ds >= ls && ds <= le) { leaveInfo = lv; break; }
       }
 
@@ -1303,8 +1303,8 @@ router.get('/analytics/summary', async (req, res, next) => {
         // Check if on approved leave this day
         let onLeave = false;
         for (const lv of empLeaves) {
-          const ls = String(lv.start_date).slice(0, 10);
-          const le = String(lv.end_date).slice(0, 10);
+          const ls = new Date(lv.start_date).toISOString().slice(0, 10);
+          const le = new Date(lv.end_date).toISOString().slice(0, 10);
           if (ds >= ls && ds <= le) { onLeave = true; break; }
         }
 
@@ -1355,13 +1355,8 @@ router.get('/analytics/summary', async (req, res, next) => {
       const totalBreak = fullTimeline.reduce((s, d) => s + (d.total_break_minutes || 0), 0);
       const breakAdjustmentMinutes = fullTimeline.reduce((s, d) => s + (d.effective_break_minutes > 0 ? d.effective_break_minutes : 0), 0);
 
-      // Approved leave overlapping days
-      let approvedLeaveDays = 0;
-      for (const lv of leaves) {
-        if (lv.user_id === emp.id) {
-          approvedLeaveDays += overlapDays(lv.start_date, lv.end_date, date_from, date_to);
-        }
-      }
+      // Approved leave days: count from fullTimeline (respects working days, excludes weekends/holidays — same correct logic as user history)
+      const approvedLeaveDays = fullTimeline.filter(d => d.status === 'leave').length;
 
       // avgWH: use daysWithHours as denominator (same as user history)
       const avgWH = daysWithHours > 0 ? Math.round((totalWH / daysWithHours) * 100) / 100 : 0;
@@ -1545,8 +1540,8 @@ router.get('/analytics/timeline', async (req, res, next) => {
       // Check if this day falls within any approved leave
       let leaveInfo = null;
       for (const lv of leaves) {
-        const ls = String(lv.start_date).slice(0, 10);
-        const le = String(lv.end_date).slice(0, 10);
+        const ls = new Date(lv.start_date).toISOString().slice(0, 10);
+        const le = new Date(lv.end_date).toISOString().slice(0, 10);
         if (ds >= ls && ds <= le) {
           leaveInfo = lv;
           break;
