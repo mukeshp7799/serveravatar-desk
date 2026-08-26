@@ -250,8 +250,9 @@ router.post('/', auth, async (req, res, next) => {
       'INSERT INTO discussions (project_id, title, created_by_user_id) VALUES (?, ?, ?)',
       [projectId && Number(projectId) > 0 ? Number(projectId) : null, String(title).trim(), req.user.id]
     );
-
-    res.status(201).json({ id: result.insertId, title: String(title).trim() });
+    const insertedId = result.insertId;
+    const trimmedTitle = String(title).trim();
+    res.status(201).json({ id: insertedId, title: trimmedTitle });
   } catch (err) { next(err); }
 });
 
@@ -400,7 +401,8 @@ router.delete('/:id', auth, async (req, res, next) => {
     if (!isCreator && !canDelete) {
       return res.status(403).json({ error: 'You do not have permission to delete this discussion.' });
     }
-
+    const discussionTitle = discussion[0].title || `Discussion ${req.params.id}`;
+    const projId = discussion[0].project_id;
     await pool.query('DELETE FROM discussions WHERE id = ?', [req.params.id]);
     res.json({ message: t(req.lang, 'errors.discussionDeleted') });
   } catch (err) { next(err); }
@@ -419,6 +421,11 @@ router.delete('/:id/messages/:messageId', auth, async (req, res, next) => {
     if (messageRows[0].sender_id !== req.user.id) {
       return res.status(403).json({ error: 'You can only delete your own messages.' });
     }
+
+    // Fetch discussion to get project_id before deleting the message.
+    const [discRows] = await pool.query('SELECT project_id FROM discussions WHERE id = ?', [req.params.id]);
+    const projId = discRows.length > 0 ? discRows[0].project_id : null;
+    const messageLabel = `Message ${req.params.messageId}`;
 
     await pool.query('DELETE FROM messages WHERE id = ?', [req.params.messageId]);
     res.json({ message: 'Message deleted' });

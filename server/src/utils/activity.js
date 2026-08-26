@@ -34,6 +34,9 @@ const FEATURE_META = {
   files:          { label: 'Files',         accent: 'cyan'    },
   chat:           { label: 'Chat',          accent: 'pink'    },
   schedule:       { label: 'Schedule',      accent: 'orange'  },
+  announcements:  { label: 'Announcements', accent: 'rose'    },
+  testCases:      { label: 'Test Cases',    accent: 'violet' },
+  testSuites:     { label: 'Test Suites',   accent: 'violet' },
 };
 
 /** Map (feature, action) → user-facing verb phrase used in the timeline.
@@ -44,8 +47,8 @@ const ACTION_VERB = {
   'project.updated':          'updated the project',
   'project.deleted':          'deleted the project',
 
-  'team.member_added':        'added a member',
-  'team.member_removed':      'removed a member',
+  'team.member_added':        'added',
+  'team.member_removed':      'removed',
 
   'task-board.task_created':  'created task',
   'task-board.task_updated':  'updated task',
@@ -55,6 +58,12 @@ const ACTION_VERB = {
   'task-board.task_archived': 'archived task',
   'task-board.task_restored': 'restored task',
   'task-board.task_commented':'commented on task',
+  'task-board.subtask_created': 'added subtask',
+  'task-board.subtask_updated': 'updated subtask',
+  'task-board.subtask_deleted': 'deleted subtask',
+  'task-board.comment_updated': 'updated comment',
+  'task-board.comment_deleted': 'deleted comment',
+  'task-board.attachment_added': 'added attachment',
 
   'todos.list_created':       'created to-do list',
   'todos.list_updated':       'updated to-do list',
@@ -65,24 +74,49 @@ const ACTION_VERB = {
   'todos.item_reopened':      'reopened to-do',
   'todos.item_deleted':       'deleted to-do',
 
-  'message-board.message_posted':  'posted a message',
-  'message-board.message_updated': 'updated a message',
-  'message-board.message_deleted': 'deleted a message',
+  'message-board.message_posted':  'posted',
+  'message-board.message_updated': 'updated',
+  'message-board.message_deleted': 'deleted',
 
   'files.document_created':   'created a document',
   'files.document_updated':   'updated a document',
   'files.document_deleted':   'deleted a document',
   'files.file_uploaded':      'uploaded a file',
   'files.file_deleted':       'deleted a file',
-  'files.commented':          'commented on a document',
+  'files.commented':          'added a comment',
+  'files.comment_updated':   'updated a comment',
+  'files.comment_deleted':   'deleted a comment',
 
-  'chat.message_posted':      'posted in chat',
-  'chat.message_updated':     'updated a chat message',
-  'chat.message_deleted':     'deleted a chat message',
+  'chat.message_posted':      'posted',
+  'chat.message_updated':     'updated',
+  'chat.message_deleted':     'deleted',
 
   'schedule.event_created':   'created a schedule event',
   'schedule.event_updated':   'updated a schedule event',
   'schedule.event_deleted':   'deleted a schedule event',
+
+  'announcements.created':   'created an announcement',
+  'announcements.updated':    'updated an announcement',
+  'announcements.deleted':    'deleted an announcement',
+  'announcements.pinned':     'pinned an announcement',
+  'announcements.unpinned':   'unpinned an announcement',
+  'announcements.restored':   'restored an announcement',
+
+  'testCases.created':        'created a test case',
+  'testCases.updated':        'updated a test case',
+  'testCases.deleted':        'deleted a test case',
+  'testCases.status_changed':  'changed test case status',
+  'testCases.priority_changed':'changed test case priority',
+  'testCases.commented':      'commented on test case',
+  'testCases.step_created':   'added test step',
+  'testCases.step_updated':    'updated test step',
+  'testCases.step_deleted':    'deleted test step',
+  'testCases.attachment_added':  'added attachment',
+  'testCases.attachment_deleted': 'deleted attachment',
+
+  'testSuites.created':       'created a test suite',
+  'testSuites.updated':      'updated a test suite',
+  'testSuites.deleted':      'deleted a test suite',
 };
 
 const FEATURE_KEYS = Object.keys(FEATURE_META);

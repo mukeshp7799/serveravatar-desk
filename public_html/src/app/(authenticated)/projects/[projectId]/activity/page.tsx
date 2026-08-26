@@ -6,7 +6,7 @@ import FeaturePage from '@/components/project/FeaturePage'
 import PaginationBar from '@/components/project/PaginationBar'
 import EmptyState from '@/components/project/EmptyState'
 import { fmtRelative } from '@/components/project/format'
-import { useActivities, getFriendlyAction } from '@/lib/project-activities-api'
+import { useActivities, getFriendlyAction, formatActivityLabel } from '@/lib/project-activities-api'
 import { TruncatedActivity } from '@/components/project/TruncatedActivity'
 import { Activity, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter, Loader2, RefreshCcw, User as UserIcon } from 'lucide-react'
 
@@ -27,6 +27,7 @@ export default function ActivityPage() {
 
   const [featureFilter, setFeatureFilter] = useState<string | undefined>(undefined)
   const [actorFilter, setActorFilter] = useState<number | undefined>(undefined)
+  const [actionFilter, setActionFilter] = useState<string | undefined>(undefined)
 
   const {
     items,
@@ -36,6 +37,7 @@ export default function ActivityPage() {
     totalPages,
     perPageOptions,
     features,
+    actions,
     actors,
     loading,
     isPaginating,
@@ -48,6 +50,7 @@ export default function ActivityPage() {
     initialPerPage: 10,
     pollMs: 20000,
     feature: featureFilter,
+    action: actionFilter,
     actorId: actorFilter,
   })
 
@@ -141,6 +144,24 @@ export default function ActivityPage() {
                   ))}
                 </select>
               </FilterChip>
+              <FilterChip
+                icon={<Filter size={13} className="text-indigo-500 dark:text-indigo-300" />}
+                label="Action"
+              >
+                <select
+                  value={actionFilter || ''}
+                  onChange={(e) => setActionFilter(e.target.value || undefined)}
+                  className="bg-transparent text-xs font-semibold text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer pr-1"
+                  aria-label="Filter by action"
+                >
+                  <option value="">All actions</option>
+                  {actions.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </select>
+              </FilterChip>
 
               {/* Right-side cluster: refresh only */}
               <div className="flex items-center gap-2 ml-auto">
@@ -168,9 +189,9 @@ export default function ActivityPage() {
         ) : items.length === 0 ? (
           <EmptyState
             iconName="Activity"
-            title={featureFilter || actorFilter ? 'No matching activity' : 'No activity yet'}
+            title={featureFilter || actorFilter || actionFilter ? 'No matching activity' : 'No activity yet'}
             description={
-              featureFilter || actorFilter
+              featureFilter || actorFilter || actionFilter
                 ? 'Try clearing one of the filters above.'
                 : 'Events will appear here as the team works.'
             }
@@ -238,11 +259,11 @@ export default function ActivityPage() {
                         {e.targetLabel ? (
                           <span
                             data-tooltip-id="app-tooltip"
-                            data-tooltip-content={e.targetLabel}
+                            data-tooltip-content={formatActivityLabel(e.actionVerb, e.targetLabel, e.targetType, e.meta)}
                             className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800"
                           >
                             <TruncatedActivity
-                              value={e.targetLabel}
+                              value={formatActivityLabel(e.actionVerb, e.targetLabel, e.targetType, e.meta)}
                               maxChars={36}
                               showTitle={false}
                             />

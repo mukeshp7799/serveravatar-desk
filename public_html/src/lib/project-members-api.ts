@@ -266,10 +266,9 @@ export function useProjectMembers(projectId: string | number): UseProjectMembers
  * ────────────────────────────────────────────────────────────────── */
 
 /**
- * Fetch active users from `/api/users?status=active`. The backend's
- * `GET /api/users` already accepts a `status` filter and excludes
- * inactive users from default search results — same contract used
- * elsewhere in the project.
+ * Fetch active users from `/api/users/active`. This endpoint is open to all
+ * authenticated users (unlike `/api/users` which requires `users.view_all`).
+ * Returns up to 100 active users ordered by first name.
  */
 export function useActiveUsers(): { users: ActiveUser[]; loading: boolean; error: string | null } {
   const [users, setUsers] = useState<ActiveUser[]>([])
@@ -280,8 +279,7 @@ export function useActiveUsers(): { users: ActiveUser[]; loading: boolean; error
     let cancelled = false
     const run = async () => {
       try {
-        // Pass status=active so we only get active registered users.
-        const res = await api.get(`/users?status=active&limit=200`)
+        const res = await api.get(`/users/active`)
         const list = Array.isArray(res?.users) ? res.users : Array.isArray(res) ? res : []
         if (!cancelled) setUsers(list as ActiveUser[])
       } catch (e: any) {

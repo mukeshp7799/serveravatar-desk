@@ -292,7 +292,7 @@ router.post("/", auth, async (req, res, next) => {
       projectId: project_id ? Number(project_id) : null,
       actorId: req.user.id,
       feature: 'files',
-      action: 'document_created',
+      action: 'created',
       targetType: 'document',
       targetId: result.insertId,
       targetLabel: title.trim(),
@@ -331,7 +331,7 @@ router.put("/:id", auth, async (req, res, next) => {
         projectId: doc.project_id,
         actorId: req.user.id,
         feature: 'files',
-        action: 'document_updated',
+        action: 'updated',
         targetType: 'document',
         targetId: doc.id,
         targetLabel: newTitle,
@@ -373,7 +373,7 @@ router.post("/upload", auth, upload.single("file"), async (req, res, next) => {
         projectId: projectIdNum,
         actorId: req.user.id,
         feature: 'files',
-        action: 'file_uploaded',
+        action: 'uploaded',
         targetType: 'file',
         targetId: result.insertId,
         targetLabel: req.file.originalname,
@@ -400,7 +400,7 @@ router.delete("/:id", auth, async (req, res, next) => {
         projectId: doc.project_id,
         actorId: req.user.id,
         feature: 'files',
-        action: doc.file_url ? 'file_deleted' : 'document_deleted',
+        action: 'deleted',
         targetType: doc.file_url ? 'file' : 'document',
         targetId: doc.id,
         targetLabel: doc.title || doc.filename,
@@ -449,6 +449,13 @@ router.post("/:id/comments", auth, async (req, res, next) => {
     const commentId = result.insertId;
     const projectId = doc[0].project_id;
 
+    // Look up document title for the activity log
+    const [[docRow]] = await pool.query(
+      "SELECT title FROM documents WHERE id = ?",
+      [req.params.id]
+    );
+    const docTitle = docRow ? docRow.title : null;
+
     // Process @mentions — store records and send in-app notifications.
     if (projectId) {
       await processAndNotifyMentions({
@@ -477,7 +484,7 @@ router.post("/:id/comments", auth, async (req, res, next) => {
         action: 'commented',
         targetType: 'document_comment',
         targetId: commentId,
-        targetLabel: `comment on doc #${req.params.id}`,
+        targetLabel: docTitle || `document #${req.params.id}`,
         meta: { document_id: Number(req.params.id), excerpt: body.slice(0, 120) },
       });
     }
@@ -509,6 +516,20 @@ router.put("/:id/comments/:commentId", auth, async (req, res, next) => {
       "UPDATE document_comments SET body = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
       [body, req.params.commentId]
     );
+    // Get projectId for activity recording
+    const [docRow] = await pool.query("SELECT project_id FROM documents WHERE id = ?", [req.params.id]);
+    const projectId = docRow.length > 0 ? docRow[0].project_id : null;
+    if (projectId) {
+      await recordActivity(pool, {
+        projectId,
+        actorId: req.user.id,
+        feature: "files",
+        action: "comment_updated",
+        targetType: "comment",
+        targetId: String(req.params.commentId),
+        targetLabel: body.slice(0, 80),
+      });
+    }
     const [fresh] = await pool.query(
       `SELECT dc.*, u.first_name, u.last_name, u.email, u.avatar_url
        FROM document_comments dc JOIN users u ON dc.user_id = u.id WHERE dc.id = ?`,
@@ -537,7 +558,22 @@ router.delete("/:id/comments/:commentId", auth, async (req, res, next) => {
       }
     }
     if (!allowed) return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
+    // Capture comment body before deleting so we can record it in the activity log.
+    const commentLabel = comment.body ? comment.body.slice(0, 80) : `Comment ${req.params.commentId}`;
+    const [docRow] = await pool.query("SELECT project_id FROM documents WHERE id = ?", [req.params.id]);
+    const projectId = docRow.length > 0 ? docRow[0].project_id : null;
     await pool.query("DELETE FROM document_comments WHERE id = ?", [req.params.commentId]);
+    if (projectId) {
+      await recordActivity(pool, {
+        projectId,
+        actorId: req.user.id,
+        feature: "files",
+        action: "comment_deleted",
+        targetType: "comment",
+        targetId: String(req.params.commentId),
+        targetLabel: commentLabel,
+      });
+    }
     res.json({ message: 'Comment deleted' });
   } catch (err) { next(err); }
 });

@@ -131,7 +131,7 @@ export default function RecentActivity({ projectId, initialPerPage = 10 }: Recen
                     <p className="text-xs text-gray-700 dark:text-gray-300 leading-snug">
                       <span className="font-semibold text-gray-900 dark:text-white">{entry.actor}</span>{' '}
                       <TruncatedActivity
-                        value={formatActivityLabel(entry.actionVerb, entry.targetLabel)}
+                        value={formatActivityLabel(entry.actionVerb, entry.targetLabel, entry.targetType, entry.meta)}
                         maxChars={36}
                         className="text-gray-600 dark:text-gray-400"
                       />

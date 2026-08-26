@@ -11,6 +11,49 @@ const PER_PAGE_OPTIONS = [10, 20, 30, 50];
 const PER_PAGE_DEFAULT = 10;
 const ACTIVITY_MAX_PAGE = 500; // safety cap (500 * 50 = 25k rows per request)
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Generic action buckets — maps a generic dropdown label → raw DB action values.
+// When the user selects "Create" the API expands this to IN('document_created',…).
+// ─────────────────────────────────────────────────────────────────────────────
+const GENERIC_ACTION_MAP = {
+  Created: ['created', 'document_created', 'event_created', 'list_created',
+             'task_created', 'column_created', 'member_added', 'file_uploaded',
+             'test_case_created', 'suite_created', 'item_created'],
+  Updated: ['updated', 'document_updated', 'event_updated', 'task_updated',
+             'column_renamed', 'message_updated', 'list_updated',
+             'test_case_updated', 'suite_updated', 'item_updated'],
+  Deleted: ['deleted', 'document_deleted', 'event_deleted', 'task_deleted',
+             'column_deleted', 'file_deleted', 'list_deleted', 'message_deleted',
+             'chat_message_deleted', 'test_case_deleted', 'suite_deleted', 'item_deleted'],
+  Added:  ['added', 'member_added'],
+  Removed: ['removed', 'member_removed'],
+  Posted: ['posted', 'message_posted', 'chat_message_posted'],
+};
+
+// Reverse map: raw DB action → generic dropdown label.
+const RAW_TO_GENERIC = {};
+Object.entries(GENERIC_ACTION_MAP).forEach(([generic, raws]) => {
+  raws.forEach((r) => { RAW_TO_GENERIC[r] = generic; });
+});
+
+/**
+ * Normalize a raw DB action string for the dropdown.
+ * Returns a generic bucket label (Create/Update/…) when available,
+ * otherwise a title-cased version of the raw value.
+ */
+function normalizeActionLabel(raw) {
+  if (!raw) return '';
+  if (RAW_TO_GENERIC[raw]) return RAW_TO_GENERIC[raw];
+  if (raw.startsWith('item_')) {
+    const verb = raw.slice(5);
+    return verb.charAt(0).toUpperCase() + verb.slice(1);
+  }
+  return raw
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
 // GET /api/projects
 router.get('/', auth, async (req, res, next) => {
   try {
@@ -291,7 +334,7 @@ router.post('/:id/members', auth, async (req, res, next) => {
       projectId: Number(req.params.id),
       actorId: req.user.id,
       feature: 'team',
-      action: 'member_added',
+      action: 'added',
       targetType: 'member',
       targetId: targetUserId,
       targetLabel: memberLabel,
@@ -341,7 +384,7 @@ router.delete('/:id/members/:userId', auth, async (req, res, next) => {
       projectId: Number(req.params.id),
       actorId: req.user.id,
       feature: 'team',
-      action: 'member_removed',
+      action: 'removed',
       targetType: 'member',
       targetId: req.params.userId,
       targetLabel: leaverLabel,
@@ -381,7 +424,7 @@ router.post('/:id/leave', auth, async (req, res, next) => {
       projectId: Number(req.params.id),
       actorId: req.user.id,
       feature: 'team',
-      action: 'member_left',
+      action: 'left',
       targetType: 'member',
       targetId: req.user.id,
       targetLabel: req.user.email,
@@ -424,7 +467,7 @@ router.post('/:id/todolists', auth, async (req, res, next) => {
       projectId: Number(req.params.id),
       actorId: req.user.id,
       feature: 'todos',
-      action: 'list_created',
+      action: 'created',
       targetType: 'todolist',
       targetId: result.insertId,
       targetLabel: name,
@@ -443,7 +486,7 @@ router.delete('/:id/todolists/:listId', auth, async (req, res, next) => {
       projectId: Number(req.params.id),
       actorId: req.user.id,
       feature: 'todos',
-      action: 'list_deleted',
+      action: 'deleted',
       targetType: 'todolist',
       targetId: Number(req.params.listId),
     });
@@ -609,6 +652,22 @@ router.get('/:id/activities', auth, async (req, res, next) => {
     let perPage = Number(req.query.perPage) || PER_PAGE_DEFAULT;
     if (!PER_PAGE_OPTIONS.includes(perPage)) perPage = PER_PAGE_DEFAULT;
 
+    // Pre-compute the action map so the filter can resolve normalized → raw.
+    // This query runs once at the top; it is NOT affected by the action filter itself.
+    const [actionRows] = await pool.query(
+      `SELECT DISTINCT pa.action FROM project_activities pa WHERE pa.project_id = ?`,
+      [projectId]
+    );
+    const rawActions = actionRows.map((r) => r.action);
+    const rawActionMap = {};
+    rawActions.forEach((raw) => {
+      const norm = normalizeActionLabel(raw);
+      if (!rawActionMap[norm]) rawActionMap[norm] = [];
+      if (!rawActionMap[norm].includes(raw)) rawActionMap[norm].push(raw);
+    });
+    // Deduplicate after normalization for the dropdown display
+    const normalizedActions = [...new Set(rawActions.map(normalizeActionLabel))].sort();
+
     // Optional filters
     const filters = [];
     const filterParams = [];
@@ -617,8 +676,20 @@ router.get('/:id/activities', auth, async (req, res, next) => {
       filterParams.push(req.query.feature);
     }
     if (req.query.action && typeof req.query.action === 'string' && req.query.action.length <= 60) {
-      filters.push('pa.action = ?');
-      filterParams.push(req.query.action);
+      // Accept both raw DB values (e.g. "item_completed") and normalized values
+      // (e.g. "Completed"). Resolve normalized -> raw using the map.
+      // rawActionMap values are now arrays (generic actions map to multiple raw actions).
+      const rawList = rawActionMap[req.query.action];
+      if (rawList && Array.isArray(rawList) && rawList.length > 0) {
+        // Generic action: expand to IN (..., ...)
+        const placeholders = rawList.map(() => '?').join(', ');
+        filters.push(`pa.action IN (${placeholders})`);
+        filterParams.push(...rawList);
+      } else {
+        // Specific action or unknown: treat as raw DB value
+        filters.push('pa.action = ?');
+        filterParams.push(req.query.action);
+      }
     }
     // Restrict to a single user. Cap defensively; non-numeric ids fall through
     // to a no-match result (empty list).
@@ -655,9 +726,57 @@ router.get('/:id/activities', auth, async (req, res, next) => {
       [...baseParams, perPage, offset]
     );
 
-    const items = rows.map((r) =>
+    let items = rows.map((r) =>
       hydrateActivity(r, { first_name: r.first_name, last_name: r.last_name, email: r.email, avatar_url: r.avatar_url })
     );
+
+    // Post-process: enhance `message` for actions that carry extra context in `meta`.
+    // Also fill in missing targetLabel for legacy records.
+    for (const item of items) {
+      // ── Fill missing task name for legacy 'commented' task records ─────────
+      if (item.action === 'Commented' && !item.targetLabel && item.meta && item.meta.comment_id) {
+        const [[commentRow]] = await pool.query(
+          'SELECT t.title FROM tb_comments c JOIN tb_tasks t ON t.id = c.task_id WHERE c.id = ?',
+          [item.meta.comment_id]
+        );
+        if (commentRow) {
+          item.targetLabel = commentRow.title;
+          item.message = `Commented on task: ${commentRow.title}`;
+        }
+      }
+
+      // ── Fix legacy 'commented on document' records with no proper title ─────
+      if (item.action === 'Commented' && item.feature === 'files' && item.meta && item.meta.document_id) {
+        const [[docRow]] = await pool.query(
+          'SELECT title FROM documents WHERE id = ?',
+          [item.meta.document_id]
+        );
+        if (docRow) {
+          item.targetLabel = docRow.title;
+          item.message = `Commented on document: ${docRow.title}`;
+        }
+      }
+
+      // ── Moved: append from/to column info ─────────────────────────────────
+      if (item.action === 'Moved' && item.meta) {
+        const from = item.meta.from_column_name;
+        const to = item.meta.to_column_name;
+        if (from && to && from !== to) {
+          item.message = `${item.message} from ${from} to ${to}`;
+        } else if (to) {
+          item.message = `${item.message} to ${to}`;
+        }
+      }
+
+      // ── Status / Priority change: append old → new ──────────────────────
+      if ((item.action === 'Status_changed' || item.action === 'Priority_changed') && item.meta) {
+        const from = item.meta.from_value || item.meta.from;
+        const to = item.meta.to_value || item.meta.to;
+        if (from && to && from !== to) {
+          item.message = `${item.message}: ${from} → ${to}`;
+        }
+      }
+    }
 
     // Distinct actors in this project. Always pulled WITHOUT the actorId
     // filter so the dropdown list stays stable while the user toggles
@@ -682,6 +801,8 @@ router.get('/:id/activities', auth, async (req, res, next) => {
       eventCount: r.event_count,
     }));
 
+
+
     res.json({
       items,
       total,
@@ -691,6 +812,8 @@ router.get('/:id/activities', auth, async (req, res, next) => {
       perPageOptions: PER_PAGE_OPTIONS,
       features: FEATURE_KEYS,
       actors,
+      actions: normalizedActions,
+      rawActionMap,
     });
   } catch (err) { next(err); }
 });

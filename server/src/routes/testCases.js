@@ -518,7 +518,7 @@ router.post("/projects/:projectId/test-cases", auth, requireMemberOrOwner, async
       projectId,
       actorId: req.user.id,
       feature: "test-cases",
-      action: "test_case_created",
+      action: "created",
       targetType: "test_case",
       targetId: caseId,
       targetLabel: title,
@@ -715,7 +715,7 @@ router.put("/projects/:projectId/test-cases/:caseId", auth, requireProjectMember
         projectId,
         actorId: req.user.id,
         feature: "test-cases",
-        action: "test_case_updated",
+        action: "updated",
         targetType: "test_case",
         targetId: caseId,
         targetLabel: testCase.title,
@@ -757,7 +757,7 @@ router.patch("/projects/:projectId/test-cases/:caseId/status", auth, requireProj
       projectId,
       actorId: req.user.id,
       feature: "test-cases",
-      action: "test_case_status_changed",
+      action: "status_changed",
       targetType: "test_case",
       targetId: caseId,
       targetLabel: old[0].title,
@@ -797,7 +797,7 @@ router.patch("/projects/:projectId/test-cases/:caseId/priority", auth, requirePr
       projectId,
       actorId: req.user.id,
       feature: "test-cases",
-      action: "test_case_priority_changed",
+      action: "priority_changed",
       targetType: "test_case",
       targetId: caseId,
       targetLabel: old[0].title,
@@ -829,7 +829,7 @@ router.delete("/projects/:projectId/test-cases/:caseId", auth, requireProjectMem
       projectId,
       actorId: req.user.id,
       feature: "test-cases",
-      action: "test_case_deleted",
+      action: "deleted",
       targetType: "test_case",
       targetId: caseId,
       targetLabel: existing[0].title,
@@ -861,6 +861,16 @@ router.post("/projects/:projectId/test-cases/:caseId/steps", auth, requireCasePr
     );
     // Touch the case so updated_at refreshes
     await pool.query("UPDATE tb_test_cases SET updated_at = NOW() WHERE id = ?", [caseId]);
+    const projectId = Number(req.params.projectId);
+    await recordActivity(pool, {
+      projectId,
+      actorId: req.user.id,
+      feature: "testCases",
+      action: "step_created",
+      targetType: "step",
+      targetId: String(r.insertId),
+      targetLabel: description.slice(0, 80),
+    });
     const [rows] = await pool.query(
       "SELECT id, test_case_id, step_number, description, expected_result FROM tb_test_case_steps WHERE id = ?",
       [r.insertId]
@@ -903,6 +913,16 @@ router.put("/projects/:projectId/test-cases/:caseId/steps/:stepId", auth, requir
       "SELECT id, test_case_id, step_number, description, expected_result FROM tb_test_case_steps WHERE id = ?",
       [stepId]
     );
+    const projectId = Number(req.params.projectId);
+    await recordActivity(pool, {
+      projectId,
+      actorId: req.user.id,
+      feature: "testCases",
+      action: "step_updated",
+      targetType: "step",
+      targetId: String(stepId),
+      targetLabel: rows[0].description.slice(0, 80),
+    });
     return res.json({ step: rows[0] });
   } catch (e) {
     console.error("[test-case-steps PUT]", e);
@@ -919,7 +939,23 @@ router.delete("/projects/:projectId/test-cases/:caseId/steps/:stepId", auth, req
       [stepId, caseId]
     );
     if (check.length === 0) return res.status(404).json({ message: "Step not found" });
+    // Capture step description before deleting so we can record it in the activity log.
+    const [stepRows] = await pool.query(
+      "SELECT description FROM tb_test_case_steps WHERE id = ?",
+      [stepId]
+    );
+    const stepLabel = stepRows.length > 0 ? stepRows[0].description.slice(0, 80) : `Step ${stepId}`;
+    const projectId = Number(req.params.projectId);
     await pool.query("DELETE FROM tb_test_case_steps WHERE id = ?", [stepId]);
+    await recordActivity(pool, {
+      projectId,
+      actorId: req.user.id,
+      feature: "testCases",
+      action: "step_deleted",
+      targetType: "step",
+      targetId: String(stepId),
+      targetLabel: stepLabel,
+    });
     // Renumber remaining steps
     const [remaining] = await pool.query(
       "SELECT id FROM tb_test_case_steps WHERE test_case_id = ? ORDER BY step_number ASC",
@@ -988,6 +1024,15 @@ router.post("/projects/:projectId/test-cases/:caseId/comments", auth, requireCas
          FROM tb_test_case_comments c JOIN users u ON u.id = c.author_id WHERE c.id = ?`,
       [commentId]
     );
+    await recordActivity(pool, {
+      projectId,
+      actorId: req.user.id,
+      feature: "testCases",
+      action: "commented",
+      targetType: "comment",
+      targetId: String(commentId),
+      targetLabel: body.slice(0, 80),
+    });
     return res.json({
       comment: {
         id: rows[0].id,
@@ -1033,6 +1078,15 @@ router.put("/projects/:projectId/test-cases/:caseId/comments/:commentId", auth, 
          FROM tb_test_case_comments c JOIN users u ON u.id = c.author_id WHERE c.id = ?`,
       [commentId]
     );
+    await recordActivity(pool, {
+      projectId: req._caseProjectId,
+      actorId: req.user.id,
+      feature: "testCases",
+      action: "comment_updated",
+      targetType: "comment",
+      targetId: String(commentId),
+      targetLabel: body.slice(0, 80),
+    });
     return res.json({
       comment: {
         id: rows[0].id,
@@ -1068,6 +1122,15 @@ router.delete("/projects/:projectId/test-cases/:caseId/comments/:commentId", aut
       }
     }
     await pool.query("DELETE FROM tb_test_case_comments WHERE id = ?", [commentId]);
+    await recordActivity(pool, {
+      projectId: req._caseProjectId,
+      actorId: req.user.id,
+      feature: "testCases",
+      action: "comment_deleted",
+      targetType: "comment",
+      targetId: String(commentId),
+      targetLabel: `Comment ${commentId}`,
+    });
     await pool.query("UPDATE tb_test_cases SET updated_at = NOW() WHERE id = ?", [caseId]);
     return res.json({ ok: true });
   } catch (e) {
@@ -1188,6 +1251,15 @@ router.patch("/projects/:projectId/test-cases/:caseId/assignees/:userId/status",
       "UPDATE tb_test_case_assignees SET execution_status = ? WHERE test_case_id = ? AND user_id = ?",
       [executionStatus, caseId, userId]
     );
+    await recordActivity(pool, {
+      projectId: req._caseProjectId,
+      actorId: req.user.id,
+      feature: "testCases",
+      action: "status_changed",
+      targetType: "test_case",
+      targetId: String(caseId),
+      targetLabel: `Execution status: ${executionStatus}`,
+    });
 
     // Clear computed_status so maybeRecomputeStatus can auto-update
     await pool.query("UPDATE tb_test_cases SET computed_status = NULL WHERE id = ?", [caseId]);
@@ -1260,6 +1332,16 @@ router.post(
         [caseId, fileUrl, req.file.mimetype, req.file.size, req.user.id]
       );
       await pool.query("UPDATE tb_test_cases SET updated_at = NOW() WHERE id = ?", [caseId]);
+      const projectId = Number(req.params.projectId);
+      await recordActivity(pool, {
+        projectId,
+        actorId: req.user.id,
+        feature: "testCases",
+        action: "attachment_added",
+        targetType: "attachment",
+        targetId: String(r.insertId),
+        targetLabel: req.file.originalname,
+      });
       return res.json({
         attachment: {
           id: r.insertId,
@@ -1298,6 +1380,15 @@ router.delete("/projects/:projectId/test-cases/:caseId/attachments/:attachmentId
       }
     }
     await pool.query("DELETE FROM tb_test_case_attachments WHERE id = ?", [attachmentId]);
+    await recordActivity(pool, {
+      projectId: req._caseProjectId,
+      actorId: req.user.id,
+      feature: "testCases",
+      action: "attachment_deleted",
+      targetType: "attachment",
+      targetId: String(attachmentId),
+      targetLabel: path.basename(a[0].file_url),
+    });
     // Try to delete file from disk
     try {
       const fp = path.join(UPLOAD_DIR, path.basename(a[0].file_url));

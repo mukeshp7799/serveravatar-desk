@@ -18,6 +18,7 @@ const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { isProjectMember } = require('../middleware/projectMember');
 const { t } = require('../i18n');
+const { recordActivity } = require('../utils/activity');
 const { sendEmail } = require('../utils/mailer');
 const { projectInvitationEmail } = require('../utils/emailTemplates');
 
@@ -170,6 +171,18 @@ router.post('/:token/accept', auth, async (req, res, next) => {
     );
 
     await conn.commit();
+
+    // Record activity
+    await recordActivity(pool, {
+      projectId: inv.project_id,
+      actorId: req.user.id,
+      feature: 'team',
+      action: 'joined',
+      targetType: 'member',
+      targetId: req.user.id,
+      targetLabel: `${req.user.first_name} ${req.user.last_name}`.trim() || req.user.email,
+    });
+
     res.json({
       message: t(req.lang, 'errors.invitationAccepted'),
       projectId: inv.project_id,
@@ -215,6 +228,17 @@ router.post('/:token/decline', auth, async (req, res, next) => {
       `DELETE FROM notifications WHERE user_id = ? AND type = 'project_invitation' AND JSON_EXTRACT(params, '$.invitation_id') = ?`,
       [req.user.id, inv.id]
     );
+
+    // Record activity
+    await recordActivity(pool, {
+      projectId: inv.project_id,
+      actorId: req.user.id,
+      feature: 'team',
+      action: 'declined_invitation',
+      targetType: 'member',
+      targetId: inv.project_id,
+      targetLabel: inv.email,
+    });
 
     res.json({ message: t(req.lang, 'errors.invitationDeclined') });
   } catch (err) { next(err); }
@@ -286,7 +310,7 @@ router.put('/:id/resend', auth, async (req, res, next) => {
 router.delete('/:id', auth, async (req, res, next) => {
   try {
     const [[inv]] = await pool.query(
-      `SELECT id, project_id, status FROM project_invitations WHERE id = ?`,
+      `SELECT id, project_id, status, email FROM project_invitations WHERE id = ?`,
       [req.params.id]
     );
 
@@ -303,6 +327,17 @@ router.delete('/:id', auth, async (req, res, next) => {
       `UPDATE project_invitations SET status = 'cancelled', updated_at = NOW() WHERE id = ?`,
       [req.params.id]
     );
+
+    // Record activity
+    await recordActivity(pool, {
+      projectId: inv.project_id,
+      actorId: req.user.id,
+      feature: 'team',
+      action: 'cancelled_invitation',
+      targetType: 'member',
+      targetId: inv.project_id,
+      targetLabel: inv.email,
+    });
 
     res.json({ message: t(req.lang, 'errors.invitationCancelled') });
   } catch (err) { next(err); }

@@ -158,7 +158,7 @@ router.post('/projects/:projectId/todos/lists', async (req, res, next) => {
       projectId: Number(req.params.projectId),
       actorId: req.user.id,
       feature: 'todos',
-      action: 'list_created',
+      action: 'created',
       targetType: 'todolist',
       targetId: r.insertId,
       targetLabel: name.trim(),
@@ -203,6 +203,14 @@ router.patch('/projects/:projectId/todos/lists/:id', async (req, res, next) => {
 // DELETE — delete list (cascade items)
 router.delete('/projects/:projectId/todos/lists/:id', async (req, res, next) => {
   try {
+    // Fetch list name before deleting so we can record it in the activity log.
+    const [existing] = await pool.query(
+      'SELECT name FROM todo_lists WHERE id = ? AND project_id = ?',
+      [req.params.id, req.params.projectId]
+    );
+    if (!existing.length) return res.status(404).json({ message: 'List not found' });
+    const listName = existing[0].name;
+
     const [r] = await pool.query(
       'DELETE FROM todo_lists WHERE id = ? AND project_id = ?',
       [req.params.id, req.params.projectId]
@@ -212,10 +220,10 @@ router.delete('/projects/:projectId/todos/lists/:id', async (req, res, next) => 
       projectId: Number(req.params.projectId),
       actorId: req.user.id,
       feature: 'todos',
-      action: 'list_deleted',
+      action: 'deleted',
       targetType: 'todolist',
       targetId: req.params.id,
-      targetLabel: null,
+      targetLabel: listName,
     });
     const data = await loadFull(req.params.projectId);
     res.json({ ok: true, lists: data.lists });
@@ -281,7 +289,7 @@ router.post('/projects/:projectId/todos/lists/:id/items', async (req, res, next)
       projectId,
       actorId: req.user.id,
       feature: 'todos',
-      action: 'item_created',
+      action: 'created',
       targetType: 'todoitem',
       targetId: itemId,
       targetLabel: title.trim(),
@@ -384,7 +392,7 @@ router.patch('/projects/:projectId/todos/items/:id', async (req, res, next) => {
           projectId: Number(req.params.projectId),
           actorId: req.user.id,
           feature: 'todos',
-          action: completed ? 'item_completed' : 'item_reopened',
+          action: completed ? 'completed' : 'reopened',
           targetType: 'todoitem',
           targetId: req.params.id,
           targetLabel: oldItem.title,
@@ -394,7 +402,7 @@ router.patch('/projects/:projectId/todos/items/:id', async (req, res, next) => {
           projectId: Number(req.params.projectId),
           actorId: req.user.id,
           feature: 'todos',
-          action: 'item_updated',
+          action: 'updated',
           targetType: 'todoitem',
           targetId: req.params.id,
           targetLabel: oldItem?.title,
@@ -464,7 +472,7 @@ router.delete('/projects/:projectId/todos/items/:id', async (req, res, next) => 
       projectId: Number(req.params.projectId),
       actorId: req.user.id,
       feature: 'todos',
-      action: 'item_deleted',
+      action: 'deleted',
       targetType: 'todoitem',
       targetId: req.params.id,
       targetLabel: oldItem?.title || null,

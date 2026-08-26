@@ -290,7 +290,7 @@ router.post(
         projectId,
         actorId: req.user.id,
         feature: "task-board",
-        action: "column_created",
+        action: "created",
         targetType: "task_column",
         targetId: r.insertId,
         targetLabel: trimmed,
@@ -341,7 +341,7 @@ router.put("/task-columns/:columnId", auth, async (req, res, next) => {
       projectId: col.project_id,
       actorId: req.user.id,
       feature: "task-board",
-      action: "column_renamed",
+      action: "renamed",
       targetType: "task_column",
       targetId: columnId,
       targetLabel: trimmed,
@@ -372,7 +372,7 @@ router.delete("/task-columns/:columnId", auth, async (req, res, next) => {
       projectId: col.project_id,
       actorId: req.user.id,
       feature: "task-board",
-      action: "column_deleted",
+      action: "deleted",
       targetType: "task_column",
       targetId: columnId,
       targetLabel: col.name,
@@ -460,6 +460,20 @@ router.post(
         [column_id]
       );
 
+      // Convert ISO8601 due_date to MySQL DATE format (YYYY-MM-DD)
+      let formattedDueDate = null;
+      if (due_date) {
+        const d = new Date(due_date);
+        if (!isNaN(d.getTime())) {
+          const y = d.getUTCFullYear();
+          const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const day = String(d.getUTCDate()).padStart(2, '0');
+          formattedDueDate = `${y}-${m}-${day}`;
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(due_date)) {
+          formattedDueDate = due_date;
+        }
+      }
+
       const [r] = await pool.query(
         `INSERT INTO tb_tasks
            (project_id, column_id, title, description_html, priority, due_date, position, created_by)
@@ -470,7 +484,7 @@ router.post(
           String(title).trim().slice(0, 255),
           description_html ? String(description_html) : "",
           safePriority,
-          due_date || null,
+          formattedDueDate,
           nextPos,
           req.user.id,
         ]
@@ -529,7 +543,7 @@ router.post(
         projectId,
         actorId: req.user.id,
         feature: "task-board",
-        action: "task_created",
+        action: "created",
         targetType: "task",
         targetId: r.insertId,
         targetLabel: task.title,
@@ -585,7 +599,21 @@ router.put("/tasks/:taskId", auth, async (req, res, next) => {
       changes.push("priority");
     }
     if (due_date !== undefined) {
-      updates.push("due_date = ?"); params.push(due_date || null);
+      // Convert ISO8601 string '2026-08-22T00:00:00.000Z' to MySQL DATE '2026-08-22'
+      let formattedDueDate = null;
+      if (due_date) {
+        const d = new Date(due_date);
+        if (!isNaN(d.getTime())) {
+          const y = d.getUTCFullYear();
+          const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const day = String(d.getUTCDate()).padStart(2, '0');
+          formattedDueDate = `${y}-${m}-${day}`;
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(due_date)) {
+          // Already in YYYY-MM-DD format
+          formattedDueDate = due_date;
+        }
+      }
+      updates.push("due_date = ?"); params.push(formattedDueDate);
       changes.push("due_date");
     }
     if (column_id !== undefined) {
@@ -686,7 +714,7 @@ router.put("/tasks/:taskId", auth, async (req, res, next) => {
       projectId: existing.project_id,
       actorId: req.user.id,
       feature: "task-board",
-      action: "task_updated",
+      action: "updated",
       targetType: "task",
       targetId: taskId,
       targetLabel: task.title,
@@ -728,7 +756,7 @@ router.delete("/tasks/:taskId", auth, async (req, res, next) => {
       projectId: existing.project_id,
       actorId: req.user.id,
       feature: "task-board",
-      action: "task_archived",
+      action: "archived",
       targetType: "task",
       targetId: taskId,
       targetLabel: existing.title,
@@ -770,7 +798,7 @@ router.post("/tasks/:taskId/restore", auth, async (req, res, next) => {
       projectId: existing.project_id,
       actorId: req.user.id,
       feature: "task-board",
-      action: "task_restored",
+      action: "restored",
       targetType: "task",
       targetId: taskId,
       targetLabel: existing.title,
@@ -815,7 +843,7 @@ router.delete("/tasks/:taskId/permanent", auth, async (req, res, next) => {
       projectId: existing.project_id,
       actorId: req.user.id,
       feature: "task-board",
-      action: "task_deleted",
+      action: "deleted",
       targetType: "task",
       targetId: taskId,
       targetLabel: existing.title,
@@ -871,7 +899,7 @@ router.post("/tasks/:taskId/move", auth, async (req, res, next) => {
       projectId: existing.project_id,
       actorId: req.user.id,
       feature: "task-board",
-      action: "task_moved",
+      action: "moved",
       targetType: "task",
       targetId: taskId,
       targetLabel: existing.title,
@@ -1069,6 +1097,15 @@ router.post("/tasks/:taskId/subtasks", auth, async (req, res, next) => {
       [r.insertId]
     );
     await recordTaskActivity(taskId, req.user.id, "subtask_added", { subtask_id: r.insertId, title: sub.title });
+    await recordActivity(pool, {
+      projectId,
+      actorId: req.user.id,
+      feature: "task-board",
+      action: "subtask_created",
+      targetType: "subtask",
+      targetId: String(r.insertId),
+      targetLabel: sub.title,
+    });
     res.status(201).json({
       subtask: {
         id: sub.id,
@@ -1127,6 +1164,28 @@ router.put("/tasks/:taskId/subtasks/:subtaskId", auth, async (req, res, next) =>
       "SELECT id, task_id, title, done, position, created_at FROM tb_subtasks WHERE id = ?",
       [subtaskId]
     );
+
+    // Record activity for meaningful subtask changes
+    const changedTitle = title !== undefined && existing.title !== updated.title;
+    const changedDone = done !== undefined && !!existing.done !== !!updated.done;
+    if (changedTitle || changedDone) {
+      await recordActivity(pool, {
+        projectId,
+        actorId: req.user.id,
+        feature: "task-board",
+        action: "subtask_updated",
+        targetType: "subtask",
+        targetId: String(subtaskId),
+        targetLabel: updated.title,
+        meta: {
+          changed: [
+            ...(changedTitle ? ["title"] : []),
+            ...(changedDone ? ["done"] : []),
+          ],
+        },
+      });
+    }
+
     res.json({
       subtask: {
         id: updated.id,
@@ -1158,6 +1217,15 @@ router.delete("/tasks/:taskId/subtasks/:subtaskId", auth, async (req, res, next)
     await recordTaskActivity(taskId, req.user.id, "subtask_deleted", {
       subtask_id: subtaskId,
       title: existing?.title || null,
+    });
+    await recordActivity(pool, {
+      projectId,
+      actorId: req.user.id,
+      feature: "task-board",
+      action: "subtask_deleted",
+      targetType: "subtask",
+      targetId: String(subtaskId),
+      targetLabel: existing?.title || null,
     });
     res.json({ ok: true });
   } catch (err) { next(err); }
@@ -1287,15 +1355,22 @@ router.post("/tasks/:taskId/comments", auth, async (req, res, next) => {
       reactions: [],
     };
 
+    // Look up task title for the activity log
+    const [[taskRow]] = await pool.query(
+      "SELECT title FROM tb_tasks WHERE id = ?",
+      [taskId]
+    );
+    const taskTitle = taskRow ? taskRow.title : null;
+
     await recordTaskActivity(taskId, req.user.id, "commented", { comment_id: commentId });
     await recordActivity(pool, {
       projectId,
       actorId: req.user.id,
       feature: "task-board",
-      action: "task_commented",
+      action: "commented",
       targetType: "task",
       targetId: taskId,
-      targetLabel: null,
+      targetLabel: taskTitle,
       meta: { comment_id: commentId },
     });
 
@@ -1355,6 +1430,15 @@ router.put("/tasks/:taskId/comments/:commentId", auth, async (req, res, next) =>
       "UPDATE tb_comments SET body = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
       [clean, commentId]
     );
+    await recordActivity(pool, {
+      projectId,
+      actorId: req.user.id,
+      feature: "task-board",
+      action: "comment_updated",
+      targetType: "comment",
+      targetId: String(commentId),
+      targetLabel: clean.slice(0, 80),
+    });
     const [[row]] = await pool.query(
       `SELECT c.id, c.task_id, c.user_id, c.body, c.created_at, c.updated_at,
               u.first_name, u.last_name, u.email, u.avatar_url
@@ -1399,7 +1483,22 @@ router.delete("/tasks/:taskId/comments/:commentId", auth, async (req, res, next)
       const isOwner = p.length > 0 && p[0].manager_id === req.user.id;
       if (!isOwner) return res.status(403).json({ error: t(req.lang, "errors.permissionDenied") });
     }
+    // Capture comment body before deleting so we can record it in the activity log.
+    const [[commentRow]] = await pool.query(
+      "SELECT body FROM tb_comments WHERE id = ? AND task_id = ?",
+      [commentId, taskId]
+    );
+    const commentLabel = commentRow?.body?.slice(0, 80) || `Comment ${commentId}`;
     await pool.query("DELETE FROM tb_comments WHERE id = ?", [commentId]);
+    await recordActivity(pool, {
+      projectId,
+      actorId: req.user.id,
+      feature: "task-board",
+      action: "comment_deleted",
+      targetType: "comment",
+      targetId: String(commentId),
+      targetLabel: commentLabel,
+    });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -1562,6 +1661,15 @@ router.post("/tasks/:taskId/attachments", auth, upload.single("file"), async (re
       name: path.basename(req.file.path),
     };
     await recordTaskActivity(taskId, req.user.id, "attached", { attachment_id: r.insertId, name: attachment.name });
+    await recordActivity(pool, {
+      projectId,
+      actorId: req.user.id,
+      feature: "task-board",
+      action: "attachment_added",
+      targetType: "attachment",
+      targetId: String(r.insertId),
+      targetLabel: attachment.name,
+    });
     res.status(201).json({ attachment });
   } catch (err) { next(err); }
 });
@@ -1604,6 +1712,15 @@ router.delete("/tasks/:taskId/attachments/:attachmentId", auth, async (req, res,
     }
     await recordTaskActivity(taskId, req.user.id, "attachment_deleted", {
       attachment_id: attachmentId,
+    });
+    await recordActivity(pool, {
+      projectId,
+      actorId: req.user.id,
+      feature: "task-board",
+      action: "attachment_deleted",
+      targetType: "attachment",
+      targetId: String(attachmentId),
+      targetLabel: path.basename(row.file_url),
     });
     res.json({ ok: true });
   } catch (err) { next(err); }

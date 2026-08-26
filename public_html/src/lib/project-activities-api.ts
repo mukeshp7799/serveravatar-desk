@@ -38,52 +38,130 @@ import api from '@/lib/api'
  * the backend sends.
  */
 const FRIENDLY_ACTION: Record<string, string> = {
-  created:           'Create',
-  updated:           'Update',
-  edited:            'Edit',
-  moved:             'Move',
-  deleted:           'Delete',
-  completed:         'Complete',
-  archived:          'Archive',
-  restored:          'Restore',
-  posted:            'Post',
-  commented:         'Comment',
-  uploaded:          'Upload',
-  added:             'Add',
-  removed:           'Remove',
-  reopened:          'Reopen',
-  clocked_in:        'Clock In',
-  clocked_out:       'Clock Out',
-  applied:           'Apply',
-  approved:          'Approve',
-  rejected:          'Reject',
-}
+  created:           'Created',
+  updated:           'Updated',
+  edited:            'Edited',
+  moved:             'Moved',
+  deleted:           'Deleted',
+  completed:         'Completed',
+  archived:          'Archived',
+  restored:          'Restored',
+  posted:            'Posted',
+  commented:         'Commented',
+  uploaded:          'Uploaded',
+  added:             'Added',
+  removed:           'Removed',
+  reopened:          'Reopened',
+  pinned:            'Pinned',
+  unpinned:          'Unpinned',
+  clocked_in:        'Clocked In',
+  clocked_out:       'Clocked Out',
+  applied:           'Applied',
+  approved:          'Approved',
+  rejected:          'Rejected',
+  // Known humanized action phrases (with spaces instead of underscores)
+  'column created':  'Created',
+  'column updated':  'Updated',
+  'column deleted':  'Deleted',
+  'column renamed':  'Renamed',
+};
 
 export function getFriendlyAction(action: string): string {
-  const lower = action.toLowerCase()
-  return FRIENDLY_ACTION[lower] ?? (action.charAt(0).toUpperCase() + action.slice(1))
+  if (!action) return '—'
+
+  // Step 1: Humanize — replace underscores with spaces.
+  // e.g. "column_created task_column" → "column created task column"
+  const humanized = action.replace(/_/g, ' ')
+
+  // Step 2: Try direct match in FRIENDLY_ACTION (case-insensitive).
+  const lower = humanized.toLowerCase()
+  if (FRIENDLY_ACTION[lower]) return FRIENDLY_ACTION[lower]
+
+  // Step 3: Try with underscores restored (e.g. "task_moved" → "task_moved").
+  const withUnderscores = lower.replace(/\s+/g, '_')
+  if (FRIENDLY_ACTION[withUnderscores]) return FRIENDLY_ACTION[withUnderscores]
+
+  // Step 4: Strip trailing target-type word(s) and re-check.
+  // Normalize underscores to spaces first so underscore-separated compounds
+  // (e.g. "column_created task_column") also strip correctly.
+  // e.g. "column_created task_column" → normalize → "column created task column"
+  //      → strip "task column" → "column created" → FRIENDLY_ACTION → Found!
+  const normalized = humanized.replace(/_/g, ' ')
+  const words = normalized.split(/\s+/)
+  for (let i = words.length - 1; i > 0; i--) {
+    const candidate = words.slice(0, i).join(' ')
+    const candidateKey = candidate.toLowerCase()
+    if (FRIENDLY_ACTION[candidateKey]) return FRIENDLY_ACTION[candidateKey]
+  }
+
+  // Step 5: Fall back to title-casing the humanized version.
+  return humanized.charAt(0).toUpperCase() + humanized.slice(1)
 }
 
 /**
- * Combines the action verb (e.g. "created task") and the target label
- * (e.g. "Fix bug") into a single, readable activity label.
+ * Combines the action verb and target info into a single, readable activity label.
  *
  * Examples:
- *   ("created task",   "Fix bug") → "Created Fix bug"
- *   ("posted a message", "Hi everyone") → "Posted Hi everyone"
- *   ("created task",   null)     → "Created task"
+ *   ("added member",   "John",    "member") → "Added member: John"
+ *   ("moved task",     "Registr.","task", meta) → "Moved task: Registration from Backlog to Inprogress"
+ *   ("completed to-do","Fix bug", "item") → "Completed to-do: Fix bug"
+ *   ("posted message",  "Meeting", "message") → "Posted message: Meeting"
+ *   ("created task",    null)              → "Created task"
  */
-export function formatActivityLabel(actionVerb: string, targetLabel: string | null): string {
+export function formatActivityLabel(
+  actionVerb: string,
+  targetLabel: string | null,
+  targetType?: string | null,
+  meta?: Record<string, unknown> | null,
+): string {
   if (!actionVerb) return '—'
-  // Strip any trailing target already embedded in actionVerb, then append
-  // the actual targetLabel so we never double-suffix.
-  const normalised = actionVerb.toLowerCase()
 
-  if (!targetLabel) return getFriendlyAction(normalised.replace(/\s+/g, '_'))
+  const friendly = getFriendlyAction(actionVerb)
 
-  // Capitalize first letter of the friendly action
-  const friendly = getFriendlyAction(normalised)
-  return `${friendly} ${targetLabel}`
+  if (!targetLabel) {
+    // Deleted items may have no targetLabel (already gone from DB).
+    // Fall back to a readable "Deleted <type>" message using targetType.
+    if (friendly === 'Deleted' && targetType) {
+      const type = targetType.replace(/_/g, ' ')
+      if (type === 'todoitem') return 'Deleted to-do item'
+      if (type === 'todolist') return 'Deleted to-do list'
+      if (type === 'chat_message') return 'Deleted message'
+      return `Deleted ${type}`
+    }
+    return friendly
+  }
+
+  // Humanize targetType: replace underscores with spaces.
+  // e.g. "todoitem" → "to-do item", "member" → "member", "task" → "task"
+  let humanizedType = targetType ? targetType.replace(/_/g, ' ') : null
+  if (humanizedType === 'todoitem') humanizedType = 'to-do item'
+  if (humanizedType === 'todolist') humanizedType = 'to-do list'
+
+  // Strip "task " prefix from compound types like "task column" → "column"
+  // so we get "Created column: Column Name" instead of "Created task column: Column Name"
+  if (humanizedType && humanizedType.startsWith('task ')) {
+    humanizedType = humanizedType.replace(/^task /, '')
+  }
+
+  // Special handling for "Commented" action: use "Commented on {label}" instead of
+  // "Commented {type}: {label}" — produces cleaner messages like
+  // "Commented on credentials.csv" instead of "Commented document comment: credentials.csv"
+  if (friendly === 'Commented') {
+    return `Commented on ${targetLabel}`
+  }
+
+  // Special handling for moved tasks: show source and destination columns
+  // e.g. "Moved task: Registration from Backlog to Inprogress"
+  const lower = actionVerb.toLowerCase()
+  if ((lower === 'moved task' || lower === 'task moved' || lower === 'task_moved') && meta) {
+    const fromCol = (meta['from_column_name'] as string | undefined) || ''
+    const toCol = (meta['to_column_name'] as string | undefined) || ''
+    if (fromCol && toCol) {
+      return `Moved ${humanizedType || 'task'}: ${targetLabel} from ${fromCol} to ${toCol}`
+    }
+  }
+
+  return `${friendly} ${humanizedType || ''}: ${targetLabel}`
 }
 
 /* ──────────────────────────────────────────────────────────────────
@@ -125,6 +203,13 @@ export interface ActivitiesPayload {
   totalPages: number
   perPageOptions: number[]
   features: string[]
+  /** Distinct normalized action types in this project (e.g. 'Created', 'Completed').
+   * Title-cased to exactly match what the Action column shows. */
+  actions: string[]
+  /** Maps normalized action label → raw DB action value(s).
+   * e.g. {"Completed": ["item_completed"], "Create": ["task_created","document_created"]}
+   * The API accepts normalized labels and resolves them to raw values via this map. */
+  rawActionMap: Record<string, string[]>
   /** Distinct humans who have ever produced an event in this project, with
    * the count of events each has on record. Used by the "Performed by" filter
    * dropdown so it doesn't need a separate round-trip. */
@@ -187,6 +272,7 @@ export interface UseActivitiesOptions {
   initialPerPage?: number
   pollMs?: number
   feature?: string
+  action?: string
   actorId?: number
 }
 
@@ -194,11 +280,12 @@ export function useActivities(
   projectId: string | number,
   options: UseActivitiesOptions = {},
 ) {
-  const { initialPerPage = 10, pollMs = 15000, feature, actorId: initialActorId } = options
+  const { initialPerPage = 10, pollMs = 15000, feature, action: initialAction, actorId: initialActorId } = options
 
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState<number>(initialPerPage)
   const [actorId, setActorId] = useState<number | undefined>(initialActorId)
+  const [actionFilter, setActionFilter] = useState<string | undefined>(initialAction)
 
   // Mirror the `actorId` option into local state when the caller changes it,
   // so dropping a new `actorId` prop into the hook actually re-fetches. The
@@ -212,6 +299,16 @@ export function useActivities(
       setActorId(initialActorId)
     }
   }, [initialActorId])
+
+  // Same mirroring for action — the page passes actionFilter as the `action`
+  // prop, and we need to sync it into internal state so load() picks it up.
+  const lastActionPropRef = useRef<string | undefined>(initialAction)
+  useEffect(() => {
+    if (initialAction !== lastActionPropRef.current) {
+      lastActionPropRef.current = initialAction
+      setActionFilter(initialAction)
+    }
+  }, [initialAction])
   const [data, setData] = useState<ActivitiesPayload | null>(null)
   // Three distinct loading flavours so the UI can react differently:
   //   loading       — very first load (no rows yet). Caller shows a skeleton.
@@ -240,7 +337,7 @@ export function useActivities(
       return
     }
     setPage(1)
-  }, [perPage, feature, actorId])
+  }, [perPage, feature, actionFilter, actorId])
 
   const load = useCallback(
     async (opts: { kind?: 'initial' | 'paginate' | 'refresh' | 'poll' } = {}) => {
@@ -262,6 +359,7 @@ export function useActivities(
           page,
           perPage,
           feature,
+          action: actionFilter,
           actorId,
         })
         setData(res)
@@ -284,7 +382,7 @@ export function useActivities(
         else if (kind === 'refresh') setIsRefreshing(false)
       }
     },
-    [projectId, page, perPage, feature, actorId],
+    [projectId, page, perPage, feature, actionFilter, actorId],
   )
 
   // Re-fetch whenever page/perPage/filter change.
@@ -320,6 +418,7 @@ export function useActivities(
     totalPages: data?.totalPages ?? 0,
     perPageOptions: data?.perPageOptions ?? [10, 20, 30, 50],
     features: data?.features ?? [],
+    actions: data?.actions ?? [],
     actors: data?.actors ?? [],
     loading,
     isPaginating,
@@ -328,6 +427,7 @@ export function useActivities(
     setPage,
     setPerPage,
     setActorId,
+    setActionFilter,
     refresh: () => load({ kind: 'refresh' }),
   }
 }

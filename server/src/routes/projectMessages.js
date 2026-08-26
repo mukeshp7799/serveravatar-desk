@@ -216,7 +216,7 @@ router.post("/projects/:projectId/messages", auth, requireProjectMember("project
       projectId,
       actorId: req.user.id,
       feature: 'message-board',
-      action: 'message_posted',
+      action: 'posted',
       targetType: 'message',
       targetId: messageId,
       targetLabel: title ? title.trim() : cleanBody.replace(/<[^>]+>/g, ' ').trim().slice(0, 120),
@@ -329,7 +329,7 @@ router.put("/messages/:id", auth, async (req, res, next) => {
       projectId: existing.project_id,
       actorId: req.user.id,
       feature: 'message-board',
-      action: 'message_updated',
+      action: 'updated',
       targetType: 'message',
       targetId: id,
       targetLabel: newTitle || existing.title,
@@ -368,7 +368,7 @@ router.delete("/messages/:id", auth, async (req, res, next) => {
       projectId: existing.project_id,
       actorId: req.user.id,
       feature: 'message-board',
-      action: 'message_deleted',
+      action: 'deleted',
       targetType: 'message',
       targetId: id,
       targetLabel: existing.title,
@@ -413,6 +413,18 @@ router.post("/messages/:id/pin", auth, async (req, res, next) => {
       "UPDATE project_messages SET is_pinned = 1, pin_order = ? WHERE id = ?",
       [nextOrder, id]
     );
+
+    // Record activity
+    await recordActivity(pool, {
+      projectId: m.project_id,
+      actorId: req.user.id,
+      feature: 'message-board',
+      action: 'pinned',
+      targetType: 'message',
+      targetId: id,
+      targetLabel: m.title || (m.body_html ? m.body_html.replace(/<[^>]+>/g, '').slice(0, 50) : null),
+    });
+
     const [updated] = await pool.query(
       `SELECT pm.*, u.first_name, u.last_name, u.email, u.avatar_url
        FROM project_messages pm JOIN users u ON pm.author_id = u.id WHERE pm.id = ?`, [id]);
@@ -441,6 +453,18 @@ router.post("/messages/:id/unpin", auth, async (req, res, next) => {
       "UPDATE project_messages SET is_pinned = 0, pin_order = NULL WHERE id = ?",
       [id]
     );
+
+    // Record activity
+    await recordActivity(pool, {
+      projectId: m.project_id,
+      actorId: req.user.id,
+      feature: 'message-board',
+      action: 'unpinned',
+      targetType: 'message',
+      targetId: id,
+      targetLabel: m.title || (m.body_html ? m.body_html.replace(/<[^>]+>/g, '').slice(0, 50) : null),
+    });
+
     const [updated] = await pool.query(
       `SELECT pm.*, u.first_name, u.last_name, u.email, u.avatar_url
        FROM project_messages pm JOIN users u ON pm.author_id = u.id WHERE pm.id = ?`, [id]);

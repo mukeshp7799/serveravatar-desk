@@ -294,7 +294,7 @@ router.post("/projects/:projectId/chat", auth, requireProjectMember("projectId")
       projectId,
       actorId: req.user.id,
       feature: 'chat',
-      action: 'message_posted',
+      action: 'posted',
       targetType: 'chat_message',
       targetId: messageId,
       targetLabel: body.slice(0, 120),
@@ -346,7 +346,7 @@ router.put("/projects/:projectId/chat/:messageId", auth, requireProjectMember("p
       projectId,
       actorId: req.user.id,
       feature: 'chat',
-      action: 'message_updated',
+      action: 'updated',
       targetType: 'chat_message',
       targetId: messageId,
       targetLabel: body.slice(0, 120),
@@ -370,7 +370,7 @@ router.delete("/projects/:projectId/chat/:messageId", auth, requireProjectMember
     const messageId = parseInt(req.params.messageId, 10);
     if (!projectId || !messageId) return res.status(400).json({ error: t(req.lang, "errors.invalidRequest") });
     const [rows] = await pool.query(
-      "SELECT id, project_id, author_id, deleted_at FROM project_chat_messages WHERE id = ?",
+      "SELECT id, project_id, author_id, body, deleted_at FROM project_chat_messages WHERE id = ?",
       [messageId]
     );
     if (rows.length === 0) return res.status(404).json({ error: t(req.lang, "errors.messageNotFound") });
@@ -381,6 +381,9 @@ router.delete("/projects/:projectId/chat/:messageId", auth, requireProjectMember
     // Idempotent: if already deleted, just return success.
     if (m.deleted_at) return res.json({ ok: true, alreadyDeleted: true });
 
+    // Capture message content for activity log before soft-deleting.
+    const messageLabel = m.body ? m.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) : `Message ${messageId}`;
+
     await pool.query(
       "UPDATE project_chat_messages SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?",
       [messageId]
@@ -389,10 +392,10 @@ router.delete("/projects/:projectId/chat/:messageId", auth, requireProjectMember
       projectId,
       actorId: req.user.id,
       feature: 'chat',
-      action: 'message_deleted',
+      action: 'deleted',
       targetType: 'chat_message',
       targetId: messageId,
-      targetLabel: null,
+      targetLabel: messageLabel,
     });
     res.json({ ok: true });
   } catch (e) {
@@ -456,6 +459,18 @@ router.post(
         "UPDATE project_chat_messages SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         [messageId]
       );
+      // Record activity for each uploaded attachment
+      for (const f of files) {
+        await recordActivity(pool, {
+          projectId,
+          actorId: req.user.id,
+          feature: "chat",
+          action: "attachment_added",
+          targetType: "attachment",
+          targetId: String(messageId),
+          targetLabel: f.originalname,
+        });
+      }
       res.status(201).json({ attachments: created });
     } catch (e) {
       console.error("[chat attachments POST]", e);
