@@ -79,16 +79,16 @@ export function DataTable({
       {/* ── Scrollable table ── */}
       <ScrollFade fadeEdge={false} className="relative">
         <table
-          className="w-full border-collapse"
-          style={{ minWidth }}
+          className="w-full"
+          style={{ minWidth, borderCollapse: 'separate' }}
         >
           {/* ── Header ── */}
           <thead className="sticky top-0 z-10 bg-white">
-            <tr className="border-b border-gray-100 dark:border-gray-700">
+            <tr className="border-b  border-gray-100 dark:border-gray-700">
               {columns.map(col => (
                 <th
                   key={col.label}
-                  className={`px-5 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap first:pl-5 last:pr-5 select-none ${col.thClassName ?? ''}`}
+                  className={`px-5 py-3 text-left text-sm font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap first:pl-5 last:pr-5 select-none ${col.thClassName ?? ''}`}
                 >
                   {col.sortable ? (
                     <button

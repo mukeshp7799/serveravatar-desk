@@ -74,7 +74,7 @@ function AnnouncementCard({
  ann, onEdit, onDelete, onReact, onPin, onRestore, currentUserId, canManage }: {
   ann: Announcement
   onEdit: (a: Announcement) => void
-  onDelete: (id: number) => void
+  onDelete: (id: number, onStart?: () => void, onDone?: () => void) => void
   onReact: (id: number, emoji: string, oldEmoji?: string) => Promise<void>
   onPin: (id: number) => void
   onRestore: (id: number) => void
@@ -99,6 +99,7 @@ function AnnouncementCard({
   const reactionRef = useRef<HTMLDivElement>(null)
   const AudienceIcon = audienceIcon[ann.audience_target] || Bell
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const reactions: Reaction[] = ann.reactions.emojis.map(e => ({
     emoji: e.emoji,
@@ -233,7 +234,10 @@ function AnnouncementCard({
           description={t('announcements.deleteConfirm')}
           confirmLabel={t('common.delete') || 'Delete'}
           destructive
-          onConfirm={() => { setShowDeleteConfirm(false); onDelete(ann.id); }}
+          loading={isDeleting}
+          onConfirm={() => {
+            onDelete(ann.id, () => setIsDeleting(true), () => { setIsDeleting(false); setShowDeleteConfirm(false); })
+          }}
           onCancel={() => setShowDeleteConfirm(false)}
         />
       </div>
@@ -525,13 +529,17 @@ export default function AnnouncementsPage() {
     } catch (err: any) { toast.error(err.message || 'Failed to restore announcement') }
   }
 
-  const handleDelete = async (id: number) => {
-    if (!confirm(t('announcements.deleteConfirm') as string)) return
+  const handleDelete = async (id: number, onStart?: () => void, onDone?: () => void) => {
+    onStart?.()
     try {
       await api.delete(`/announcements/${id}`)
       toast.success(t('common.deletedSuccessfully') as string)
       loadAnnouncements(page)
-    } catch (err: any) { toast.error(err.message || (t('common.failedToDelete') as string)) }
+    } catch (err: any) {
+      toast.error(err.message || (t('common.failedToDelete') as string))
+    } finally {
+      onDone?.()
+    }
   }
 
   const handleEdit = (ann: Announcement) => { setEditAnn(ann); setShowCreate(false) }

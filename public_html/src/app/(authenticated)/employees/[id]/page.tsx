@@ -626,41 +626,15 @@ export default function EmployeeProfilePage() {
                 <p className="text-xs text-gray-400 dark:text-gray-500">No activity has been recorded for this employee.</p>
               </div>
             ) : (
-              <>
-                <DataTable
+              <DataTable
                 columns={[
                   { label: 'Date & Time' },
                   { label: 'Activity' },
                   { label: 'Project' },
                 ]}
                 minWidth="600px"
-              >
-                <tbody className="divide-y divide-gray-50 dark:divide-gray-700/60">
-                  {activity.map((item: any) => (
-                    <tr key={`${item.source}-${item.id}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
-                      <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{fmtDateTime(item.created_at)}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-900 dark:text-white">
-                        <span className="font-medium">{item.first_name} {item.last_name}</span>{' '}
-                        <span className="text-gray-500 dark:text-gray-400">{activityLabel(item)}</span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        {item.project_name ? (
-                          <Link href={`/projects/${item.project_id}`}
-                            className="text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 no-underline">
-                            {item.project_name}
-                          </Link>
-                        ) : (
-                          <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </DataTable>
-
-              {/* Pagination */}
-              {activity.length > 0 && (
-                  <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-t border-gray-100 dark:border-gray-700">
+                pagination={
+                  <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       Showing{' '}
                       <span className="font-semibold text-gray-700 dark:text-gray-200">
@@ -744,8 +718,30 @@ export default function EmployeeProfilePage() {
                       )}
                     </div>
                   </div>
-                )}
-              </>
+                }
+              >
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {activity.map((item: any) => (
+                    <tr key={`${item.source}-${item.id}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
+                      <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{fmtDateTime(item.created_at)}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-900 dark:text-white">
+                        <span className="font-medium">{item.first_name} {item.last_name}</span>{' '}
+                        <span className="text-gray-500 dark:text-gray-400">{activityLabel(item)}</span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {item.project_name ? (
+                          <Link href={`/projects/${item.project_id}`}
+                            className="text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 no-underline">
+                            {item.project_name}
+                          </Link>
+                        ) : (
+                          <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
             )}
           </div>
         </div>

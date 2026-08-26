@@ -118,7 +118,7 @@ export default function EmployeesPage() {
   const [filterEmpType, setFilterEmpType] = useState('')
   const [sortBy, setSortBy] = useState('first_name')
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('ASC')
-  const [limit, setLimit] = useState(12)
+  const [limit, setLimit] = useState(10)
   const [view, setView] = useState<'table' | 'grid'>(
     typeof window !== 'undefined'
       ? (localStorage.getItem('employees_view') as 'table' | 'grid') || 'table'
@@ -373,7 +373,7 @@ export default function EmployeesPage() {
       </div>
 
       {/* ── Table / Grid ── */}
-      <div className="w-full overflow-hidden rounded-2xl">
+      <div className="w-full">
         {loading ? (
           <div className="flex justify-center py-20"><PageLoader /></div>
         ) : employees.length === 0 ? (
@@ -390,6 +390,7 @@ export default function EmployeesPage() {
           <>
             {view === 'table' ? (
               <>
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <DataTable
                   columns={[
                     {
@@ -447,7 +448,7 @@ export default function EmployeesPage() {
                     />
                   }
                 >
-                  <tbody className="divide-y divide-gray-50 dark:divide-gray-700/60">
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                     {employees.map((emp: any) => {
                       const initials = `${emp.first_name?.[0] || ''}${emp.last_name?.[0] || ''}`.toUpperCase()
                       return (
@@ -511,6 +512,7 @@ export default function EmployeesPage() {
                     })}
                   </tbody>
                 </DataTable>
+                </div>
               </>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-2">
