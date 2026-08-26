@@ -660,7 +660,7 @@ router.get('/my-history', async (req, res, next) => {
 
     // Approved leaves for this employee in range
     const [leaves] = await pool.query(
-      `SELECT start_date, end_date, reason, leave_type_id FROM leave_requests
+      `SELECT start_date, end_date, reason, leave_type_id, half_day FROM leave_requests
        WHERE user_id = ? AND status = 'approved' AND start_date <= ? AND end_date >= ?`,
       [userId, date_to, date_from]
     );
@@ -751,6 +751,7 @@ router.get('/my-history', async (req, res, next) => {
         remarks: att?.remarks || null,
         holiday_name: holiday?.name || null,
         leave_reason: leaveInfo?.reason || null,
+        leave_half_day: leaveInfo?.half_day || false,
         breaks: att ? (breaksMap[att.id] || []) : [],
         attendance_id: att?.id || null,
         raw_status: att?.status || null,
@@ -813,7 +814,10 @@ router.get('/my-history', async (req, res, next) => {
     const weekends = fullTimeline.filter(d => d.status === 'weekend').length;
     const companyHolidays = fullTimeline.filter(d => d.status === 'holiday').length;
     const presentDays = fullTimeline.filter(d => d.status === 'present').length;
-    const approvedLeaveDays = fullTimeline.filter(d => d.status === 'leave').length;
+    const approvedLeaveDays = fullTimeline.reduce((sum, d) => {
+      if (d.status !== 'leave') return sum;
+      return sum + (d.leave_half_day ? 0.5 : 1);
+    }, 0);
     const absentDays = fullTimeline.filter(d => d.status === 'absent').length;
     const lateCheckins = fullTimeline.filter(d => d.is_late).length;
     const totalBreakMinutes = fullTimeline.reduce((s, d) => s + (d.total_break_minutes || 0), 0);
@@ -1237,7 +1241,7 @@ router.get('/analytics/summary', async (req, res, next) => {
 
     // Fetch approved leaves overlapping the range
     const [leaves] = await pool.query(
-      `SELECT user_id, start_date, end_date FROM leave_requests
+      `SELECT user_id, start_date, end_date, half_day FROM leave_requests
        WHERE status = 'approved' AND start_date <= ? AND end_date >= ?`,
       [date_to, date_from]
     );
@@ -1302,10 +1306,11 @@ router.get('/analytics/summary', async (req, res, next) => {
 
         // Check if on approved leave this day
         let onLeave = false;
+        let leaveHalfDay = false;
         for (const lv of empLeaves) {
           const ls = new Date(lv.start_date).toISOString().slice(0, 10);
           const le = new Date(lv.end_date).toISOString().slice(0, 10);
-          if (ds >= ls && ds <= le) { onLeave = true; break; }
+          if (ds >= ls && ds <= le) { onLeave = true; leaveHalfDay = Boolean(lv.half_day); break; }
         }
 
         // Determine status (same logic as user history)
@@ -1341,6 +1346,7 @@ router.get('/analytics/summary', async (req, res, next) => {
           total_break_minutes: dayRec?.total_break_minutes || 0,
           effective_break_minutes: dayRec ? Number(dayRec.effective_break_minutes) || 0 : 0,
           break_minutes: dayRec?.break_minutes || 0,
+          leave_half_day: onLeave ? leaveHalfDay : false,
         });
 
         cur.setDate(cur.getDate() + 1);
@@ -1356,7 +1362,10 @@ router.get('/analytics/summary', async (req, res, next) => {
       const breakAdjustmentMinutes = fullTimeline.reduce((s, d) => s + (d.effective_break_minutes > 0 ? d.effective_break_minutes : 0), 0);
 
       // Approved leave days: count from fullTimeline (respects working days, excludes weekends/holidays — same correct logic as user history)
-      const approvedLeaveDays = fullTimeline.filter(d => d.status === 'leave').length;
+      const approvedLeaveDays = fullTimeline.reduce((sum, d) => {
+      if (d.status !== 'leave') return sum;
+      return sum + (d.leave_half_day ? 0.5 : 1);
+    }, 0);
 
       // avgWH: use daysWithHours as denominator (same as user history)
       const avgWH = daysWithHours > 0 ? Math.round((totalWH / daysWithHours) * 100) / 100 : 0;
@@ -1493,7 +1502,7 @@ router.get('/analytics/timeline', async (req, res, next) => {
 
     // Approved leaves for this employee
     const [leaves] = await pool.query(
-      `SELECT start_date, end_date, reason, leave_type_id FROM leave_requests
+      `SELECT start_date, end_date, reason, leave_type_id, half_day FROM leave_requests
        WHERE user_id = ? AND status = 'approved' AND start_date <= ? AND end_date >= ?`,
       [user_id, date_to, date_from]
     );
@@ -1588,6 +1597,7 @@ router.get('/analytics/timeline', async (req, res, next) => {
         remarks: att?.remarks || null,
         holiday_name: holiday?.name || null,
         leave_reason: leaveInfo?.reason || null,
+        leave_half_day: leaveInfo?.half_day || false,
         breaks: att ? (breaksMap[att.id] || []) : [],
         attendance_id: att?.id || null,
         raw_status: att?.status || null,

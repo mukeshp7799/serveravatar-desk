@@ -197,6 +197,7 @@ interface TimelineDay {
   total_break_minutes: number; working_hours: number | null
   is_late: boolean; late_minutes: number; remarks: string | null
   holiday_name: string | null; leave_reason: string | null
+  leave_half_day?: boolean
   breaks: any[]; attendance_id: number | null; raw_status: string | null;
   adjustments?: InlineAdjustment[];
 }
@@ -1277,16 +1278,22 @@ export default function AttendancePage() {
                     <tr key={r.date} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                       <td className="px-4 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">{fmtDate(r.date)}</td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          r.status === 'present' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                          r.status === 'absent' ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' :
-                          r.status === 'leave' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                          r.status === 'holiday' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
-                          r.status === 'weekend' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
-                          'bg-gray-100 text-gray-600 dark:bg-gray-700'
-                        }`}>
-                          {r.status_label}
-                        </span>
+                        {r.status === 'leave' && r.leave_half_day ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400">
+                            Half-day
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            r.status === 'present' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                            r.status === 'absent' ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' :
+                            r.status === 'leave' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                            r.status === 'holiday' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
+                            r.status === 'weekend' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+                            'bg-gray-100 text-gray-600 dark:bg-gray-700'
+                          }`}>
+                            {r.status_label}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap">{r.clock_in_time ? fmtHHMM(r.clock_in_time, companyTz) : '—'}</td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap">{r.clock_out_time ? fmtHHMM(r.clock_out_time, companyTz) : '—'}</td>
@@ -1668,7 +1675,12 @@ export default function AttendancePage() {
                       <div className="text-gray-500">Absent</div>
                     </div>
                     <div className="text-center">
-                      <div className="font-bold text-blue-600">{timeline.filter(d => d.status === 'leave').length}</div>
+                      <div className="font-bold text-blue-600">
+                        {timeline.reduce((sum, d) => {
+                          if (d.status !== 'leave') return sum;
+                          return sum + (d.leave_half_day ? 0.5 : 1);
+                        }, 0)}
+                      </div>
                       <div className="text-gray-500">Leave</div>
                     </div>
                     <div className="text-center">
@@ -1752,9 +1764,15 @@ export default function AttendancePage() {
                                 </td>
                                 {/* Status badge */}
                                 <td className="whitespace-nowrap px-4 py-3">
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${meta.bg} ${meta.color} border-0 whitespace-nowrap`}>
-                                    {meta.label}
-                                  </span>
+                                  {day.status === 'leave' && day.leave_half_day ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400 border-0 whitespace-nowrap">
+                                      Half-day
+                                    </span>
+                                  ) : (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${meta.bg} ${meta.color} border-0 whitespace-nowrap`}>
+                                      {meta.label}
+                                    </span>
+                                  )}
                                 </td>
                                 {/* Clock In */}
                                 <td className="whitespace-nowrap px-4 py-3">
