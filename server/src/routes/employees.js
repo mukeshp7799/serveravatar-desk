@@ -10,6 +10,11 @@ const router = express.Router();
 // GET /api/employees — List all employees with search, filters, pagination, sorting
 router.get('/', auth, async (req, res, next) => {
   try {
+    const perms = req.user.permissions || [];
+    if (!perms.includes('users.view_all')) {
+      return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
+    }
+
     const {
       search,
       departmentId,

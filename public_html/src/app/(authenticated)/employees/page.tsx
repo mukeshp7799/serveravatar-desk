@@ -11,7 +11,7 @@ import { DataTable } from '@/components/DataTable'
 import PortalModal from '@/components/PortalModal'
 import {
   Search, X, ChevronUp, ChevronDown, ChevronsUpDown,
-  User, Plus, MoreHorizontal, RefreshCw, Pencil, Trash2, Eye, UserCheck, Ban, LayoutGrid, List, Loader2,
+  User, Plus, MoreHorizontal, RefreshCw, Pencil, Trash2, Eye, UserCheck, Ban, LayoutGrid, List, Loader2, Users,
 } from 'lucide-react'
 
 const ACCENT = '#4F46E5'
@@ -131,7 +131,6 @@ export default function EmployeesPage() {
   const [deletingEmployee, setDeletingEmployee] = useState<any>(null)
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [statusEmployee, setStatusEmployee] = useState<any>(null)
-
   const sortOptions: SortOption[] = [
     { value: 'first_name',      label: 'Name' },
     { value: 'employee_id',     label: 'Emp. ID' },
@@ -202,6 +201,26 @@ export default function EmployeesPage() {
     } finally { setShowStatusModal(false); setStatusEmployee(null) }
   }
 
+  // Initialize user from localStorage synchronously to avoid React hooks count mismatch
+  const [user, setUser] = useState<any>(
+    () => {
+      try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null }
+    }
+  )
+
+  // Keep user in sync if it changes in localStorage
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'user' && e.newValue) {
+        try { setUser(JSON.parse(e.newValue)) } catch {}
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    const onUpdate = (e: Event) => { const u = (e as CustomEvent).detail; if (u) setUser(u) }
+    window.addEventListener('user-updated', onUpdate)
+    return () => { window.removeEventListener('storage', onStorage); window.removeEventListener('user-updated', onUpdate) }
+  }, [])
+
   useEffect(() => {
     Promise.all([api.get('/departments'), api.get('/roles')])
       .then(([deptsData, rolesData]) => {
@@ -211,6 +230,19 @@ export default function EmployeesPage() {
   }, [])
 
   useEffect(() => { fetchEmployees(1) }, [search, filterDept, filterStatus, filterRole, filterEmpType, sortBy, sortOrder, limit])
+
+  const hasAccess = user?.permissions?.includes('users.view_all')
+
+  if (!hasAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <Users size={48} className="text-gray-300 dark:text-gray-600" />
+        <p className="text-gray-500 dark:text-gray-400 text-center">
+          You do not have permission to view the employee directory.
+        </p>
+      </div>
+    )
+  }
 
   const clearFilters = () => {
     debouncedSearch.cancel()
