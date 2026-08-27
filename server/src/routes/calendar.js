@@ -47,8 +47,8 @@ router.post('/holidays', auth, canManageHolidays, async (req, res, next) => {
     );
     const [rows] = await pool.query('SELECT * FROM company_holidays WHERE id = ?', [result.insertId]);
     // ── Activity log: Holiday Created ─────────────────────────────────────
-    logActivity({ req, module: 'Calendar', action: 'Holiday Created',
-      description: `Holiday "${name}" created for ${date}` });
+    logActivity({ req, module: 'Calendar', action: 'Created',
+      description: `Holiday (${name}) created` });
     res.status(201).json({ holiday: rows[0], message: 'Holiday created successfully' });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'A holiday already exists on this date' });
@@ -73,8 +73,8 @@ router.put('/holidays/:id', auth, canManageHolidays, async (req, res, next) => {
     await pool.query(`UPDATE company_holidays SET ${updates.join(', ')} WHERE id = ?`, params);
     const [rows] = await pool.query('SELECT * FROM company_holidays WHERE id = ?', [id]);
     // ── Activity log: Holiday Updated ──────────────────────────────────────
-    logActivity({ req, module: 'Calendar', action: 'Holiday Updated',
-      description: `Holiday "${rows[0]?.name}" (${rows[0]?.date}) updated` });
+    logActivity({ req, module: 'Calendar', action: 'Updated',
+      description: `Holiday (${rows[0]?.name || id}) updated` });
     res.json({ holiday: rows[0], message: 'Holiday updated successfully' });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'A holiday already exists on this date' });
@@ -88,10 +88,11 @@ router.delete('/holidays/:id', auth, canManageHolidays, async (req, res, next) =
     const { id } = req.params;
     const [existing] = await pool.query('SELECT id FROM company_holidays WHERE id = ?', [id]);
     if (!existing.length) return res.status(404).json({ error: 'Holiday not found' });
+    const [[holiday]] = await pool.query('SELECT name FROM company_holidays WHERE id = ?', [id]);
     await pool.query('DELETE FROM company_holidays WHERE id = ?', [id]);
     // ── Activity log: Holiday Deleted ─────────────────────────────────────
-    logActivity({ req, module: 'Calendar', action: 'Holiday Deleted',
-      description: `Holiday ID ${id} deleted` });
+    logActivity({ req, module: 'Calendar', action: 'Deleted',
+      description: `Holiday (${holiday?.name || id}) deleted` });
     res.json({ message: 'Holiday deleted successfully' });
   } catch (err) { next(err); }
 });
@@ -126,8 +127,8 @@ router.post('/events', auth, canManageEvents, async (req, res, next) => {
     );
     const [rows] = await pool.query('SELECT * FROM company_events WHERE id = ?', [result.insertId]);
     // ── Activity log: Calendar Event Created ─────────────────────────────
-    logActivity({ req, module: 'Calendar', action: 'Event Created',
-      description: `Calendar event "${title}" created` });
+    logActivity({ req, module: 'Calendar', action: 'Created',
+      description: `Event (${title}) created` });
     res.status(201).json({ event: rows[0], message: 'Event created successfully' });
   } catch (err) { next(err); }
 });
@@ -147,8 +148,8 @@ router.put('/events/:id', auth, canManageEvents, async (req, res, next) => {
     const [rows] = await pool.query('SELECT * FROM company_events WHERE id = ?', [id]);
     if (!rows.length) return res.status(404).json({ error: 'Event not found' });
     // ── Activity log: Calendar Event Updated ──────────────────────────────
-    logActivity({ req, module: 'Calendar', action: 'Event Updated',
-      description: `Calendar event "${rows[0]?.title}" (ID: ${id}) updated` });
+    logActivity({ req, module: 'Calendar', action: 'Updated',
+      description: `Event (${rows[0]?.title || id}) updated` });
     res.json({ event: rows[0], message: 'Event updated successfully' });
   } catch (err) { next(err); }
 });
@@ -159,7 +160,10 @@ router.delete('/events/:id', auth, canManageEvents, async (req, res, next) => {
     const { id } = req.params;
     const [existing] = await pool.query('SELECT id FROM company_events WHERE id = ?', [id]);
     if (!existing.length) return res.status(404).json({ error: 'Event not found' });
+    const [ev] = await pool.query('SELECT title FROM company_events WHERE id = ?', [id]);
     await pool.query('DELETE FROM company_events WHERE id = ?', [id]);
+    logActivity({ req, module: 'Calendar', action: 'Deleted',
+      description: `Event (${ev[0]?.title || id}) deleted` });
     res.json({ message: 'Event deleted successfully' });
   } catch (err) { next(err); }
 });

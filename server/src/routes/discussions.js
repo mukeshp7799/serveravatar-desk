@@ -5,6 +5,7 @@ const { requireProjectMember, isProjectMember } = require('../middleware/project
 const { t } = require('../i18n');
 const { processAndNotifyMentions, SOURCE_TYPES } = require('../utils/mentions');
 const { isNotificationAllowed } = require('../utils/notificationPreferences');
+const { logActivity } = require('../services/activityService');
 
 const router = express.Router();
 
@@ -253,6 +254,9 @@ router.post('/', auth, async (req, res, next) => {
     const insertedId = result.insertId;
     const trimmedTitle = String(title).trim();
     res.status(201).json({ id: insertedId, title: trimmedTitle });
+
+    logActivity({ req, module: 'Discussion', action: 'Created',
+      description: `Discussion (${trimmedTitle}) created` });
   } catch (err) { next(err); }
 });
 
@@ -392,7 +396,7 @@ router.post('/:id/messages/:messageId/reactions', auth, async (req, res, next) =
 // Only the discussion creator OR a user with 'discussions.delete' permission can delete.
 router.delete('/:id', auth, async (req, res, next) => {
   try {
-    const [discussion] = await pool.query('SELECT id, created_by_user_id FROM discussions WHERE id = ?', [req.params.id]);
+    const [discussion] = await pool.query('SELECT id, title, created_by_user_id FROM discussions WHERE id = ?', [req.params.id]);
     if (!discussion.length) return res.status(404).json({ error: t(req.lang, 'errors.discussionNotFound') });
 
     const isCreator = discussion[0].created_by_user_id === req.user.id;
@@ -404,6 +408,10 @@ router.delete('/:id', auth, async (req, res, next) => {
     const discussionTitle = discussion[0].title || `Discussion ${req.params.id}`;
     const projId = discussion[0].project_id;
     await pool.query('DELETE FROM discussions WHERE id = ?', [req.params.id]);
+
+    logActivity({ req, module: 'Discussion', action: 'Deleted',
+      description: `Discussion (${discussionTitle}) deleted` });
+
     res.json({ message: t(req.lang, 'errors.discussionDeleted') });
   } catch (err) { next(err); }
 });

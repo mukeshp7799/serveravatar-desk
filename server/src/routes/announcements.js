@@ -431,7 +431,7 @@ router.post('/', requirePermission('announcements.create'), async (req, res, nex
     res.status(201).json({ id: annId, message: t(req.lang, 'errors.announcementsPosted') });
     // ── Activity log: Announcement Created ─────────────────────────────────
     logActivity({ req, module: 'Announcement', action: 'Created',
-      description: `Announcement "${title}" created (status: ${status})` });
+      description: `Announcement (${title}) created` });
   } catch (err) {
     next(err);
   }
@@ -508,7 +508,7 @@ router.put('/:id', requirePermission('announcements.create'), async (req, res, n
     res.json({ message: t(req.lang, 'errors.announcementUpdated') });
     // ── Activity log: Announcement Updated ────────────────────────────────
     logActivity({ req, module: 'Announcement', action: 'Updated',
-      description: `Announcement "${title}" (ID: ${req.params.id}) updated` });
+      description: `Announcement (${title}) updated` });
   } catch (err) {
     next(err);
   }
@@ -522,10 +522,11 @@ router.delete('/:id', requirePermission('announcements.manage'), async (req, res
     var [existing] = await pool.query('SELECT id FROM announcements WHERE id = ?', [req.params.id]);
     if (existing.length === 0) return res.status(404).json({ error: 'Announcement not found' });
 
+    var [ann] = await pool.query('SELECT title FROM announcements WHERE id = ?', [req.params.id]);
     await pool.query('UPDATE announcements SET status = \'archived\' WHERE id = ?', [req.params.id]);
     // ── Activity log: Announcement Archived ───────────────────────────────
     logActivity({ req, module: 'Announcement', action: 'Archived',
-      description: `Announcement ID ${req.params.id} archived` });
+      description: `Announcement (${ann[0]?.title || req.params.id}) archived` });
     res.json({ message: 'Announcement archived successfully' });
   } catch (err) {
     next(err);
@@ -714,7 +715,7 @@ router.post('/:id/restore', requirePermission('announcements.manage'), async (re
     res.json({ message: t(req.lang, 'errors.announcementRestored') || 'Announcement restored to published' });
     // ── Activity log: Announcement Restored ───────────────────────────────
     logActivity({ req, module: 'Announcement', action: 'Restored',
-      description: `Announcement "${ann.title}" (ID: ${req.params.id}) restored` });
+      description: `Announcement (${ann.title}) restored` });
   } catch (err) {
     next(err);
   }

@@ -37,7 +37,7 @@ router.put('/:id', auth, async (req, res, next) => {
     const [[oldRole]] = await pool.query('SELECT name FROM roles WHERE id = ?', [req.params.id]);
     await pool.query('UPDATE roles SET name = ? WHERE id = ?', [name, req.params.id]);
     logActivity({ req, module: 'Role', action: 'Updated',
-      description: `Role "${oldRole?.name || req.params.id}" renamed to "${name}"` });
+      description: `Role (${oldRole?.name || req.params.id}) renamed to "${name}"` });
     res.json({ message: t(req.lang, 'errors.roleUpdated') });
   } catch (err) { next(err); }
 });
@@ -45,12 +45,32 @@ router.put('/:id', auth, async (req, res, next) => {
 // POST /api/roles
 router.post('/', auth, async (req, res, next) => {
   try {
-    const { name } = req.body;
+    const { name, permissionIds } = req.body;
     if (!name) return res.status(400).json({ error: t(req.lang, 'errors.roleNameRequired') });
+
+    // 1. Create the role
     const [result] = await pool.query('INSERT INTO roles (name) VALUES (?)', [name]);
-    logActivity({ req, module: 'Role', action: 'Created',
-      description: `Role "${name}" created` });
-    res.status(201).json({ id: result.insertId, name });
+    const roleId = result.insertId;
+
+    // 2. Assign permissions if provided (same request — ensures correct log order)
+    if (permissionIds && Array.isArray(permissionIds) && permissionIds.length > 0) {
+      const values = permissionIds.map(pid => [roleId, pid]);
+      await pool.query('INSERT INTO role_permissions (role_id, permission_id) VALUES ?', [values]);
+      // Fetch permission names for the log
+      const [newPerms] = await pool.query(
+        `SELECT p.name FROM role_permissions rp JOIN permissions p ON rp.permission_id = p.id WHERE rp.role_id = ?`,
+        [roleId]
+      );
+      const newPermNames = newPerms.map(p => p.name);
+      logActivity({ req, module: 'Role', action: 'Created',
+        description: `Role (${name}) created with permissions`,
+        newValue: { permissions: newPermNames } });
+    } else {
+      logActivity({ req, module: 'Role', action: 'Created',
+        description: `Role (${name}) created` });
+    }
+
+    res.status(201).json({ id: roleId, name });
   } catch (err) { next(err); }
 });
 
@@ -60,7 +80,7 @@ router.delete('/:id', auth, async (req, res, next) => {
     const [[delRole]] = await pool.query('SELECT name FROM roles WHERE id = ?', [req.params.id]);
     await pool.query('DELETE FROM roles WHERE id = ?', [req.params.id]);
     logActivity({ req, module: 'Role', action: 'Deleted',
-      description: `Role "${delRole?.name || req.params.id}" deleted` });
+      description: `Role (${delRole?.name || req.params.id}) deleted` });
     res.json({ message: t(req.lang, 'errors.roleDeleted') });
   } catch (err) { next(err); }
 });
@@ -93,8 +113,8 @@ router.put('/:id/permissions', auth, async (req, res, next) => {
     const newPermNames = newPerms.map(p => p.name);
 
     // ── Activity log: Role Permissions Updated ─────────────────────────────
-    logActivity({ req, module: 'Role', action: 'Permissions Updated',
-      description: `Permissions updated for role "${roleName}"`,
+    logActivity({ req, module: 'Role', action: 'Updated',
+      description: `Role (${roleName}) permissions updated`,
       previousValue: { permissions: prevPerms },
       newValue: { permissions: newPermNames } });
 

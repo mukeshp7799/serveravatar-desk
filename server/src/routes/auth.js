@@ -154,7 +154,7 @@ router.post('/login', async (req, res, next) => {
 
     // ── Activity log: Login ───────────────────────────────────────────────
     logActivity({ req: { user: { id: user.id } }, module: 'Auth', action: 'Login',
-      description: `User logged in` });
+      description: `Logged in successfully` });
 
     res.json({
       token,
@@ -357,7 +357,7 @@ router.post('/logout', auth, async (req, res, next) => {
     }
     // ── Activity log: Logout ─────────────────────────────────────────────
     logActivity({ req, module: 'Auth', action: 'Logout',
-      description: `User logged out` });
+      description: `Logged out successfully` });
 
     res.json({ message: 'Logged out successfully' });
   } catch (err) {

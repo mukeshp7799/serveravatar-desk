@@ -123,7 +123,7 @@ router.post('/clock-in', async (req, res, next) => {
         },
       });
       logActivity({ req, module: 'Attendance', action: 'Clocked In',
-        description: 'Clocked in again after clock-out' });
+        description: 'Clocked in again' });
       return;
     }
 
@@ -1096,9 +1096,12 @@ router.put('/:id', async (req, res, next) => {
     await pool.query(`UPDATE attendance SET ${updates.join(', ')} WHERE id = ?`, vals);
 
     const [[updated]] = await pool.query('SELECT * FROM attendance WHERE id = ?', [attId]);
-    // ── Activity log: Attendance Updated (admin) ───────────────────────────
+    const [[userRow]] = await pool.query('SELECT email FROM users WHERE id = ?', [existing.user_id]);
+    const attDate = existing.attendance_date
+      ? new Date(existing.attendance_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : '';
     logActivity({ req, module: 'Attendance', action: 'Updated',
-      description: `Attendance record updated for user ID ${existing.user_id}`,
+      description: `Attendance${userRow ? ` (${userRow.email})` : ''}${attDate ? ` (${attDate})` : ''} updated`,
       previousValue: existing, newValue: updated });
     res.json({ message: 'Updated', attendance: formatAttendance(updated) });
   } catch (err) { next(err); }
@@ -1789,9 +1792,12 @@ router.put('/:id', async (req, res, next) => {
     }
 
     const [[updated]] = await pool.query('SELECT * FROM attendance WHERE id = ?', [attId]);
-    // ── Activity log: Attendance Updated (admin) ───────────────────────────
+    const [[userRow]] = await pool.query('SELECT email FROM users WHERE id = ?', [existing.user_id]);
+    const attDate = existing.attendance_date
+      ? new Date(existing.attendance_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      : '';
     logActivity({ req, module: 'Attendance', action: 'Updated',
-      description: `Attendance record updated`,
+      description: `Attendance${userRow ? ` (${userRow.email})` : ''}${attDate ? ` (${attDate})` : ''} updated`,
       previousValue: existing, newValue: updated });
     res.json({ message: 'Updated', attendance: formatAttendance(updated) });
   } catch (err) { next(err); }
@@ -2124,11 +2130,12 @@ router.post('/break-adjustments', async (req, res, next) => {
       [result.insertId]
     );
 
+    const [[reqUserRow]] = await pool.query('SELECT email FROM users WHERE id = ?', [userId]);
     logActivity({
       req,
       module: 'Attendance',
-      action: 'Break Adjustment Requested',
-      description: `Requested ${requested_minutes} min break adjustment for break #${break_id}`,
+      action: 'Requested',
+      description: `Break adjustment${reqUserRow ? ` (${reqUserRow.email})` : ''} (${requested_minutes} min) requested`,
       newValue: newReq,
     });
 
@@ -2723,11 +2730,12 @@ router.put('/break-adjustments/:id/approve', async (req, res, next) => {
       [reqId]
     );
 
+    const [[empRow]] = await pool.query('SELECT email FROM users WHERE id = ?', [existing.user_id]);
     logActivity({
       req,
       module: 'Attendance',
-      action: 'Break Adjustment Approved',
-      description: `Approved ${approvedMinutes} min work-during-break (requested ${requested} min) for user ${existing.user_id} (break #${existing.break_id})`,
+      action: 'Approved',
+      description: `Break adjustment${empRow ? ` (${empRow.email})` : ''} (${approvedMinutes} min) approved`,
       previousValue: existing,
       newValue: updated,
     });
@@ -2798,11 +2806,12 @@ router.put('/break-adjustments/:id/reject', async (req, res, next) => {
       [reqId]
     );
 
+    const [[empRowRej]] = await pool.query('SELECT email FROM users WHERE id = ?', [existing.user_id]);
     logActivity({
       req,
       module: 'Attendance',
-      action: 'Break Adjustment Rejected',
-      description: `Rejected break adjustment request #${reqId} (${existing.requested_minutes} min) for user ${existing.user_id}`,
+      action: 'Rejected',
+      description: `Break adjustment${empRowRej ? ` (${empRowRej.email})` : ''} rejected`,
       previousValue: existing,
       newValue: updated,
     });
@@ -2858,11 +2867,12 @@ router.put('/break-adjustments/:id/cancel', async (req, res, next) => {
     // Reverse any approved work minutes if they had been approved (shouldn't happen for Pending, but safe)
     await reverseAdjustmentFromAttendance(reqId, pool);
 
+    const [[empRowCan]] = await pool.query('SELECT email FROM users WHERE id = ?', [existing.user_id]);
     logActivity({
       req,
       module: 'Attendance',
-      action: 'Break Adjustment Cancelled',
-      description: `Cancelled break adjustment request #${reqId} by employee ${userId}`,
+      action: 'Cancelled',
+      description: `Break adjustment${empRowCan ? ` (${empRowCan.email})` : ''} cancelled`,
       previousValue: existing,
     });
 

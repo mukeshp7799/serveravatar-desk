@@ -308,6 +308,9 @@ router.post('/types', auth, async (req, res, next) => {
       ]
     );
     res.status(201).json({ id: result.insertId, message: t(req.lang, 'errors.leaveTypeCreated') });
+
+    logActivity({ req, module: 'LeaveType', action: 'Created',
+      description: `Leave type (${name}) created` });
   } catch (err) { next(err); }
 });
 
@@ -331,6 +334,10 @@ router.put('/types/:id', auth, async (req, res, next) => {
     if (fields.length === 0) return res.status(400).json({ error: t(req.lang, 'errors.noFieldsToUpdate') });
     params.push(req.params.id);
     await pool.query(`UPDATE leave_types SET ${fields.join(', ')} WHERE id = ?`, params);
+
+    logActivity({ req, module: 'LeaveType', action: 'Updated',
+      description: `Leave type (${name || req.params.id}) updated` });
+
     res.json({ message: t(req.lang, 'errors.leaveTypeUpdated') });
   } catch (err) { next(err); }
 });
@@ -351,6 +358,10 @@ router.delete('/types/:id', auth, async (req, res, next) => {
       return res.status(409).json({ error: 'Cannot delete leave type with existing requests. Archive it instead.' });
     }
     await pool.query('DELETE FROM leave_types WHERE id = ?', [req.params.id]);
+
+    logActivity({ req, module: 'LeaveType', action: 'Deleted',
+      description: `Leave type deleted` });
+
     res.json({ message: t(req.lang, 'errors.leaveTypeDeleted') });
   } catch (err) { next(err); }
 });
@@ -716,9 +727,9 @@ router.post('/', auth, async (req, res, next) => {
       message: t(req.lang, 'errors.leaveRequestSubmitted'),
       days,
     });
-    // ── Activity log: Leave Applied ───────────────────────────────────────
+    // ── Activity log: Leave Requested ────────────────────────────────────
     logActivity({ req, module: 'Leave', action: 'Applied',
-      description: `Applied for ${ltype[0]?.name || 'leave'} (${days} day${days !== 1 ? 's' : ''})` });
+      description: `Leave (${ltype[0]?.name || 'leave'} - ${days} day${days !== 1 ? 's' : ''}) requested` });
   } catch (err) { next(err); }
 });
 
@@ -730,7 +741,12 @@ router.put('/:id/approve', auth, async (req, res, next) => {
       return res.status(400).json({ error: t(req.lang, 'errors.actionMustBeApprovedOrRejected') });
     }
 
-    const [request] = await pool.query('SELECT * FROM leave_requests WHERE id = ?', [req.params.id]);
+    const [request] = await pool.query(
+      `SELECT lr.*, lt.name as leave_type_name, u.email as user_email
+       FROM leave_requests lr
+       JOIN leave_types lt ON lr.leave_type_id = lt.id
+       JOIN users u ON lr.user_id = u.id
+       WHERE lr.id = ?`, [req.params.id]);
     if (request.length === 0) return res.status(404).json({ error: t(req.lang, 'errors.leaveRequestNotFound') });
     const lr = request[0];
 
@@ -766,7 +782,7 @@ router.put('/:id/approve', auth, async (req, res, next) => {
     res.json({ message: t(req.lang, `success.leaveRequest${action === 'approved' ? 'Approved' : 'Rejected'}`) });
     // ── Activity log: Leave Approved/Rejected ─────────────────────────────
     logActivity({ req, module: 'Leave', action: action === 'approved' ? 'Approved' : 'Rejected',
-      description: `${action === 'approved' ? 'Approved' : 'Rejected'} leave request for user ID ${lr.user_id}${rejection_reason ? ` — Reason: ${rejection_reason}` : ''}`,
+      description: `User (${lr.user_email}) leave (${lr.leave_type_name || 'leave'}) ${action === 'approved' ? 'approved' : 'rejected'}${rejection_reason ? ` (${rejection_reason})` : ''}`,
       previousValue: lr });
   } catch (err) { next(err); }
 });
@@ -774,7 +790,12 @@ router.put('/:id/approve', auth, async (req, res, next) => {
 // PUT /api/leaves/:id/cancel
 router.put('/:id/cancel', auth, async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM leave_requests WHERE id = ?', [req.params.id]);
+    const [rows] = await pool.query(
+      `SELECT lr.*, u.email as user_email, lt.name as leave_type_name
+       FROM leave_requests lr
+       JOIN users u ON lr.user_id = u.id
+       LEFT JOIN leave_types lt ON lr.leave_type_id = lt.id
+       WHERE lr.id = ?`, [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: t(req.lang, 'errors.leaveRequestNotFound') });
     const lr = rows[0];
 
@@ -807,6 +828,9 @@ router.put('/:id/cancel', auth, async (req, res, next) => {
     }
 
     res.json({ message: t(req.lang, 'success.leaveRequestCancelled') });
+    // ── Activity log: Leave Cancelled ──────────────────────────────────────
+    logActivity({ req, module: 'Leave', action: 'Cancelled',
+      description: `User (${lr.user_email}) leave (${lr.leave_type_name || 'leave'}) cancelled` });
   } catch (err) { next(err); }
 });
 

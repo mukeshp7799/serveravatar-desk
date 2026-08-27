@@ -173,8 +173,19 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
     return () => { document.body.style.overflow = '' }
   }, [mobileMenuOpen])
 
-  const handleLogout = () => {
-    localStorage.removeItem('token'); localStorage.removeItem('user')
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (token) {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json' }
+        })
+      }
+    } catch (e) { /* ignore */ }
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
     router.push('/login')
   }
 

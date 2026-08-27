@@ -36,6 +36,7 @@ router.get('/', auth, async (req, res, next) => {
 
     const {
       filter_user_id,   // Intended for view_all callers; silently ignored for view_own
+      user_search,      // Search by user name or email
       module,
       action,
       date_from,
@@ -66,25 +67,11 @@ router.get('/', auth, async (req, res, next) => {
         where += ' AND al.user_id = ?';
         params.push(parseInt(filter_user_id, 10));
       }
-      // Module filter
-      if (module) {
-        where += ' AND al.module = ?';
-        params.push(module);
-      }
-      // Action filter
-      if (action) {
-        where += ' AND al.action = ?';
-        params.push(action);
-      }
-      // Date range filters
-      if (date_from) {
-        where += ' AND al.created_at >= ?';
-        params.push(date_from);
-      }
-      if (date_to) {
-        // Add one day to make the bound inclusive at end of day
-        where += ' AND al.created_at < DATE_ADD(?, INTERVAL 1 DAY)';
-        params.push(date_to);
+      // User search: by name or email
+      if (user_search && user_search.trim()) {
+        const search = `%${user_search.trim()}%`;
+        where += ' AND (u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?)';
+        params.push(search, search, search);
       }
     } else {
       // view_own only → always scope to the current user
@@ -92,8 +79,27 @@ router.get('/', auth, async (req, res, next) => {
       params.push(userId);
     }
 
-    // Count total matching rows
-    const countQuery = `SELECT COUNT(*) AS total FROM activity_logs al ${where}`;
+    // Module, action, and date filters apply to ALL users (already scoped by user_id above)
+    if (module) {
+      where += ' AND al.module = ?';
+      params.push(module);
+    }
+    if (action) {
+      where += ' AND al.action = ?';
+      params.push(action);
+    }
+    if (date_from) {
+      where += ' AND al.created_at >= ?';
+      params.push(date_from);
+    }
+    if (date_to) {
+      // Add one day to make the bound inclusive at end of day
+      where += ' AND al.created_at < DATE_ADD(?, INTERVAL 1 DAY)';
+      params.push(date_to);
+    }
+
+    // Count total matching rows (JOIN users for user_search filter)
+    const countQuery = `SELECT COUNT(*) AS total FROM activity_logs al JOIN users u ON al.user_id = u.id ${where}`;
     const [[{ total }]] = await pool.query(countQuery, params);
 
     // Data query
@@ -202,12 +208,20 @@ router.get('/recent', auth, async (req, res, next) => {
 router.get('/modules', auth, async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('activity_logs.view_all')) {
+    const hasViewAll = perms.includes('activity_logs.view_all');
+    const hasViewOwn = perms.includes('activity_logs.view_own');
+    if (!hasViewAll && !hasViewOwn) {
       return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
     }
-    const [rows] = await pool.query(
-      'SELECT DISTINCT module FROM activity_logs ORDER BY module'
-    );
+    let query = 'SELECT DISTINCT module FROM activity_logs';
+    const params = [];
+    if (!hasViewAll) {
+      // view_own: only modules from the current user's own logs
+      query += ' WHERE user_id = ?';
+      params.push(req.user.id);
+    }
+    query += ' ORDER BY module';
+    const [rows] = await pool.query(query, params);
     res.json({ modules: rows.map(r => r.module) });
   } catch (err) {
     next(err);
@@ -218,12 +232,20 @@ router.get('/modules', auth, async (req, res, next) => {
 router.get('/actions', auth, async (req, res, next) => {
   try {
     const perms = req.user.permissions || [];
-    if (!perms.includes('activity_logs.view_all')) {
+    const hasViewAll = perms.includes('activity_logs.view_all');
+    const hasViewOwn = perms.includes('activity_logs.view_own');
+    if (!hasViewAll && !hasViewOwn) {
       return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
     }
-    const [rows] = await pool.query(
-      'SELECT DISTINCT action FROM activity_logs ORDER BY action'
-    );
+    let query = 'SELECT DISTINCT action FROM activity_logs';
+    const params = [];
+    if (!hasViewAll) {
+      // view_own: only actions from the current user's own logs
+      query += ' WHERE user_id = ?';
+      params.push(req.user.id);
+    }
+    query += ' ORDER BY action';
+    const [rows] = await pool.query(query, params);
     res.json({ actions: rows.map(r => r.action) });
   } catch (err) {
     next(err);

@@ -82,7 +82,7 @@ interface ActivityLog {
 }
 
 interface FilterState {
-  filter_user_id: string
+  user_search: string
   module: string
   action: string
   date_from: string
@@ -101,17 +101,19 @@ export default function ActivityLogsPage() {
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [totalPages, setTotalPages] = useState(1)
-const [employees, setEmployees] = useState<any[]>([])
   const [modules, setModules] = useState<string[]>([])
   const [actions, setActions] = useState<string[]>([])
 
   const [filters, setFilters] = useState<FilterState>({
-    filter_user_id: '',
+    user_search: '',
     module: '',
     action: '',
     date_from: '',
     date_to: '',
   })
+
+  // 'my' = own activity only, 'all' = all users (admin/HR)
+  const [viewMode, setViewMode] = useState<'my' | 'all'>('my')
 
   const hasViewAll = user?.permissions?.includes('activity_logs.view_all')
   const hasViewOwn = user?.permissions?.includes('activity_logs.view_own')
@@ -125,17 +127,9 @@ const [employees, setEmployees] = useState<any[]>([])
     } catch {}
   }, [])
 
-  // Load employees for filter dropdown (needs view_all)
-  useEffect(() => {
-    if (!hasViewAll) return
-    api.get('/employees?limit=100')
-      .then((res: any) => setEmployees(res.employees || []))
-      .catch(() => {})
-  }, [hasViewAll])
-
   // Load filter helper lists (modules + actions)
   useEffect(() => {
-    if (!hasViewAll) return
+    if (!canView) return
     api.get('/activity-logs/modules')
       .then((res: any) => setModules(res.modules || []))
       .catch(() => {})
@@ -151,13 +145,24 @@ const [employees, setEmployees] = useState<any[]>([])
       const params = new URLSearchParams()
       params.set('page', String(page))
       params.set('limit', String(limit))
+
       if (hasViewAll) {
-        if (filters.filter_user_id) params.set('filter_user_id', filters.filter_user_id)
-        if (filters.module)         params.set('module', filters.module)
-        if (filters.action)         params.set('action', filters.action)
-        if (filters.date_from)      params.set('date_from', filters.date_from)
-        if (filters.date_to)        params.set('date_to', filters.date_to)
+        // Admin/HR: decide based on viewMode tab
+        if (viewMode === 'my') {
+          params.set('filter_user_id', String(user?.id))
+        } else {
+          // viewMode='all': show everyone, allow user search
+          if (filters.user_search) params.set('user_search', filters.user_search)
+        }
       }
+      // else: non-admin users (hasViewOwn only) — API uses auth token to get own user_id
+
+      // Filters apply to everyone who can view
+      if (filters.module)    params.set('module', filters.module)
+      if (filters.action)    params.set('action', filters.action)
+      if (filters.date_from) params.set('date_from', filters.date_from)
+      if (filters.date_to)   params.set('date_to', filters.date_to)
+
       const res = await api.get(`/activity-logs?${params}`)
       setLogs(res.data || [])
       setTotal(res.pagination?.total ?? 0)
@@ -167,7 +172,7 @@ const [employees, setEmployees] = useState<any[]>([])
     } finally {
       setLoading(false)
     }
-  }, [page, limit, filters, hasViewAll, canView, t])
+  }, [page, limit, filters, hasViewAll, canView, viewMode, user, t])
 
   useEffect(() => { fetchLogs() }, [fetchLogs])
 
@@ -177,11 +182,12 @@ const [employees, setEmployees] = useState<any[]>([])
   }
 
   const clearFilters = () => {
-    setFilters({ filter_user_id: '', module: '', action: '', date_from: '', date_to: '' })
+    setFilters({ user_search: '', module: '', action: '', date_from: '', date_to: '' });
+    setViewMode('my')
     setPage(1)
   }
 
-  const hasActiveFilters = filters.module || filters.action || filters.date_from || filters.date_to || (hasViewAll && filters.filter_user_id)
+  const hasActiveFilters = filters.module || filters.action || filters.date_from || filters.date_to || (hasViewAll && filters.user_search)
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -225,26 +231,64 @@ const [employees, setEmployees] = useState<any[]>([])
         </div>
       </div>
 
-      {/* ── Filter Panel — always visible ───────────────────────────────── */}
+      {/* ── View Mode Tabs (admin only) ────────────────────────────────────── */}
       {hasViewAll && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-1.5 w-full flex gap-1">
+          <button
+            onClick={() => { setViewMode('my'); setPage(1); }}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer ${
+              viewMode === 'my'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            My Activity
+          </button>
+          <button
+            onClick={() => { setViewMode('all'); setPage(1); }}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer ${
+              viewMode === 'all'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            All Activity
+          </button>
+        </div>
+      )}
+
+      {/* ── Filter Panel — visible to all who can view ─────────────────────────── */}
+      {canView && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-4 py-3.5 w-full">
           <div className="flex flex-wrap gap-3 items-center w-full">
-            {/* Group 1: User */}
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">User</span>
-              <select
-                value={filters.filter_user_id}
-                onChange={e => handleFilterChange('filter_user_id', e.target.value)}
-                className="h-9 pl-3 pr-8 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none"
-              >
-                <option value="">All</option>
-                {employees.map((emp: any) => (
-                  <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>
-                ))}
-              </select>
-            </div>
+            {/* Group 1: User Search — only shown in 'all' viewMode (admin only) */}
+            {hasViewAll && viewMode === 'all' && (
+              <>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">Search</span>
+                  <div className="relative">
+                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={filters.user_search}
+                      onChange={e => handleFilterChange('user_search', e.target.value)}
+                      placeholder="Name or email..."
+                      className="h-9 pl-8 pr-7 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-44"
+                    />
+                    {filters.user_search && (
+                      <button
+                        onClick={() => handleFilterChange('user_search', '')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-            <div className="h-5 w-px bg-gray-200 dark:bg-gray-700 hidden sm:block" />
+                <div className="h-5 w-px bg-gray-200 dark:bg-gray-700 hidden sm:block" />
+              </>
+            )}
 
             {/* Group 2: Module */}
             <div className="flex items-center gap-2 min-w-0">
@@ -308,15 +352,6 @@ const [employees, setEmployees] = useState<any[]>([])
               </>
             )}
           </div>
-        </div>
-      )}
-
-      {/* ── Scope badge for view_own users ─────────────────────────────────── */}
-      {!hasViewAll && hasViewOwn && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800 px-4 py-2.5 flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
-          <User size={14} />
-          Showing only your own activity logs.
-          <span className="ml-auto text-xs opacity-70">Request <strong>activity_logs.view_all</strong> permission to view all users.</span>
         </div>
       )}
 
@@ -427,7 +462,7 @@ const [employees, setEmployees] = useState<any[]>([])
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
@@ -446,7 +481,7 @@ const [employees, setEmployees] = useState<any[]>([])
                 }, [])
                 .map((p, i) =>
                   p === '...' ? (
-                    <span key={`e-${i}`} className="w-8 h-8 flex items-center justify-center text-xs text-gray-400">…</span>
+                    <span key={`e-${i}`} className="w-8 h-8 flex items-center  justify-center text-xs text-gray-400">…</span>
                   ) : (
                     <button key={p} onClick={() => setPage(Number(p))}
                       className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-semibold transition cursor-pointer border ${

@@ -87,9 +87,8 @@ router.put('/', requirePermission('admin.settings'), async (req, res, next) => {
 
     const updated = await getAllSettings();
     // ── Activity log: Company Settings Updated ────────────────────────────
-    const changedGroups = groups.join(', ');
     logActivity({ req, module: 'CompanySettings', action: 'Updated',
-      description: `Company settings updated: ${changedGroups}` });
+      description: `Company settings updated` });
     res.json({ message: t(req.lang, 'settings.companySettingsUpdated'), settings: updated });
   } catch (err) { next(err); }
 });

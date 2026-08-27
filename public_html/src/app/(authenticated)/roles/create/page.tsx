@@ -56,22 +56,15 @@ function CreateRolePageInner() {
     }
     setSubmitting(true)
     try {
-      // 1. Create the role
-      const createRes = await api.post('/roles', { name: data.name.trim() })
-      const newRoleId = createRes.role?.id || createRes.id
-
-      if (!newRoleId) {
-        throw new Error('Role ID not returned from server')
-      }
-
-      // 2. Assign selected permissions
+      // Build permissionIds map
       const nameToId: Record<string, number> = {}
       allPerms.forEach((p: any) => { nameToId[p.name] = p.id })
       const permissionIds = Array.from(selected)
         .filter(n => nameToId[n] != null)
         .map(n => nameToId[n])
 
-      await api.put(`/roles/${newRoleId}/permissions`, { permissionIds })
+      // Create role WITH permissions in single request
+      await api.post('/roles', { name: data.name.trim(), permissionIds })
 
       toast.success('Role created successfully')
       router.push('/roles')

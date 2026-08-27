@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { t } = require('../i18n');
+const { logActivity } = require('../services/activityService');
 
 const router = express.Router();
 
@@ -27,6 +28,10 @@ router.post('/', auth, async (req, res, next) => {
       [name, headId || null]
     );
     res.status(201).json({ id: result.insertId, name });
+
+    logActivity({ req, module: 'Department', action: 'Created',
+      description: `Department (${name}) created` });
+
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: t(req.lang, 'errors.departmentExists') });
     next(err);
@@ -48,7 +53,14 @@ router.put('/:id', auth, async (req, res, next) => {
       return res.status(400).json({ error: t(req.lang, 'errors.noFieldsToUpdate') });
     }
     params.push(req.params.id);
+    const [[oldDept]] = await pool.query('SELECT name FROM departments WHERE id = ?', [req.params.id]);
     await pool.query(`UPDATE departments SET ${fields.join(', ')} WHERE id = ?`, params);
+
+    logActivity({ req, module: 'Department', action: 'Updated',
+      description: oldDept && oldDept.name !== name
+        ? `Department (${oldDept.name}) updated to (${name})`
+        : `Department (${name}) updated` });
+
     res.json({ message: t(req.lang, 'errors.departmentUpdated') });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: t(req.lang, 'errors.departmentExists') });
@@ -63,6 +75,10 @@ router.delete('/:id', auth, async (req, res, next) => {
       return res.status(403).json({ error: t(req.lang, 'errors.permissionDenied') });
     }
     await pool.query('DELETE FROM departments WHERE id = ?', [req.params.id]);
+
+    logActivity({ req, module: 'Department', action: 'Deleted',
+      description: 'Department deleted' });
+
     res.json({ message: t(req.lang, 'errors.departmentDeleted') });
   } catch (err) { next(err); }
 });

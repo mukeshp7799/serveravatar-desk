@@ -4,6 +4,7 @@ const { auth } = require('../middleware/auth');
 const { requireProjectMember } = require('../middleware/projectMember');
 const { t } = require('../i18n');
 const { recordActivity, hydrateActivity, FEATURE_META, FEATURE_KEYS } = require('../utils/activity');
+const { logActivity } = require('../services/activityService');
 
 const router = express.Router();
 
@@ -202,6 +203,10 @@ router.post('/', auth, async (req, res, next) => {
       targetLabel: name,
     });
 
+    // ── Global activity log ───────────────────────────────────────────────
+    logActivity({ req, module: 'Project', action: 'Created',
+      description: `Project (${name}) created` });
+
     res.status(201).json({ id: result.insertId, message: t(req.lang, 'errors.projectCreated') });
   } catch (err) { next(err); }
 });
@@ -225,6 +230,11 @@ router.put('/:id/archive', auth, async (req, res, next) => {
       targetId: req.params.id,
       targetLabel: proj.name,
     });
+
+    // ── Global activity log ───────────────────────────────────────────────
+    logActivity({ req, module: 'Project', action: 'Archived',
+      description: `Project (${proj.name}) archived` });
+
     res.json({ message: t(req.lang, 'errors.projectArchived') });
   } catch (err) { next(err); }
 });
@@ -247,6 +257,9 @@ router.put('/:id', auth, async (req, res, next) => {
     params.push(req.params.id);
     await pool.query(`UPDATE projects SET ${fields.join(', ')} WHERE id = ?`, params);
 
+    // Capture old values for activity logging
+    const [[oldProj]] = await pool.query('SELECT name, description FROM projects WHERE id = ?', [req.params.id]);
+
     await recordActivity(pool, {
       projectId: Number(req.params.id),
       actorId: req.user.id,
@@ -254,8 +267,12 @@ router.put('/:id', auth, async (req, res, next) => {
       action: 'updated',
       targetType: 'project',
       targetId: req.params.id,
-      targetLabel: name || undefined,
+      targetLabel: name || oldProj?.name,
     });
+
+    // ── Global activity log ───────────────────────────────────────────────
+    logActivity({ req, module: 'Project', action: 'Updated',
+      description: `Project (${name || oldProj?.name}) updated` });
 
     res.json({ message: t(req.lang, 'errors.projectUpdated') });
   } catch (err) { next(err); }
@@ -280,6 +297,11 @@ router.delete('/:id', auth, async (req, res, next) => {
       targetId: req.params.id,
       targetLabel: proj.name,
     });
+
+    // ── Global activity log ───────────────────────────────────────────────
+    logActivity({ req, module: 'Project', action: 'Deleted',
+      description: `Project (${proj.name}) deleted` });
+
     res.json({ message: t(req.lang, 'errors.projectDeleted') });
   } catch (err) { next(err); }
 });
@@ -453,6 +475,11 @@ router.post('/:id/restore', auth, async (req, res, next) => {
       targetId: req.params.id,
       targetLabel: proj.name,
     });
+
+    // ── Global activity log ───────────────────────────────────────────────
+    logActivity({ req, module: 'Project', action: 'Restored',
+      description: `Project (${proj.name}) restored` });
+
     res.json({ message: t(req.lang, 'errors.projectRestored') });
   } catch (err) { next(err); }
 });

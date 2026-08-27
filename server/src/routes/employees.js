@@ -361,9 +361,31 @@ router.put('/:id', auth, async (req, res, next) => {
     params.push(targetId);
     await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
 
-    // ── Activity log: Employee Updated ───────────────────────────────────
-    logActivity({ req, module: 'Employee', action: 'Updated',
-      description: `Employee profile updated` });
+    // Capture old status and email before update for activity logging
+    const [[oldUser]] = await pool.query('SELECT status, email FROM users WHERE id = ?', [targetId]);
+
+    params.push(targetId);
+    await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
+
+
+    // ── Activity log: Employee Updated or Status Changed ─────────────────────
+    // Only show target email when admin acts on someone else's account
+    const targetLabel = isSelf ? null : (oldUser?.email || targetId);
+    const newStatus = req.body.status;
+    const oldStatus = oldUser ? oldUser.status : null;
+    const statusChanged = newStatus !== undefined && oldStatus !== newStatus;
+
+    if (statusChanged) {
+      logActivity({ req, module: 'Employee', action: 'Updated',
+        description: targetLabel
+          ? `Employee (${targetLabel}) ${newStatus === 'active' ? 'activated' : 'deactivated'}`
+          : `${newStatus === 'active' ? 'Activated' : 'Deactivated'} account` });
+    } else {
+      logActivity({ req, module: 'Employee', action: 'Updated',
+        description: targetLabel
+          ? `Employee (${targetLabel}) updated`
+          : `Profile updated` });
+    }
 
     res.json({ message: t(req.lang, 'errors.userUpdated') });
   } catch (err) { next(err); }
@@ -379,7 +401,16 @@ router.delete('/:id', auth, async (req, res, next) => {
     if (target.length === 0) return res.status(404).json({ error: t(req.lang, 'errors.userNotFound') });
     if (target[0].role_id === 1) return res.status(403).json({ error: t(req.lang, 'errors.cannotDeleteAdmin') });
 
+    const [[deletedUser]] = await pool.query('SELECT email, first_name, last_name FROM users WHERE id = ?', [req.params.id]);
     await pool.query('DELETE FROM users WHERE id = ?', [req.params.id]);
+
+    // ── Activity log: Employee Deleted ──────────────────────────────────────
+    const empLabel = deletedUser?.email
+      || `${deletedUser?.first_name || ''} ${deletedUser?.last_name || ''}`.trim()
+      || `user #${req.params.id}`;
+    logActivity({ req, module: 'Employee', action: 'Deleted',
+      description: `Employee (${empLabel}) deleted` });
+
     res.json({ message: t(req.lang, 'errors.userDeleted') });
   } catch (err) { next(err); }
 });
