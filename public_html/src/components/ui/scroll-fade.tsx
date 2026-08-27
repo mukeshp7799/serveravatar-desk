@@ -25,7 +25,7 @@ export function ScrollFade({
       )}
 
       {/* Scrollable container — mobile: one-finger horizontal swipe */}
-      <div className="overflow-x-auto overflow-y-auto touch-pan-x overscroll-contain">
+      <div className="overflow-x-auto scroll-fade-x overflow-y-auto touch-pan-x overscroll-contain">
         {children}
       </div>
     </div>

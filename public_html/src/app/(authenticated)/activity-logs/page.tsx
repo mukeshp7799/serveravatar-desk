@@ -2,8 +2,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
-import { Activity, ChevronLeft, ChevronRight, Filter, RefreshCw, Search, User, X } from 'lucide-react'
+import { Activity, RefreshCw, Search, X } from 'lucide-react'
 import api from '@/lib/api'
+import PaginationBar from '@/components/project/PaginationBar'
+import { ScrollFade } from '@/components/ui/scroll-fade'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -205,15 +207,16 @@ export default function ActivityLogsPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="">
       {/* ── Page Header ─────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-center justify-between gap-4 flex-wrap px-1 mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-indigo-600 flex items-center justify-center shadow">
-            <Activity size={20} className="text-white" />
+          <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-sm">
+            <Activity size={18} className="text-white" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">Activity Logs</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">View and filter user activity across the system.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -230,7 +233,7 @@ export default function ActivityLogsPage() {
 
       {/* ── View Mode Tabs (admin only) ────────────────────────────────────── */}
       {hasViewAll && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-1.5 w-full flex gap-1">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl mb-4 border border-gray-200 dark:border-gray-700 p-1.5 w-full flex gap-1">
           <button
             onClick={() => { setViewMode('my'); setPage(1); }}
             className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer ${
@@ -256,7 +259,7 @@ export default function ActivityLogsPage() {
 
       {/* ── Filter Panel — visible to all who can view ─────────────────────────── */}
       {canView && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 px-4 py-3.5 w-full">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border mb-4 border-gray-200 dark:border-gray-700 px-5 py-4">
           <div className="flex flex-wrap gap-3 items-center w-full">
             {/* Group 1: User Search — only shown in 'all' viewMode (admin only) */}
             {hasViewAll && viewMode === 'all' && (
@@ -353,7 +356,7 @@ export default function ActivityLogsPage() {
       )}
 
       {/* ── Logs Table ────────────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-t-2xl border border-gray-200 dark:border-gray-700">
         {loading ? (
           <div className="flex items-center justify-center h-48">
             <RefreshCw size={24} className="animate-spin text-gray-400" />
@@ -364,23 +367,23 @@ export default function ActivityLogsPage() {
             <p className="text-gray-500 dark:text-gray-400 text-sm">No activity logs found</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <ScrollFade fadeEdge={false} className="relative">
+            <table className="min-w-max w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-800/60">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">User</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Module</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Description</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">IP Address</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">When</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">User</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Module</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Description</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">IP Address</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">When</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {logs.map(log => (
-                  <tr key={log.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/50 transition">
+                  <tr key={log.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-700/30 transition-colors">
                     {/* User */}
-                    <td className="px-4 py-3">
+                    <td className="px-5 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs font-bold shrink-0">
                           {log.first_name?.[0]}{log.last_name?.[0]}
@@ -394,29 +397,35 @@ export default function ActivityLogsPage() {
                       </div>
                     </td>
                     {/* Module */}
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold ${getBadgeClass(log.module, log.action)}`}>
+                    <td className="px-5 py-3">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold ${getBadgeClass(log.module, log.action)}`}>
                         {log.module}
                       </span>
                     </td>
                     {/* Action */}
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold ${getActionBadgeClass(log.action)}`}>
+                    <td className="px-5 py-3">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold ${getActionBadgeClass(log.action)}`}>
                         {log.action}
                       </span>
                     </td>
                     {/* Description */}
-                    <td className="px-4 py-3">
-                      <span className="text-gray-700 dark:text-gray-300 leading-relaxed">{log.description}</span>
+                    <td className="px-5 py-3 max-w-[300px]">
+                      <div
+                        className="text-gray-700 dark:text-gray-300 text-sm truncate whitespace-nowrap"
+                        data-tooltip-id="app-tooltip"
+                        data-tooltip-content={log.description}
+                      >
+                        {log.description}
+                      </div>
                     </td>
                     {/* IP */}
-                    <td className="px-4 py-3">
+                    <td className="px-5 py-3">
                       <span className="text-gray-400 dark:text-gray-500 font-mono text-xs">
                         {log.ip_address || <span className="italic opacity-50">—</span>}
                       </span>
                     </td>
                     {/* When */}
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-5 py-3 whitespace-nowrap">
                       <div className="text-gray-500 dark:text-gray-400 text-xs" title={formatDateTime(log.created_at)}>
                         {timeAgo(log.created_at)}
                       </div>
@@ -428,81 +437,23 @@ export default function ActivityLogsPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollFade>
         )}
       </div>
 
       {/* ── Pagination ────────────────────────────────────────────────────── */}
-      {totalPages > 1 && (
-        <div className="flex flex-wrap items-start sm:items-center justify-between gap-x-6 gap-y-2 px-4 sm:px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-b-2xl">
-          <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap leading-7">
-            Showing <span className="font-medium text-gray-700 dark:text-gray-200">{Math.min((page - 1) * limit + 1, total)}</span> to{' '}
-            <span className="font-medium text-gray-700 dark:text-gray-200">{Math.min(page * limit, total)}</span> of{' '}
-            <span className="font-medium text-gray-700 dark:text-gray-200">{total.toLocaleString()}</span> results
-          </p>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-400 whitespace-nowrap leading-7">Per page:</span>
-              <div className="relative">
-                <select
-                  value={limit}
-                  onChange={e => { const newLimit = Number(e.target.value); setLimit(newLimit); setPage(1); fetchLogs() }}
-                  className="appearance-none pl-2 pr-6 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer focus:outline-none focus:ring-2 transition"
-                  style={{ '--tw-ring-color': '#4F46E5', colorScheme: 'normal' } as any}
-                >
-                  {[10, 20, 30, 50].map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-                <span className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-gray-400">
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-1">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1)
-                .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-                .reduce<(number | string)[]>((acc, p, idx, arr) => {
-                  if (idx > 0 && Number(p) - Number(arr[idx - 1]) > 1) acc.push('...')
-                  acc.push(p)
-                  return acc
-                }, [])
-                .map((p, i) =>
-                  p === '...' ? (
-                    <span key={`e-${i}`} className="w-8 h-8 flex items-center  justify-center text-xs text-gray-400">…</span>
-                  ) : (
-                    <button key={p} onClick={() => setPage(Number(p))}
-                      className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-semibold transition cursor-pointer border ${
-                        page === p
-                          ? 'text-white border-transparent'
-                          : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                      }`}
-                      style={page === p ? { backgroundColor: '#4F46E5' } : {}}
-                    >{p}</button>
-                  )
-                )}
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer bg-transparent"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="border-t  shadow border-gray-100 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-800 rounded-b-2xl -mt-px">
+        {totalPages > 1 && (
+          <PaginationBar
+            page={page}
+            total={total}
+            limit={limit}
+            onPage={p => setPage(p)}
+            onLimitChange={l => { setLimit(l); setPage(1); fetchLogs() }}
+            pageSizeOptions={[10, 20, 30, 50]}
+          />
+        )}
+      </div>
     </div>
   )
 }
