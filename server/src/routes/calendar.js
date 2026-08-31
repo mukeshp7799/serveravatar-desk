@@ -231,9 +231,11 @@ router.get('/dashboard', auth, async (req, res, next) => {
   try {
     const tz = await getCompanySetting('general', 'timezone', 'UTC');
     const today = nowInTimezone(tz);
-    const y = today.getFullYear(), m = today.getMonth() + 1;
     const todayStr = todayInTimezone(tz);
-    const thirtyDaysLater = new Date(today.getTime() + 30 * 86400000).toISOString().slice(0, 10);
+    // Dynamic date range: ?days=N (default 30 for full-month, ?days=7 for Next7Days widget)
+    const days = parseInt(req.query.days) || 30;
+    const targetDate = new Date(today.getTime() + days * 86400000).toISOString().slice(0, 10);
+    const dayOffset = days;
 
     const [todaysHoliday] = await pool.query(
       'SELECT id, name, date, holiday_type FROM company_holidays WHERE date = ? LIMIT 1', [todayStr]
@@ -245,32 +247,52 @@ router.get('/dashboard', auth, async (req, res, next) => {
        WHERE lr.status = 'approved' AND lr.start_date <= ? AND lr.end_date >= ?`, [todayStr, todayStr]
     );
 
+    // Find birthdays within the dynamic window using day-of-year arithmetic.
+    // Handles year-boundary crossing (e.g., Dec 28 + 10d = Jan 7).
     const [upcomingBirthdays] = await pool.query(
       `SELECT id, first_name, last_name, avatar_url, date_of_birth,
-              IF(DAYOFMONTH(date_of_birth) < DAYOFMONTH(CURDATE()), MONTH(DATE_ADD(date_of_birth, INTERVAL 1 YEAR)), MONTH(date_of_birth)) as upcoming_month,
-              IF(DAYOFMONTH(date_of_birth) < DAYOFMONTH(CURDATE()), DAYOFMONTH(DATE_ADD(date_of_birth, INTERVAL 1 YEAR)), DAYOFMONTH(date_of_birth)) as upcoming_day
-       FROM users
+              MONTH(DATE_ADD(date_of_birth, INTERVAL IF(DAYOFYEAR(DATE_ADD(date_of_birth, INTERVAL YEAR(CURDATE()) - YEAR(date_of_birth) YEAR)) < DAYOFYEAR(CURDATE()), 1, 0) YEAR)) as upcoming_month,
+              DAYOFMONTH(DATE_ADD(date_of_birth, INTERVAL IF(DAYOFYEAR(DATE_ADD(date_of_birth, INTERVAL YEAR(CURDATE()) - YEAR(date_of_birth) YEAR)) < DAYOFYEAR(CURDATE()), 1, 0) YEAR)) as upcoming_day
+       FROM users u
        WHERE date_of_birth IS NOT NULL AND date_of_birth != '0000-00-00' AND status = 'active'
-       AND (
-         (MONTH(date_of_birth) = MONTH(CURDATE()) AND DAYOFMONTH(date_of_birth) >= DAYOFMONTH(CURDATE())) OR
-         (MONTH(DATE_ADD(date_of_birth, INTERVAL 1 YEAR)) = MONTH(CURDATE()) AND DAYOFMONTH(DATE_ADD(date_of_birth, INTERVAL 1 YEAR)) <= DAYOFMONTH(CURDATE()) + 30)
-       )
-       ORDER BY upcoming_month, upcoming_day LIMIT 5`
+         AND (
+           DAYOFYEAR(DATE_ADD(date_of_birth, INTERVAL YEAR(CURDATE()) - YEAR(date_of_birth) YEAR)) >= DAYOFYEAR(CURDATE())
+           AND DAYOFYEAR(DATE_ADD(date_of_birth, INTERVAL YEAR(CURDATE()) - YEAR(date_of_birth) YEAR)) <= DAYOFYEAR(CURDATE()) + ?
+           OR
+           DAYOFYEAR(DATE_ADD(date_of_birth, INTERVAL YEAR(CURDATE()) - YEAR(date_of_birth) + 1 YEAR)) <= (DAYOFYEAR(CURDATE()) + ?) - 365
+         )
+       ORDER BY upcoming_month, upcoming_day LIMIT 5`,
+      [dayOffset, dayOffset]
     );
 
+    // Find work anniversaries within the dynamic window.
     const [upcomingAnniversaries] = await pool.query(
       `SELECT id, first_name, last_name, avatar_url, hire_date,
-              TIMESTAMPDIFF(YEAR, hire_date, CURDATE()) as years
-       FROM users
+              TIMESTAMPDIFF(YEAR, hire_date, CURDATE()) as years,
+              MONTH(DATE_ADD(hire_date, INTERVAL IF(DAYOFYEAR(DATE_ADD(hire_date, INTERVAL YEAR(CURDATE()) - YEAR(hire_date) YEAR)) < DAYOFYEAR(CURDATE()), 1, 0) YEAR)) as upcoming_month,
+              DAYOFMONTH(DATE_ADD(hire_date, INTERVAL IF(DAYOFYEAR(DATE_ADD(hire_date, INTERVAL YEAR(CURDATE()) - YEAR(hire_date) YEAR)) < DAYOFYEAR(CURDATE()), 1, 0) YEAR)) as upcoming_day
+       FROM users u
        WHERE hire_date IS NOT NULL AND hire_date != '0000-00-00' AND status = 'active'
-       AND MONTH(hire_date) = MONTH(CURDATE()) AND DAYOFMONTH(hire_date) >= DAYOFMONTH(CURDATE())
-       AND hire_date <= CURDATE()
-       ORDER BY DAYOFMONTH(hire_date) LIMIT 5`
+         AND hire_date <= CURDATE()
+         AND (
+           DAYOFYEAR(DATE_ADD(hire_date, INTERVAL YEAR(CURDATE()) - YEAR(hire_date) YEAR)) >= DAYOFYEAR(CURDATE())
+           AND DAYOFYEAR(DATE_ADD(hire_date, INTERVAL YEAR(CURDATE()) - YEAR(hire_date) YEAR)) <= DAYOFYEAR(CURDATE()) + ?
+           OR
+           DAYOFYEAR(DATE_ADD(hire_date, INTERVAL YEAR(CURDATE()) - YEAR(hire_date) + 1 YEAR)) <= (DAYOFYEAR(CURDATE()) + ?) - 365
+         )
+       ORDER BY upcoming_month, upcoming_day LIMIT 5`,
+      [dayOffset, dayOffset]
     );
 
     const [upcomingEvents] = await pool.query(
       `SELECT id, title, start_date, category, color FROM company_events
-       WHERE start_date BETWEEN ? AND ? ORDER BY start_date LIMIT 5`, [todayStr, thirtyDaysLater]
+       WHERE start_date BETWEEN ? AND ? ORDER BY start_date LIMIT 5`, [todayStr, targetDate]
+    );
+
+    // upcomingHolidays mapped seamlessly to EventItem shape for the widget
+    const [upcomingHolidays] = await pool.query(
+      `SELECT id, name as title, date as start_date, holiday_type as category FROM company_holidays
+       WHERE date BETWEEN ? AND ? ORDER BY date LIMIT 5`, [todayStr, targetDate]
     );
 
     const [pendingLeaves] = await pool.query(
@@ -285,6 +307,7 @@ router.get('/dashboard', auth, async (req, res, next) => {
       upcomingBirthdays,
       upcomingAnniversaries,
       upcomingEvents,
+      upcomingHolidays,
       pendingLeaves,
     });
   } catch (err) { next(err); }

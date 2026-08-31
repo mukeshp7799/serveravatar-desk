@@ -15,27 +15,42 @@ router.get('/', auth, async (req, res, next) => {
     const perms = req.user.permissions || [];
     const userId = req.user.id;
 
-    // Pending approvals for managers and HR
+    // Pending approvals for managers and HR — get total count + limited list
     let pendingApprovals = [];
+    let pendingApprovalsCount = 0;
     if (perms.includes('leaves.approve')) {
       const canManageAll = perms.includes('leaves.manage');
-      let query = `SELECT lr.*, u.first_name, u.last_name, lt.name as leave_type
+      let listQuery = `SELECT lr.*, u.first_name, u.last_name, lt.name as leave_type
                    FROM leave_requests lr JOIN users u ON lr.user_id = u.id
                    JOIN leave_types lt ON lr.leave_type_id = lt.id
                    WHERE lr.status = 'pending'`;
+      let countQuery = `SELECT COUNT(*) as total FROM leave_requests lr
+                        JOIN users u ON lr.user_id = u.id
+                        WHERE lr.status = 'pending'`;
       let params = [];
-      // Managers (without `leaves.manage`) only see their direct reports'
-      // requests. HR/Admins (with `leaves.manage`) see all.
+      let countParams = [];
       if (!canManageAll) {
-        query += ' AND (u.reporting_manager_id = ? OR lr.user_id = ?)';
+        listQuery += ' AND (u.reporting_manager_id = ? OR lr.user_id = ?)';
+        countQuery += ' AND (u.reporting_manager_id = ? OR lr.user_id = ?)';
         params = [userId, userId];
+        countParams = [userId, userId];
       }
-      query += ' ORDER BY lr.created_at ASC LIMIT 10';
-      const [pending] = await pool.query(query, params);
+      listQuery += ' ORDER BY lr.created_at ASC LIMIT 10';
+      const [pending] = await pool.query(listQuery, params);
+      const [countRows] = await pool.query(countQuery, countParams);
       pendingApprovals = pending;
+      pendingApprovalsCount = countRows[0]?.total ?? 0;
     }
 
-    // My tasks (assigned to current user via tb_assignees)
+    // My tasks — get total count + limited list
+    const [myTasksCountRows] = await pool.query(
+      `SELECT COUNT(DISTINCT t.id) as total
+       FROM tb_tasks t
+       JOIN tb_assignees a ON a.task_id = t.id
+       WHERE a.user_id = ? AND t.archived_at IS NULL`,
+      [userId]
+    );
+    const myTasksCount = myTasksCountRows[0]?.total ?? 0;
     const [myTasks] = await pool.query(
       `SELECT t.id, t.title, t.priority, t.due_date, t.column_id, t.project_id,
               p.name as project_name,
@@ -75,7 +90,14 @@ router.get('/', auth, async (req, res, next) => {
        WHERE la.user_id = ?`, [userId]
     );
 
-    // My projects
+    // My projects — get total count + limited list
+    const [myProjectsCountRows] = await pool.query(
+      `SELECT COUNT(DISTINCT p.id) as total
+       FROM projects p JOIN project_members pm ON p.id = pm.project_id
+       WHERE pm.user_id = ? AND p.status = 'active'`,
+      [userId]
+    );
+    const myProjectsCount = myProjectsCountRows[0]?.total ?? 0;
     const [myProjects] = await pool.query(
       `SELECT p.*, pm.role_in_project,
               (SELECT COUNT(*) FROM tb_tasks tk WHERE tk.project_id = p.id AND tk.archived_at IS NULL) as total_tasks,
@@ -127,9 +149,9 @@ router.get('/', auth, async (req, res, next) => {
       reactions: reactionsMap[a.id] || { emojis: [], total: 0 }
     }));
 
-    // HR-specific stats (any user with `hr.view_directory` sees them)
+    // HR-specific stats (any user with `hr.view_directory` or `users.view_all` sees them)
     let hrStats = {};
-    if (perms.includes('hr.view_directory')) {
+    if (perms.includes('hr.view_directory') || perms.includes('users.view_all')) {
       const [totalEmployees] = await pool.query('SELECT COUNT(*) as count FROM users WHERE status = ?', ['active']);
       const [totalLeavePending] = await pool.query("SELECT COUNT(*) as count FROM leave_requests WHERE status = 'pending'");
       const [deptBreakdown] = await pool.query(
@@ -175,7 +197,7 @@ router.get('/', auth, async (req, res, next) => {
     let activeBreakStart = null;
     if (myToday) {
       const [breakRows] = await pool.query(
-        'SELECT start_time FROM attendance_breaks WHERE attendance_id = ?',
+        'SELECT start_time, end_time FROM attendance_breaks WHERE attendance_id = ?',
         [myToday.id]
       );
       breakCount = breakRows.length;
@@ -212,11 +234,14 @@ router.get('/', auth, async (req, res, next) => {
 
     res.json({
       pendingApprovals,
+      pendingApprovalsCount,
       myTasks,
+      myTasksCount,
       myUpcomingLeave,
       notifications: translateNotifications(notifications, req.lang),
       leaveBalances: leaveAllocs,
       myProjects,
+      myProjectsCount,
       announcements,
       hrStats,
       attendanceStats,

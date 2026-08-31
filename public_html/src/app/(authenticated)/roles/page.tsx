@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import { Check, Eye, KeyRound, Pencil, Plus, Shield, Tag, Trash2 } from 'lucide-react'
+import { ScrollFade } from '@/components/ui/scroll-fade'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
 
@@ -150,7 +151,7 @@ function RolesPageInner() {
           <div className="bg-indigo-600 hover:bg-indigo-700 px-5 py-4">
             <h3 className="font-bold text-white flex items-center gap-2"><Tag size={16} strokeWidth={2.25} /> {t('roles.allRoles')} <span className="ml-auto bg-white/20 backdrop-blur-sm px-2 py-0.5 rounded-full text-xs">{roles.length}</span></h3>
           </div>
-          <div className="overflow-x-auto">
+          <ScrollFade>
             <table className="w-full border-collapse min-w-[600px]">
               <thead>
                 <tr className="bg-gray-50">
@@ -208,7 +209,7 @@ function RolesPageInner() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollFade>
           {roles.length === 0 && (
             <div className="p-10 text-center">
               <Tag size={36} strokeWidth={1.75} className="text-gray-300 mx-auto mb-2" />

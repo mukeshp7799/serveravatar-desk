@@ -1,8 +1,8 @@
 "use client";
 /* ──────────────────────────────────────────────────────────────
-   ServerAvatar Hub — Dashboard Page (Redesigned)
-   Clean SaaS aesthetic: white cards, subtle borders, consistent
-   spacing, refined typography, responsive grid.
+   ServerAvatar Hub — Dashboard Page (Premium Edition)
+   Rich SaaS aesthetic: layered depth, glassmorphism accents,
+   gradient progress bars, staggered entrance animations.
    ────────────────────────────────────────────────────────────── */
 
 function safeFmtDate(d: any, dateFormat = "DD/MM/YYYY"): string {
@@ -34,12 +34,12 @@ import {
   Users, Gem, CheckSquare, Clock, Palmtree, Bell, Megaphone,
   CalendarDays, AlertCircle, ChevronRight, Coffee,
   LogIn, LogOut, Pause, Loader2, Check, Target,
-  Activity, Star, PartyPopper, ArrowUpRight,
+  Activity, ArrowUpRight, TrendingUp, Zap,
 } from "lucide-react";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
 import StatCard from "@/components/dashboard/widgets/StatCard";
-import GradientCard from "@/components/dashboard/widgets/GradientCard";
+import Next7DaysWidget from "@/components/dashboard/widgets/Next7DaysWidget";
 import { useDateSettings } from "@/contexts/CompanySettingsContext";
 
 /* ── Helpers ── */
@@ -123,10 +123,10 @@ function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
       ? parts[0][0] + parts[parts.length - 1][0]
       : parts[0].slice(0, 2);
   const sz =
-    size === "sm" ? "w-7 h-7 text-[10px]" : "w-8 h-8 text-xs";
+    size === "sm" ? "w-8 h-8 text-[10px]" : "w-9 h-9 text-xs";
   return (
     <div
-      className={`${sz} rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0`}
+      className={`${sz} rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold shrink-0 shadow-md`}
     >
       {initials.toUpperCase()}
     </div>
@@ -134,59 +134,80 @@ function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
 }
 
 const PRIORITY: Record<string, string> = {
-  urgent: "bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800",
-  high: "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800",
-  medium: "bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800",
-  low: "bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800",
+  urgent: "bg-red-50 text-red-700 ring-1 ring-red-200 dark:bg-red-950/50 dark:text-red-300 dark:ring-red-800",
+  high: "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:ring-amber-800",
+  medium: "bg-sky-50 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:ring-sky-800",
+  low: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:ring-indigo-800",
 };
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-  absent:     { label: "Absent",     color: "text-red-600",   bg: "bg-red-50 dark:bg-red-950/40",    dot: "bg-red-500" },
-  clocked_in:  { label: "Clocked In", color: "text-green-600", bg: "bg-green-50 dark:bg-green-950/40", dot: "bg-green-500" },
-  working:     { label: "Working",    color: "text-blue-600",  bg: "bg-blue-50 dark:bg-blue-950/40",   dot: "bg-blue-500" },
-  on_break:    { label: "On Break",   color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-950/40",dot: "bg-amber-500" },
-  completed:   { label: "Completed",  color: "text-gray-600",  bg: "bg-gray-100 dark:bg-gray-800",     dot: "bg-gray-400" },
+  absent:     { label: "Absent",     color: "text-red-600",    bg: "bg-red-50 dark:bg-red-950/40",     dot: "bg-red-500" },
+  clocked_in: { label: "Clocked In", color: "text-green-600", bg: "bg-green-50 dark:bg-green-950/40", dot: "bg-green-500" },
+  working:    { label: "Working",    color: "text-blue-600",  bg: "bg-blue-50 dark:bg-blue-950/40",   dot: "bg-blue-500" },
+  on_break:   { label: "On Break",   color: "text-amber-600",bg: "bg-amber-50 dark:bg-amber-950/40", dot: "bg-amber-500" },
+  completed:  { label: "Completed",  color: "text-gray-600",  bg: "bg-gray-100 dark:bg-gray-800",     dot: "bg-gray-400" },
 };
 
-/* Card wrapper — consistent SaaS card styling */
+/* Premium Card wrapper with hover lift */
 function Card({
   children,
   className = "",
+  accentColor = "indigo",
 }: {
   children: React.ReactNode;
   className?: string;
+  accentColor?: string;
 }) {
+  const accentMap: Record<string, string> = {
+    indigo:  "hover:shadow-indigo-200/60 dark:hover:shadow-indigo-950/50 hover:border-indigo-200/60 dark:hover:border-indigo-700/50",
+    emerald: "hover:shadow-emerald-200/60 dark:hover:shadow-emerald-950/50 hover:border-emerald-200/60 dark:hover:border-emerald-700/50",
+    purple:  "hover:shadow-purple-200/60 dark:hover:shadow-purple-950/50 hover:border-purple-200/60 dark:hover:border-purple-700/50",
+    orange:  "hover:shadow-orange-200/60 dark:hover:shadow-orange-950/50 hover:border-orange-200/60 dark:hover:border-orange-700/50",
+    teal:    "hover:shadow-teal-200/60 dark:hover:shadow-teal-950/50 hover:border-teal-200/60 dark:hover:border-teal-700/50",
+    amber:   "hover:shadow-amber-200/60 dark:hover:shadow-amber-950/50 hover:border-amber-200/60 dark:hover:border-amber-700/50",
+  };
   return (
     <div
-      className={`bg-white dark:bg-[#161b22] rounded-xl border border-gray-200 dark:border-gray-700/80
-        shadow-sm transition-shadow duration-200 hover:shadow-md ${className}`}
+      className={`h-full flex flex-col bg-white dark:bg-[#161b22] rounded-2xl border border-gray-100 dark:border-gray-700/60
+        shadow-sm hover:shadow-xl ${accentMap[accentColor] ?? accentMap.indigo}
+        hover:-translate-y-0.5 transition-all duration-300 animate-fade-in-up ${className}`}
     >
       {children}
     </div>
   );
 }
 
-/* Card header */
+/* Premium Card header with colored left-border accent */
 function CardHeader({
   icon: Icon,
   iconBg,
   iconColor,
   title,
   action,
+  accentColor = "indigo",
 }: {
   icon: any;
   iconBg: string;
   iconColor: string;
   title: React.ReactNode;
   action?: React.ReactNode;
+  accentColor?: string;
 }) {
+  const borderMap: Record<string, string> = {
+    indigo:  "border-l-indigo-500",
+    emerald: "border-l-emerald-500",
+    purple:  "border-l-purple-500",
+    orange:  "border-l-orange-500",
+    teal:    "border-l-teal-500",
+    amber:   "border-l-amber-500",
+  };
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700/80">
-      <div className="flex items-center gap-2">
-        <div className={`w-7 h-7 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
-          <Icon size={13} className={iconColor} strokeWidth={2.25} />
+    <div className={`flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700/60 border-l-4 ${borderMap[accentColor] ?? borderMap.indigo}`}>
+      <div className="flex items-center gap-2.5">
+        <div className={`w-8 h-8 rounded-xl ${iconBg} flex items-center justify-center shrink-0 shadow-sm`}>
+          <Icon size={14} className={iconColor} strokeWidth={2.5} />
         </div>
-        <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+        <h3 className="text-xs font-bold text-gray-700 dark:text-gray-200 tracking-wide uppercase">
           {title}
         </h3>
       </div>
@@ -195,14 +216,29 @@ function CardHeader({
   );
 }
 
+/* Gradient progress bar component */
+function GradientBar({ pct, from = "from-indigo-500", to = "to-purple-500" }: { pct: number; from?: string; to?: string }) {
+  return (
+    <div className="bg-gray-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden shadow-inner">
+      <div
+        className={`bg-gradient-to-r ${from} ${to} h-full rounded-full transition-all duration-700 relative overflow-hidden`}
+        style={{ width: `${Math.min(100, pct)}%` }}
+      >
+        {/* Shine overlay */}
+        <div className="absolute inset-0 bg-white/20 shimmer" />
+      </div>
+    </div>
+  );
+}
+
 /* Empty state */
 function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-      <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-2">
-        <Icon size={18} className="text-gray-300 dark:text-gray-600" />
+    <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center mb-3 shadow-sm">
+        <Icon size={20} className="text-gray-300 dark:text-gray-600" />
       </div>
-      <p className="text-xs text-gray-400 dark:text-gray-500">{message}</p>
+      <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">{message}</p>
     </div>
   );
 }
@@ -230,13 +266,11 @@ export default function DashboardPage() {
       })
       .catch(() => {});
 
-  // Refresh attendance every 60s
   useEffect(() => {
     const t = setInterval(fetchDashboard, 60_000);
     return () => clearInterval(t);
   }, []);
 
-  // Re-render for live hours every 10s
   useEffect(() => {
     const t = setInterval(() => setTick((n) => n + 1), 10_000);
     return () => clearInterval(t);
@@ -245,7 +279,7 @@ export default function DashboardPage() {
   useEffect(() => {
     Promise.all([
       fetchDashboard(),
-      api.get("/calendar/dashboard").catch(() => null),
+      api.get("/calendar/dashboard?days=7").catch(() => null),
     ])
       .then(([dash, cal]) => {
         setDashData(dash);
@@ -287,7 +321,6 @@ export default function DashboardPage() {
 
   const [nowStr, setNowStr] = useState("");
 
-  // Live working hours computation
   const getLiveHours = () => {
     if (!myToday) return null;
     if (myToday.live_working_hours != null) return myToday.live_working_hours;
@@ -301,15 +334,14 @@ export default function DashboardPage() {
     return null;
   };
 
-  // Force tick dependency
   void tick;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
-          <div className="w-10 h-10 border-[3px] border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-gray-500">Loading dashboard…</p>
+          <div className="w-12 h-12 border-[3px] border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-500 font-medium">Loading dashboard…</p>
         </div>
       </div>
     );
@@ -339,7 +371,8 @@ export default function DashboardPage() {
 
   const meta = myToday?.status ? (STATUS_META[myToday.status] || STATUS_META.completed) : null;
 
-  const canClockIn = !myToday || myToday.status === "absent";
+  // Allow clock-in when: no record, absent, or completed (after clock-out)
+  const canClockIn = !myToday || ["absent", "completed"].includes(myToday.status);
   const canStartBreak = myToday && ["clocked_in", "working"].includes(myToday.status);
   const canEndBreak = myToday && myToday.status === "on_break";
   const canClockOut = myToday && ["clocked_in", "working", "on_break"].includes(myToday.status);
@@ -361,143 +394,68 @@ export default function DashboardPage() {
   /* ── Stat card configs ── */
   const statCards = [];
   if (hasHR) {
-    statCards.push({
-      label: "Employees",
-      value: hrStats.totalEmployees ?? "-",
-      icon: Users,
-      color: "text-blue-600",
-      bgColor: "bg-blue-50 dark:bg-blue-950/40",
-      href: "/employees",
-      delay: 0,
-    });
+    statCards.push({ label: "Employees", value: hrStats.totalEmployees ?? "-", icon: Users, color: "text-blue-600", bgColor: "bg-blue-50", href: "/employees", delay: 0 });
   }
-  statCards.push({
-    label: "Projects",
-    value: myProjects.length,
-    icon: Gem,
-    color: "text-purple-600",
-    bgColor: "bg-purple-50 dark:bg-purple-950/40",
-    href: "/projects",
-    delay: 50,
-  });
-  statCards.push({
-    label: "My Tasks",
-    value: myTasks.length,
-    icon: CheckSquare,
-    color: "text-emerald-600",
-    bgColor: "bg-emerald-50 dark:bg-emerald-950/40",
-    href: "/projects",
-    delay: 100,
-  });
+  statCards.push({ label: "Projects", value: myProjects.length, icon: Gem, color: "text-purple-600", bgColor: "bg-purple-50", href: "/projects", delay: 80 });
+  statCards.push({ label: "My Tasks", value: myTasks.length, icon: CheckSquare, color: "text-emerald-600", bgColor: "bg-emerald-50", href: "/projects", delay: 160 });
   if (hasApprove) {
-    statCards.push({
-      label: "Pending Approvals",
-      value: pendingApprovals.length,
-      icon: Clock,
-      color: "text-orange-600",
-      bgColor: "bg-orange-50 dark:bg-orange-950/40",
-      href: "/leaves",
-      delay: 150,
-    });
+    statCards.push({ label: "Pending Approvals", value: pendingApprovals.length, icon: Clock, color: "text-orange-600", bgColor: "bg-orange-50", href: "/leaves", delay: 240 });
   }
   if (hasAttendanceTeam && attendanceStats) {
-    statCards.push({
-      label: "Present Today",
-      value: attendanceStats.present_today ?? "-",
-      icon: Users,
-      color: "text-green-600",
-      bgColor: "bg-green-50 dark:bg-green-950/40",
-      href: "/attendance",
-      delay: 200,
-    });
+    statCards.push({ label: "Present Today", value: attendanceStats.present_today ?? "-", icon: Users, color: "text-green-600", bgColor: "bg-green-50", href: "/attendance", delay: 320 });
     if (Number(attendanceStats.late_checkins) > 0) {
-      statCards.push({
-        label: "Late Check-ins",
-        value: attendanceStats.late_checkins,
-        icon: AlertCircle,
-        color: "text-amber-600",
-        bgColor: "bg-amber-50 dark:bg-amber-950/40",
-        href: "/attendance",
-        delay: 250,
-      });
+      statCards.push({ label: "Late Check-ins", value: attendanceStats.late_checkins, icon: AlertCircle, color: "text-amber-600", bgColor: "bg-amber-50", href: "/attendance", delay: 400 });
     }
   }
 
-  /* ── Gradient highlights ── */
-  const gradientItems = [];
-  if (calData?.todaysHoliday) {
-    gradientItems.push({
-      gradient: "from-red-500 to-rose-600",
-      icon: CalendarDays,
-      label: "Today's Holiday",
-      title: calData.todaysHoliday.name,
-      href: "/calendar",
-      delay: 100,
-    });
-  }
-  if (calData?.onLeaveToday?.length > 0) {
-    gradientItems.push({
-      gradient: "from-orange-500 to-amber-600",
-      icon: Bell,
-      label: "On Leave Today",
-      title: `${calData.onLeaveToday.length} Employee${calData.onLeaveToday.length > 1 ? "s" : ""}`,
-      delay: 150,
-    });
-  }
-  if (calData?.upcomingBirthdays?.length > 0) {
-    const b = calData.upcomingBirthdays[0];
-    gradientItems.push({
-      gradient: "from-pink-500 to-rose-500",
-      icon: PartyPopper,
-      label: "Next Birthday",
-      title: `${b.first_name} ${b.last_name}`,
-      href: "/calendar",
-      delay: 200,
-    });
-  }
-  if (calData?.upcomingEvents?.length > 0) {
-    const ev = calData.upcomingEvents[0];
-    gradientItems.push({
-      gradient: "from-blue-500 to-indigo-600",
-      icon: Star,
-      label: "Next Event",
-      title: ev.title,
-      href: "/calendar",
-      delay: 250,
-    });
-  }
+  const liveHours = getLiveHours();
+  const progressPct = Math.min(100, ((liveHours ?? 0) / 8) * 100);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-5 w-full">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 w-full">
 
       {/* ══════════════════════════════════════════════════
-          1. GREETING CARD
+          1. PREMIUM GREETING CARD
       ══════════════════════════════════════════════════ */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 text-white shadow-lg">
-        {/* Decorative circles */}
-        <div className="absolute -top-8 -right-8 w-36 h-36 rounded-full bg-white/10" />
-        <div className="absolute -bottom-6 -left-6 w-24 h-24 rounded-full bg-white/8" />
-        <div className="absolute top-2 right-1/4 w-8 h-8 rounded-full bg-white/6" />
+      <div className="relative overflow-hidden rounded-3xl">
+        {/* Background gradient layers */}
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800" />
+        {/* Decorative mesh */}
+        <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/5 blur-3xl" />
+        <div className="absolute -bottom-10 -left-10 w-48 h-48 rounded-full bg-purple-400/10 blur-3xl" />
+        <div className="absolute top-0 right-1/3 w-24 h-24 rounded-full bg-white/5 blur-2xl" />
+        {/* Grid overlay */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
 
-        <div className="relative flex items-center gap-4 px-6 py-5">
-          <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-lg font-bold shrink-0 border border-white/30">
-            {userInitials}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-lg sm:text-xl font-bold leading-tight">
-              {greeting}, {storedUser.firstName || storedUser.first_name || "there"}
+        <div className="relative flex items-center gap-5 px-7 py-6">
+          {/* Avatar */}
+          <div className="relative shrink-0">
+            <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-xl font-extrabold text-white border-2 border-white/30 shadow-xl">
+              {userInitials}
             </div>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-white/20 border border-white/30">
+            {/* Online status dot */}
+            <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-400 border-2 border-indigo-600 shadow-md" />
+          </div>
+
+          {/* Greeting text */}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight tracking-tight">
+              {greeting}, {storedUser.firstName || storedUser.first_name || "there"}
+            </h1>
+            <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-white/15 border border-white/20 text-white/90 backdrop-blur-sm">
+                <Zap size={9} className="mr-1" />
                 {storedUser.roleName || "User"}
               </span>
-              <span className="text-xs text-indigo-200">{nowStr}</span>
+              <span className="text-xs text-indigo-200 font-medium">{nowStr}</span>
             </div>
           </div>
+
+          {/* Status badge */}
           {meta && (
-            <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold ${meta.bg} ${meta.color}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${meta.dot} animate-pulse`} />
-              {meta.label}
+            <div className="hidden sm:flex flex-col items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 shadow-lg">
+              <span className={`w-2 h-2 rounded-full ${meta.dot} animate-pulse`} />
+              <span className="text-[11px] font-bold text-white/90">{meta.label}</span>
             </div>
           )}
         </div>
@@ -515,493 +473,457 @@ export default function DashboardPage() {
       </div>
 
       {/* ══════════════════════════════════════════════════
-          3. GRADIENT HIGHLIGHTS (Calendar strip)
+          3. NEXT 7 DAYS — Calendar widget
       ══════════════════════════════════════════════════ */}
-      {hasCalendar && gradientItems.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-          {gradientItems.map((item) => (
-            <GradientCard key={item.label} {...item} />
-          ))}
-        </div>
+      {hasCalendar && (calData?.upcomingEvents?.length > 0 || calData?.upcomingHolidays?.length > 0) && (
+        <Next7DaysWidget
+          upcomingEvents={calData?.upcomingEvents}
+          upcomingAnniversaries={calData?.upcomingAnniversaries}
+          upcomingHolidays={calData?.upcomingHolidays}
+        />
       )}
 
       {/* ══════════════════════════════════════════════════
-          4. MAIN CONTENT — 3-column grid
+          4. MAIN CONTENT — premium 3-column grid
       ══════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 items-stretch">
 
-        {/* ── Column 1 ── */}
-        <div className="space-y-5">
-
-          {/* Attendance */}
-          {hasAttendance && (
-            <Card>
+        {/* ── Attendance Card ── */}
+        {hasAttendance && (
+          <div className="md:col-span-2 xl:col-span-1">
+            <Card accentColor="indigo">
               <CardHeader
                 icon={Clock}
-                iconBg="bg-indigo-50 dark:bg-indigo-950/40"
+                iconBg="bg-indigo-100 dark:bg-indigo-950/60"
                 iconColor="text-indigo-600 dark:text-indigo-400"
                 title="Attendance"
+                accentColor="indigo"
                 action={
                   meta ? (
-                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${meta.bg} ${meta.color}`}>
+                    <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full ${meta.bg} ${meta.color} ring-1 ring-inset ring-black/5 dark:ring-white/10`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${meta.dot} animate-pulse`} />
                       {meta.label}
                     </span>
                   ) : undefined
                 }
               />
-              <div className="p-4 space-y-3">
-                {/* Time boxes */}
-                <div className="grid grid-cols-4 gap-2">
+              <div className="flex flex-col justify-between h-full p-4 gap-4">
+
+                {/* ── Top: 2×2 Glass Stat Grid ── */}
+                <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: "Clock In", value: fmtTime(myToday?.clock_in_time), accent: false },
-                    { label: "Clock Out", value: fmtTime(myToday?.clock_out_time), accent: false },
-                    { label: "Worked", value: fmtHrs(getLiveHours()), accent: false },
-                    { label: "Break", value: fmtBreak(myToday?.total_break_minutes), accent: true },
+                    { label: "Clock In", value: fmtTime(myToday?.clock_in_time), accent: false, icon: LogIn },
+                    { label: "Clock Out", value: fmtTime(myToday?.clock_out_time), accent: false, icon: LogOut },
+                    { label: "Worked", value: fmtHrs(liveHours), accent: false, icon: TrendingUp },
+                    { label: "Break", value: fmtBreak(myToday?.total_break_minutes), accent: true, icon: Coffee },
                   ].map((box) => (
                     <div
                       key={box.label}
-                      className={`rounded-xl p-2.5 text-center ${box.accent ? "bg-amber-50 dark:bg-amber-950/40" : "bg-gray-50 dark:bg-gray-800/60"}`}
+                      className={`relative rounded-2xl p-4 text-center overflow-hidden
+                        ${box.accent
+                          ? "bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/20 ring-1 ring-amber-200/60 dark:ring-amber-800/40"
+                          : "bg-gradient-to-br from-gray-50 to-slate-50 dark:from-gray-800/60 dark:to-slate-800/40 ring-1 ring-gray-200/60 dark:ring-gray-700/40"
+                        }`}
                     >
-                      <div className="text-[10px] font-medium text-gray-400 dark:text-gray-500 mb-0.5 leading-none">
+                      {/* Subtle icon watermark */}
+                      <box.icon size={28} className={`absolute -bottom-2 -right-2 opacity-5 ${box.accent ? "text-amber-400" : "text-gray-300 dark:text-gray-600"}`} />
+                      <div className={`text-[9px] font-bold uppercase tracking-widest mb-1.5 ${box.accent ? "text-amber-500" : "text-gray-400 dark:text-gray-500"}`}>
                         {box.label}
                       </div>
-                      <div className={`text-sm font-bold leading-none ${box.accent ? "text-amber-600 dark:text-amber-400" : "text-gray-900 dark:text-white"}`}>
+                      <div className={`text-lg font-extrabold tracking-tight ${box.accent ? "text-amber-700 dark:text-amber-400" : "text-gray-900 dark:text-white"}`}>
                         {box.value}
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {myToday?.is_late && (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
-                    <AlertCircle size={11} className="text-amber-500 shrink-0" />
-                    <span className="text-[11px] text-amber-700 dark:text-amber-300 font-medium">
-                      Late by {myToday.late_minutes || 0} min
-                    </span>
-                  </div>
-                )}
+                {/* ── Middle: Status Insights ── */}
+                <div className="flex flex-col gap-2.5">
+                  {myToday?.is_late && (
+                    <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 shadow-sm">
+                      <div className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                      <AlertCircle size={12} className="text-amber-500 shrink-0" />
+                      <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                        Late arrival — {myToday.late_minutes || 0} minutes
+                      </span>
+                    </div>
+                  )}
 
-                {/* Action buttons */}
-                <div className="flex flex-wrap gap-2 pt-1">
+                  {/* Day progress bar */}
+                  {myToday?.clock_in_time && !myToday?.clock_out_time && (
+                    <div className="flex flex-col gap-1.5 px-3.5 py-3 rounded-xl bg-gradient-to-br from-indigo-50/80 to-purple-50/80 dark:from-indigo-950/30 dark:to-purple-950/20 border border-indigo-100/60 dark:border-indigo-800/30">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-1.5">
+                          <TrendingUp size={10} className="text-indigo-500" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 dark:text-indigo-400">Day Progress</span>
+                        </div>
+                        <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-300">{fmtHrs(liveHours)} / 8h</span>
+                      </div>
+                      <div className="bg-white/60 dark:bg-slate-900/40 rounded-full h-2.5 overflow-hidden shadow-inner ring-1 ring-indigo-100/60 dark:ring-indigo-900/40">
+                        <div
+                          className="h-full rounded-full transition-all duration-700 relative overflow-hidden"
+                          style={{
+                            width: `${progressPct}%`,
+                            background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
+                          }}
+                        >
+                          <div className="absolute inset-0 bg-gradient-to-b from-white/30 to-transparent" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {!myToday?.clock_in_time && (
+                    <div className="flex items-center justify-center gap-2 py-3 px-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/40">
+                      <Clock size={12} className="text-slate-400" />
+                      <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                        No active shift — clock in to start
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Bottom: Action Buttons ── */}
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => performAction("clock-in")}
                     disabled={!canClockIn || !!clocking}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
-                      bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 disabled:cursor-not-allowed
-                      transition-colors shadow-sm"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold
+                      bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800
+                      text-white disabled:opacity-40 disabled:cursor-not-allowed
+                      transition-all duration-200 shadow-lg shadow-indigo-600/25 hover:shadow-indigo-700/35 hover:-translate-y-0.5"
                   >
-                    {clocking === "clock-in" ? <Loader2 size={11} className="animate-spin" /> : <LogIn size={11} strokeWidth={2.5} />}
+                    {clocking === "clock-in" ? <Loader2 size={12} className="animate-spin" /> : <LogIn size={12} strokeWidth={2.5} />}
                     Clock In
                   </button>
                   <button
                     onClick={() => performAction("start-break")}
                     disabled={!canStartBreak || !!clocking}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
-                      bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600
-                      text-gray-700 dark:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed
-                      transition-colors"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold
+                      bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600
+                      text-gray-600 dark:text-gray-200 border border-gray-200 dark:border-gray-600
+                      disabled:opacity-40 disabled:cursor-not-allowed
+                      transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5"
                   >
-                    {clocking === "start-break" ? <Loader2 size={11} className="animate-spin" /> : <Coffee size={11} strokeWidth={2.5} />}
+                    {clocking === "start-break" ? <Loader2 size={12} className="animate-spin" /> : <Coffee size={12} strokeWidth={2.5} />}
                     Break
                   </button>
                   <button
                     onClick={() => performAction("end-break")}
                     disabled={!canEndBreak || !!clocking}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
-                      bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600
-                      text-gray-700 dark:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed
-                      transition-colors"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold
+                      bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600
+                      text-gray-600 dark:text-gray-200 border border-gray-200 dark:border-gray-600
+                      disabled:opacity-40 disabled:cursor-not-allowed
+                      transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5"
                   >
-                    {clocking === "end-break" ? <Loader2 size={11} className="animate-spin" /> : <Pause size={11} strokeWidth={2.5} />}
+                    {clocking === "end-break" ? <Loader2 size={12} className="animate-spin" /> : <Pause size={12} strokeWidth={2.5} />}
                     End Break
                   </button>
                   <button
                     onClick={() => performAction("clock-out")}
                     disabled={!canClockOut || !!clocking}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
-                      bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/40
-                      text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800
-                      disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold
+                      bg-white dark:bg-gray-700 hover:bg-red-50 dark:hover:bg-red-950/30
+                      text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800/60
+                      disabled:opacity-40 disabled:cursor-not-allowed
+                      transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5"
                   >
-                    {clocking === "clock-out" ? <Loader2 size={11} className="animate-spin" /> : <LogOut size={11} strokeWidth={2.5} />}
+                    {clocking === "clock-out" ? <Loader2 size={12} className="animate-spin" /> : <LogOut size={12} strokeWidth={2.5} />}
                     Clock Out
                   </button>
                 </div>
               </div>
             </Card>
-          )}
+          </div>
+        )}
 
-          {/* Leave Balances */}
-          {hasApply && (
-            <Card>
-              <CardHeader
-                icon={Palmtree}
-                iconBg="bg-emerald-50 dark:bg-emerald-950/40"
-                iconColor="text-emerald-600 dark:text-emerald-400"
-                title="Leave Balances"
-                action={
-                  <Link href="/leaves" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline no-underline">
-                    Apply <ArrowUpRight size={10} />
-                  </Link>
-                }
-              />
-              <div className="p-4 space-y-3">
-                {leaveBalances.length === 0 ? (
-                  <EmptyState icon={Palmtree} message="No leave allocated" />
-                ) : (
-                  leaveBalances.slice(0, 4).map((b: any) => {
-                    const pct = Math.min(100, (parseFloat(b.current_balance) / b.max_allowed) * 100);
-                    return (
-                      <div key={b.leave_type_id}>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{b.leave_type_name}</span>
-                          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                            {b.current_balance}
-                            <span className="text-gray-400 font-normal">/{b.max_allowed}</span>
-                          </span>
-                        </div>
-                        <div className="bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className="bg-indigo-500 h-full rounded-full transition-all duration-500"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </Card>
-          )}
-
-          {/* Work Anniversaries */}
-          {hasCalendar && calData?.upcomingAnniversaries?.length > 0 && (
-            <Card>
-              <CardHeader
-                icon={Star}
-                iconBg="bg-amber-50 dark:bg-amber-950/40"
-                iconColor="text-amber-600 dark:text-amber-400"
-                title="Work Anniversaries"
-              />
-              <div className="divide-y divide-gray-100 dark:divide-gray-700/80">
-                {calData.upcomingAnniversaries.slice(0, 3).map((a: any) => (
-                  <div key={a.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
-                    <Avatar name={`${a.first_name} ${a.last_name}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-semibold text-gray-900 dark:text-white">
-                        {a.first_name} {a.last_name}
-                      </div>
-                      <div className="text-[11px] text-gray-500">{a.years} year{a.years > 1 ? "s" : ""}</div>
-                    </div>
-                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full shrink-0">
-                      {fmtDateStr(a.hire_date)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-        </div>
-
-        {/* ── Column 2 ── */}
-        <div className="space-y-5">
-
-          {/* My Tasks */}
-          <Card>
+        {/* ── Leave Balances ── */}
+        {hasApply && (
+          <Card accentColor="emerald">
             <CardHeader
-              icon={CheckSquare}
-              iconBg="bg-emerald-50 dark:bg-emerald-950/40"
+              icon={Palmtree}
+              iconBg="bg-emerald-100 dark:bg-emerald-950/60"
               iconColor="text-emerald-600 dark:text-emerald-400"
-              title="My Tasks"
+              title="Leave Balances"
+              accentColor="emerald"
               action={
-                <Link href="/projects" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline no-underline">
-                  View all <ArrowUpRight size={10} />
+                <Link href="/leaves/apply" className="flex items-center gap-1 text-[11px] font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 px-3 py-1 rounded-full transition-all shadow-sm shadow-emerald-500/30">
+                  Apply
                 </Link>
               }
             />
-            <div className="divide-y divide-gray-100 dark:divide-gray-700/80">
-              {myTasks.length === 0 ? (
-                <EmptyState icon={Target} message="No tasks assigned" />
+            <div className="flex flex-col justify-between h-full p-4">
+              {leaveBalances.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <EmptyState icon={Palmtree} message="No leave allocated" />
+                </div>
               ) : (
-                myTasks.slice(0, 5).map((task: any) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">
-                        {task.title || task.description}
+                <div className="flex-1 flex flex-col justify-around gap-4">
+                  {leaveBalances.slice(0, 4).map((b: any, i: number) => {
+                    const pct = Math.min(100, (parseFloat(b.current_balance) / b.max_allowed) * 100);
+                    const gradients = [
+                      "from-indigo-500 to-purple-500",
+                      "from-emerald-500 to-teal-500",
+                      "from-amber-500 to-orange-500",
+                      "from-pink-500 to-rose-500",
+                    ];
+                    return (
+                      <div key={b.leave_type_id} className="group">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="text-xs font-bold text-gray-700 dark:text-gray-200">{b.leave_type_name}</span>
+                          <div className="text-right">
+                            <span className="text-sm font-extrabold text-gray-900 dark:text-white">{b.current_balance}</span>
+                            <span className="text-[10px] text-gray-400 font-medium"> / {b.max_allowed} days</span>
+                          </div>
+                        </div>
+                        <GradientBar pct={pct} from={`from-${['indigo','emerald','amber','pink'][i]}-500`} to={`to-${['purple','teal','orange','rose'][i]}-500`} />
                       </div>
-                      <div className="text-[11px] text-gray-500 mt-0.5 truncate">
-                        {task.project_name} · {task.column_name}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* ── My Tasks ── */}
+        <Card accentColor="emerald">
+          <CardHeader
+            icon={CheckSquare}
+            iconBg="bg-emerald-100 dark:bg-emerald-950/60"
+            iconColor="text-emerald-600 dark:text-emerald-400"
+            title="My Tasks"
+            accentColor="emerald"
+            action={
+              <Link href="/projects" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 no-underline transition-colors">
+                View all <ArrowUpRight size={10} />
+              </Link>
+            }
+          />
+          <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+            {myTasks.length === 0 ? (
+              <EmptyState icon={Target} message="No tasks assigned" />
+            ) : (
+              myTasks.slice(0, 5).map((task: any) => (
+                <div
+                  key={task.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 transition-colors group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-bold text-gray-800 dark:text-gray-100 truncate group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors">
+                      {task.title || task.description}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Gem size={9} className="text-gray-300 dark:text-gray-600 shrink-0" />
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{task.project_name}</span>
+                      <span className="text-gray-200 dark:text-gray-700">·</span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{task.column_name}</span>
+                    </div>
+                  </div>
+                  <span className={`shrink-0 text-[10px] font-bold px-2.5 py-1 rounded-lg ${PRIORITY[task.priority] || PRIORITY.low}`}>
+                    {task.priority}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
+
+        {/* ── My Projects ── */}
+        <Card accentColor="purple">
+          <CardHeader
+            icon={Gem}
+            iconBg="bg-purple-100 dark:bg-purple-950/60"
+            iconColor="text-purple-600 dark:text-purple-400"
+            title="My Projects"
+            accentColor="purple"
+            action={
+              <Link href="/projects" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 no-underline transition-colors">
+                View all <ArrowUpRight size={10} />
+              </Link>
+            }
+          />
+          <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+            {myProjects.length === 0 ? (
+              <EmptyState icon={Gem} message="No projects assigned" />
+            ) : (
+              myProjects.slice(0, 4).map((proj: any) => {
+                const pct = proj.total_tasks > 0 ? Math.round((proj.done_tasks / proj.total_tasks) * 100) : 0;
+                return (
+                  <div key={proj.id} className="px-4 py-3.5 hover:bg-purple-50/40 dark:hover:bg-purple-950/20 transition-colors group">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-gray-800 dark:text-gray-100 truncate mr-2 group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors">
+                        {proj.name}
+                      </span>
+                      <span className="text-[11px] font-extrabold text-purple-600 dark:text-purple-400 shrink-0">{pct}%</span>
+                    </div>
+                    <GradientBar pct={pct} from="from-purple-500" to="to-pink-500" />
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </Card>
+
+        {/* ── Pending Approvals ── */}
+        {hasApprove && (
+          <Card accentColor="orange">
+            <CardHeader
+              icon={Clock}
+              iconBg="bg-orange-100 dark:bg-orange-950/60"
+              iconColor="text-orange-600 dark:text-orange-400"
+              title="Pending Approvals"
+              accentColor="orange"
+              action={
+                <span className="flex items-center gap-1 bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-300 px-2 py-0.5 rounded-full text-[10px] font-bold ring-1 ring-orange-200/60 dark:ring-orange-800/40">
+                  {pendingApprovals.length}
+                </span>
+              }
+            />
+            <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+              {pendingApprovals.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-green-50 dark:bg-green-950/40 flex items-center justify-center mb-3 shadow-sm">
+                    <Check size={22} className="text-green-500" />
+                  </div>
+                  <p className="text-xs font-semibold text-green-600 dark:text-green-400">All caught up!</p>
+                </div>
+              ) : (
+                pendingApprovals.slice(0, 4).map((lr: any) => (
+                  <div key={lr.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-orange-50/40 dark:hover:bg-orange-950/20 transition-colors">
+                    <Avatar name={`${lr.first_name} ${lr.last_name}`} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-gray-800 dark:text-gray-100 truncate">
+                        {lr.first_name} {lr.last_name}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Palmtree size={9} className="text-gray-300 dark:text-gray-600 shrink-0" />
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{lr.leave_type}</span>
+                        <span className="text-gray-200 dark:text-gray-700">·</span>
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500">{fmtDateStr(lr.start_date)}</span>
                       </div>
                     </div>
-                    <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold border ${PRIORITY[task.priority] || PRIORITY.low}`}>
-                      {task.priority}
-                    </span>
+                    <Link href="/leaves" className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 shrink-0 transition-colors">
+                      Review →
+                    </Link>
                   </div>
                 ))
               )}
             </div>
           </Card>
+        )}
 
-          {/* My Projects */}
-          <Card>
+        {/* ── Announcements ── */}
+        {announcements.length > 0 && (
+          <Card accentColor="indigo">
             <CardHeader
-              icon={Gem}
-              iconBg="bg-purple-50 dark:bg-purple-950/40"
-              iconColor="text-purple-600 dark:text-purple-400"
-              title="My Projects"
+              icon={Megaphone}
+              iconBg="bg-indigo-100 dark:bg-indigo-950/60"
+              iconColor="text-indigo-600 dark:text-indigo-400"
+              title="Announcements"
+              accentColor="indigo"
               action={
-                <Link href="/projects" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline no-underline">
+                <Link href="/announcements" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 no-underline transition-colors">
                   View all <ArrowUpRight size={10} />
                 </Link>
               }
             />
-            <div className="divide-y divide-gray-100 dark:divide-gray-700/80">
-              {myProjects.length === 0 ? (
-                <EmptyState icon={Gem} message="No projects assigned" />
-              ) : (
-                myProjects.slice(0, 4).map((proj: any) => {
-                  const pct = proj.total_tasks > 0 ? Math.round((proj.done_tasks / proj.total_tasks) * 100) : 0;
-                  return (
-                    <div key={proj.id} className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs font-semibold text-gray-900 dark:text-white truncate mr-2">
-                          {proj.name}
-                        </span>
-                        <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400 shrink-0">
-                          {pct}%
-                        </span>
-                      </div>
-                      <div className="bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className="bg-purple-500 h-full rounded-full transition-all duration-500"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
+            <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+              {announcements.slice(0, 3).map((a: any) => (
+                <div key={a.id} className="px-4 py-3.5 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20 transition-colors">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 shadow-sm ${a.priority === "urgent" ? "bg-red-500" : "bg-indigo-400"}`} />
+                    <div className="text-[11px] font-bold text-gray-800 dark:text-gray-100 leading-tight line-clamp-1">
+                      {a.title}
                     </div>
-                  );
-                })
-              )}
+                  </div>
+                  <div className="text-[10px] text-gray-400 dark:text-gray-500 ml-3.5 leading-relaxed line-clamp-2">
+                    {a.content?.slice(0, 100)}{a.content?.length > 100 ? "…" : ""}
+                  </div>
+                </div>
+              ))}
             </div>
           </Card>
-        </div>
+        )}
 
-        {/* ── Column 3 ── */}
-        <div className="space-y-5">
-
-          {/* Pending Approvals */}
-          {hasApprove && (
-            <Card>
-              <CardHeader
-                icon={Clock}
-                iconBg="bg-orange-50 dark:bg-orange-950/40"
-                iconColor="text-orange-600 dark:text-orange-400"
-                title={
-                  <span>
-                    Pending
-                    {pendingApprovals.length > 0 && (
-                      <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-900/60 text-[9px] font-bold text-orange-700 dark:text-orange-300">
-                        {pendingApprovals.length}
-                      </span>
-                    )}
-                  </span>
-                }
-                action={
-                  <Link href="/leaves" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline no-underline">
-                    View all <ArrowUpRight size={10} />
-                  </Link>
-                }
-              />
-              <div className="divide-y divide-gray-100 dark:divide-gray-700/80">
-                {pendingApprovals.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-                    <div className="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-950/40 flex items-center justify-center mb-2">
-                      <Check size={18} className="text-green-500" />
-                    </div>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">All caught up!</p>
-                  </div>
-                ) : (
-                  pendingApprovals.slice(0, 4).map((lr: any) => (
-                    <div
-                      key={lr.id}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
-                    >
-                      <Avatar name={`${lr.first_name} ${lr.last_name}`} size="sm" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-semibold text-gray-900 dark:text-white truncate">
-                          {lr.first_name} {lr.last_name}
-                        </div>
-                        <div className="text-[11px] text-gray-500 mt-0.5">
-                          {lr.leave_type} · {fmtDateStr(lr.start_date)}
-                        </div>
-                      </div>
-                      <Link href="/leaves" className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 shrink-0 hover:underline">
-                        Review
-                      </Link>
-                    </div>
-                  ))
-                )}
-              </div>
-            </Card>
-          )}
-
-          {/* Announcements */}
-          {announcements.length > 0 && (
-            <Card>
-              <CardHeader
-                icon={Megaphone}
-                iconBg="bg-indigo-50 dark:bg-indigo-950/40"
-                iconColor="text-indigo-600 dark:text-indigo-400"
-                title="Announcements"
-                action={
-                  <Link href="/announcements" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline no-underline">
-                    View all <ArrowUpRight size={10} />
-                  </Link>
-                }
-              />
-              <div className="divide-y divide-gray-100 dark:divide-gray-700/80">
-                {announcements.slice(0, 3).map((a: any) => (
-                  <div key={a.id} className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.priority === "urgent" ? "bg-red-500" : "bg-indigo-400"}`}
-                      />
-                      <div className="text-xs font-semibold text-gray-900 dark:text-white leading-tight truncate">
-                        {a.title}
-                      </div>
-                    </div>
-                    <div className="text-[11px] text-gray-500 ml-3.5 line-clamp-1">
-                      {a.content?.slice(0, 80)}
-                      {a.content?.length > 80 ? "…" : ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Recent Activity */}
-          {(recentActivities.length > 0 || has("activity_logs.view_own") || has("activity_logs.view_all")) && (
-            <Card>
-              <CardHeader
-                icon={Activity}
-                iconBg="bg-teal-50 dark:bg-teal-950/40"
-                iconColor="text-teal-600 dark:text-teal-400"
-                title="Recent Activity"
-                action={
-                  <Link href="/activity-logs" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline no-underline">
-                    All <ChevronRight size={10} />
-                  </Link>
-                }
-              />
-              <div className="divide-y divide-gray-100 dark:divide-gray-700/80">
-                {recentActivities.length === 0 ? (
-                  <EmptyState icon={Activity} message="No activity yet" />
-                ) : (
-                  recentActivities.slice(0, 4).map((log: any) => (
-                    <div key={log.id} className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors">
-                      <div className="text-[12px] text-gray-700 dark:text-gray-200 leading-snug">
-                        {log.description || log.action}
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                          {log.module}
-                        </span>
-                        <span className="text-[10px] text-gray-400">{timeAgo(log.created_at)}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </Card>
-          )}
-
-          {/* Notifications */}
-          <Card>
+        {/* ── Recent Activity ── */}
+        {(recentActivities.length > 0 || has("activity_logs.view_own") || has("activity_logs.view_all")) && (
+          <Card accentColor="teal">
             <CardHeader
-              icon={Bell}
-              iconBg="bg-amber-50 dark:bg-amber-950/40"
-              iconColor="text-amber-600 dark:text-amber-400"
-              title="Notifications"
+              icon={Activity}
+              iconBg="bg-teal-100 dark:bg-teal-950/60"
+              iconColor="text-teal-600 dark:text-teal-400"
+              title="Recent Activity"
+              accentColor="teal"
               action={
-                <Link href="/notifications" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline no-underline">
+                <Link href="/activity-logs" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 no-underline transition-colors">
                   All <ChevronRight size={10} />
                 </Link>
               }
             />
-            <div className="divide-y divide-gray-100 dark:divide-gray-700/80">
-              {notifications.length === 0 ? (
-                <EmptyState icon={Bell} message="All caught up!" />
+            <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+              {recentActivities.length === 0 ? (
+                <EmptyState icon={Activity} message="No activity yet" />
               ) : (
-                notifications.slice(0, 4).map((n: any, i: number) => (
-                  <div
-                    key={n.id ?? i}
-                    className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
-                  >
-                    <div className="relative shrink-0 mt-1">
-                      <div className={`w-1.5 h-1.5 rounded-full ${n.is_read ? "bg-gray-300" : "bg-indigo-500"}`} />
-                      {!n.is_read && (
-                        <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-indigo-400" />
-                      )}
+                recentActivities.slice(0, 4).map((log: any) => (
+                  <div key={log.id} className="px-4 py-3 hover:bg-teal-50/40 dark:hover:bg-teal-950/20 transition-colors">
+                    <div className="text-[11px] text-gray-700 dark:text-gray-200 leading-relaxed font-medium">
+                      {log.description || log.action}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-semibold text-gray-800 dark:text-gray-100 leading-tight truncate">
-                        {n.title || n.message}
-                      </div>
-                      {n.message && n.title && (
-                        <div className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">{n.message}</div>
-                      )}
-                      {n.created_at && (
-                        <div className="text-[10px] text-gray-400 mt-0.5">{notifTime(n.created_at)}</div>
-                      )}
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 ring-1 ring-teal-200/60 dark:ring-teal-800/40 uppercase tracking-wider">
+                        {log.module}
+                      </span>
+                      <span className="text-[10px] text-gray-400">{timeAgo(log.created_at)}</span>
                     </div>
                   </div>
                 ))
               )}
             </div>
           </Card>
+        )}
 
-          {/* Upcoming Events */}
-          {hasCalendar && calData?.upcomingEvents?.length > 0 && (
-            <Card>
-              <CardHeader
-                icon={CalendarDays}
-                iconBg="bg-blue-50 dark:bg-blue-950/40"
-                iconColor="text-blue-600 dark:text-blue-400"
-                title="Upcoming Events"
-                action={
-                  <Link href="/calendar" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline no-underline">
-                    View all <ArrowUpRight size={10} />
-                  </Link>
-                }
-              />
-              <div className="divide-y divide-gray-100 dark:divide-gray-700/80">
-                {calData.upcomingEvents.slice(0, 4).map((ev: any) => (
-                  <div
-                    key={ev.id}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center shrink-0">
-                      <CalendarDays size={13} className="text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-semibold text-gray-900 dark:text-white truncate">
-                        {ev.title}
-                      </div>
-                      <div className="text-[11px] text-gray-500 capitalize">{ev.category}</div>
-                    </div>
-                    <span className="text-[11px] font-medium text-gray-500 shrink-0">
-                      {fmtDateStr(ev.start_date)}
-                    </span>
+        {/* ── Notifications ── */}
+        <Card accentColor="amber">
+          <CardHeader
+            icon={Bell}
+            iconBg="bg-amber-100 dark:bg-amber-950/60"
+            iconColor="text-amber-600 dark:text-amber-400"
+            title="Notifications"
+            accentColor="amber"
+            action={
+              <Link href="/notifications" className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 no-underline transition-colors">
+                All <ChevronRight size={10} />
+              </Link>
+            }
+          />
+          <div className="divide-y divide-gray-50 dark:divide-gray-700/50">
+            {notifications.length === 0 ? (
+              <EmptyState icon={Bell} message="All caught up!" />
+            ) : (
+              notifications.slice(0, 4).map((n: any, i: number) => (
+                <div key={n.id ?? i} className="flex items-start gap-3 px-4 py-3.5 hover:bg-amber-50/30 dark:hover:bg-amber-950/20 transition-colors">
+                  <div className="relative shrink-0 mt-0.5">
+                    <div className={`w-2 h-2 rounded-full mt-1 ${n.is_read ? "bg-gray-300" : "bg-indigo-500 shadow-sm shadow-indigo-300/50"}`} />
                   </div>
-                ))}
-              </div>
-            </Card>
-          )}
-        </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[11px] font-bold text-gray-800 dark:text-gray-100 leading-tight truncate">
+                      {n.title || n.message}
+                    </div>
+                    {n.message && n.title && (
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 line-clamp-1">{n.message}</div>
+                    )}
+                    {n.created_at && (
+                      <div className="text-[9px] text-gray-400 mt-0.5">{notifTime(n.created_at)}</div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
+
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import PortalModal from '@/components/PortalModal';
 import api from '@/lib/api'
 import PageLoader from '@/components/PageLoader'
 import PaginationBar from '@/components/project/PaginationBar'
+import { ScrollFade } from '@/components/ui/scroll-fade'
 import { useDateSettings, useCompanySettings } from '@/contexts/CompanySettingsContext'
 import {
   CheckCircle, Check, Coffee, Clock, Edit2, Eye, LogIn,
@@ -1106,7 +1107,7 @@ export default function AttendancePage() {
                 {myBreaks.length === 0 ? (
                   <div className="p-10 text-center text-gray-400 dark:text-gray-500 text-sm">No breaks recorded today.</div>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <ScrollFade>
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 dark:bg-gray-700/50">
                         <tr>
@@ -1127,7 +1128,7 @@ export default function AttendancePage() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </ScrollFade>
                 )}
               </div>
             </>
@@ -1253,7 +1254,7 @@ export default function AttendancePage() {
                 )}
               </button>
             </div>
-            <div className="overflow-x-auto">
+            <ScrollFade>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
                   <tr>
@@ -1343,7 +1344,7 @@ export default function AttendancePage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollFade>
 
             {/* Pagination */}
             <PaginationBar
@@ -1445,6 +1446,8 @@ export default function AttendancePage() {
         </>
       )}
 
+      {/* ====================================================================== */}
+      {/* == REPORTS TAB (HR/Admin) ======================================== */}
       {/* ====================================================================== */}
       {/* == REPORTS TAB (HR/Admin) ======================================== */}
       {/* ====================================================================== */}
@@ -1561,7 +1564,7 @@ export default function AttendancePage() {
                     {summaries.length === 0 ? (
                       <div className="p-12 text-center text-gray-400 dark:text-gray-500 text-sm">No data for the selected filters.</div>
                     ) : (
-                      <div className="overflow-x-auto">
+                      <ScrollFade>
                         <table className="w-full text-sm">
                           <thead className="bg-gray-50 dark:bg-gray-700/50">
                             <tr>
@@ -1626,7 +1629,7 @@ export default function AttendancePage() {
                             )}
                           </tbody>
                         </table>
-                      </div>
+                      </ScrollFade>
                     )}
 
                     {/* Pagination footer */}
@@ -1721,7 +1724,7 @@ export default function AttendancePage() {
                     const paginatedTimeline = timeline.slice((currentPage - 1) * tlLimit, currentPage * tlLimit)
                     return (
                       <>
-                        <div className="overflow-x-auto">
+                        <ScrollFade>
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50 dark:bg-gray-700/60">
                           <tr>
@@ -1840,7 +1843,7 @@ export default function AttendancePage() {
                           })}
                         </tbody>
                       </table>
-                    </div>
+                    </ScrollFade>
 
                         {/* Pagination footer */}
                         <PaginationBar
@@ -1954,7 +1957,7 @@ export default function AttendancePage() {
 
           {/* Table */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="overflow-x-auto">
+            <ScrollFade>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
                   <tr>
@@ -2030,7 +2033,7 @@ export default function AttendancePage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollFade>
 
             {/* Pagination */}
             <PaginationBar

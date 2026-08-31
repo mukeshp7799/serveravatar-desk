@@ -9,6 +9,7 @@ import { useDateSettings, useCompanySettings } from '@/contexts/CompanySettingsC
 import Tabs from '@/components/Tabs'
 import PageLoader from '@/components/PageLoader'
 import { useForm } from 'react-hook-form';
+import { ScrollFade } from '@/components/ui/scroll-fade'
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -841,7 +842,7 @@ export default function LeavesPage() {
                   <p className="text-sm text-gray-400 dark:text-gray-500">No leave requests found</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto scrollbar-hide relative">
+                <ScrollFade className="relative">
                   <table className="w-full min-w-[600px]">
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
@@ -898,7 +899,7 @@ export default function LeavesPage() {
                       <svg className="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     </div>
                   )}
-                </div>
+                </ScrollFade>
               )}
 
               <PaginationBar
@@ -970,7 +971,7 @@ export default function LeavesPage() {
                   <p className="text-sm text-gray-400 dark:text-gray-500">No requests found</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto scrollbar-hide relative">
+                <ScrollFade className="relative">
                   <table className="w-full min-w-[700px]">
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
@@ -1065,7 +1066,7 @@ export default function LeavesPage() {
                       <svg className="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     </div>
                   )}
-                </div>
+                </ScrollFade>
               )}
               <PaginationBar
                 page={teamReqPage}
@@ -1109,7 +1110,7 @@ export default function LeavesPage() {
                 </div>
               )}
               {leaveTypes.length > 0 && (
-                <div className="overflow-x-auto scrollbar-hide relative">
+                <ScrollFade className="relative">
                   <table className="w-full min-w-[800px]">
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
@@ -1189,7 +1190,7 @@ export default function LeavesPage() {
                       <svg className="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     </div>
                   )}
-                </div>
+                </ScrollFade>
               )}
               <PaginationBar
                 page={typesPage}
@@ -1270,7 +1271,7 @@ export default function LeavesPage() {
                 </div>
               )}
               {allAllocations.length > 0 && (
-                <div className="overflow-x-auto scrollbar-hide relative">
+                <ScrollFade className="relative">
                   <table className="w-full min-w-[850px]">
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
@@ -1340,7 +1341,7 @@ export default function LeavesPage() {
                       <svg className="w-5 h-5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                     </div>
                   )}
-                </div>
+                </ScrollFade>
               )}
               <PaginationBar
                 page={allocPage}
