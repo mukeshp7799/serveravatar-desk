@@ -648,7 +648,7 @@ export default function DashboardPage() {
               title="Leave Balances"
               accentColor="emerald"
               action={
-                <Link href="/leaves/apply" className="flex items-center gap-1 text-[11px] font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 px-3 py-1 rounded-full transition-all shadow-sm shadow-emerald-500/30">
+                <Link href="/leaves" className="flex items-center gap-1 text-[11px] font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 px-3 py-1 rounded-full transition-all shadow-sm shadow-emerald-500/30">
                   Apply
                 </Link>
               }

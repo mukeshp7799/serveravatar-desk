@@ -21,7 +21,7 @@ export default function LeaveWidget({ permissions, data }: { permissions: string
         emptyText="No leave allocated"
         viewAllHref="/leaves"
         delay={300}
-        headerAction={<a href="/leaves/apply" className="text-xs font-bold text-white bg-white/20 hover:bg-white/30 backdrop-blur-sm px-3 py-1 rounded-full transition no-underline">Apply →</a>}
+        headerAction={<a href="/leaves" className="text-xs font-bold text-white bg-white/20 hover:bg-white/30 backdrop-blur-sm px-3 py-1 rounded-full transition no-underline">Apply →</a>}
         renderItem={(b: any) => {
           const pct = Math.min(100, (parseFloat(b.current_balance) / b.max_allowed) * 100);
           return (

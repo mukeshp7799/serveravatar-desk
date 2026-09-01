@@ -8,6 +8,7 @@ import {
   User, Lock, Bell, Briefcase, Mail, Phone, MapPin,
   UserCircle, AlertTriangle, Save, KeyRound, RefreshCw,
   Link2, Globe, CheckCircle2, Shield, Bookmark,
+  CalendarDays, Clock,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { profileSchema, passwordChangeSchema, type ProfileInput, type PasswordChangeInput } from '@/lib/schemas'
@@ -789,97 +790,161 @@ export default function ProfilePage() {
       {/* ══════════════════════════════════════════════════════════════════ */}
       {/* ── EMPLOYMENT INFORMATION TAB ── */}
       {tab === 'employment' && (
-        <div className={cardCls}>
-          <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-5">
-            <h3 className="text-lg font-extrabold text-white flex items-center gap-2">
-              <Briefcase size={20} strokeWidth={2.25} />
-              {t('profile.employmentInfo')}
-            </h3>
-            <p className="text-indigo-200 text-sm mt-0.5">Your employment details at the company</p>
+        <div className="space-y-4">
+
+          {/* ── Department Hero Banner ── */}
+          {empInfo?.department_name && (
+            <div className={`rounded-2xl p-6 bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-700 relative overflow-hidden shadow-lg`}>
+              {/* Decorative circles */}
+              <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/5" />
+              <div className="absolute -bottom-4 -left-4 w-24 h-24 rounded-full bg-white/5" />
+              <div className="absolute top-0 right-16 w-16 h-16 rounded-full bg-white/5" />
+
+              <div className="relative flex flex-col sm:flex-row sm:items-center gap-5">
+                {/* Department Icon */}
+                <div className="shrink-0 w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center shadow-inner">
+                  <Briefcase size={28} strokeWidth={2} className="text-white" />
+                </div>
+
+                {/* Department & Role Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-flex items-center rounded-full bg-white/15 text-indigo-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest border border-white/20">
+                      {t('profile.department')}
+                    </span>
+                  </div>
+                  <h2 className="text-2xl font-extrabold text-white leading-tight">{empInfo.department_name}</h2>
+                  {empInfo.designation && (
+                    <p className="text-indigo-200 text-sm font-medium mt-1 flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-indigo-300" />
+                      {empInfo.designation}
+                    </p>
+                  )}
+                </div>
+
+                {/* Employment Type + Status Pills */}
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  {empInfo.employment_type && (
+                    <span className="inline-flex items-center rounded-full bg-white/20 text-white px-3 py-1.5 text-xs font-bold border border-white/25 backdrop-blur-sm">
+                      {empInfo.employment_type}
+                    </span>
+                  )}
+                  {empInfo.status && (
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold border backdrop-blur-sm ${
+                      empInfo.status === 'active'
+                        ? 'bg-emerald-400/30 text-emerald-100 border-emerald-400/40'
+                        : 'bg-gray-400/30 text-gray-200 border-gray-400/40'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${empInfo.status === 'active' ? 'bg-emerald-400 animate-pulse' : 'bg-gray-400'}`} />
+                      {empInfo.status === 'active' ? 'Active' : 'Inactive'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Main Info Grid ── */}
+          <div className={cardCls}>
+            <div className="p-5">
+              {loadingEmp ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <RefreshCw size={28} strokeWidth={2.25} className="animate-spin text-indigo-500" />
+                  <p className="text-sm text-gray-500">{t('common.loading')}</p>
+                </div>
+              ) : empInfo ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+                  {/* Employee ID — indigo accent */}
+                  <div className="group p-4 rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50/60 to-white hover:shadow-md hover:border-indigo-200 transition-all duration-200">
+                    <div className="flex items-center gap-2.5 mb-3">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                        <UserCircle size={16} strokeWidth={2} className="text-indigo-600" />
+                      </div>
+                      <div className="text-[11px] font-bold text-indigo-400 uppercase tracking-widest">{t('profile.employeeId')}</div>
+                    </div>
+                    <div className="text-lg font-extrabold text-gray-900 pl-10">
+                      {empInfo.employee_id
+                        ? <span className="font-mono text-indigo-700">{empInfo.employee_id}</span>
+                        : <span className="text-gray-300 font-normal text-sm">Not assigned</span>
+                      }
+                    </div>
+                  </div>
+
+                  {/* Manager — violet accent */}
+                  <div className="group p-4 rounded-xl border border-violet-100 bg-gradient-to-br from-violet-50/60 to-white hover:shadow-md hover:border-violet-200 transition-all duration-200">
+                    <div className="flex items-center gap-2.5 mb-3">
+                      <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                        <Shield size={16} strokeWidth={2} className="text-violet-600" />
+                      </div>
+                      <div className="text-[11px] font-bold text-violet-400 uppercase tracking-widest">{t('profile.reportingManager')}</div>
+                    </div>
+                    {empInfo.manager_first_name ? (
+                      <div className="flex items-center gap-2.5 pl-0.5">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white text-xs font-extrabold shrink-0">
+                          {empInfo.manager_first_name[0]}{empInfo.manager_last_name?.[0] || ''}
+                        </div>
+                        <div className="text-base font-extrabold text-gray-900 leading-none pt-0.5">
+                          {`${empInfo.manager_first_name} ${empInfo.manager_last_name || ''}`.trim()}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-base font-medium text-gray-300 pl-0.5">Not assigned</div>
+                    )}
+                  </div>
+
+                  {/* Joining Date — amber accent */}
+                  <div className="group p-4 rounded-xl border border-amber-100 bg-gradient-to-br from-amber-50/60 to-white hover:shadow-md hover:border-amber-200 transition-all duration-200">
+                    <div className="flex items-center gap-2.5 mb-3">
+                      <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                        <CalendarDays size={16} strokeWidth={2} className="text-amber-600" />
+                      </div>
+                      <div className="text-[11px] font-bold text-amber-500 uppercase tracking-widest">{t('profile.joiningDate')}</div>
+                    </div>
+                    <div className="pl-0.5">
+                      {empInfo.hire_date ? (
+                        <>
+                          <div className="text-base font-extrabold text-gray-900">
+                            {new Date(empInfo.hire_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </div>
+                          <div className="text-xs text-amber-500 font-medium mt-1 flex items-center gap-1">
+                            <Clock size={10} strokeWidth={2.5} />
+                            {(() => {
+                              const join = new Date(empInfo.hire_date)
+                              const now = new Date()
+                              const diffMs = now.getTime() - join.getTime()
+                              const totalMonths = Math.floor(diffMs / (1000 * 60 * 60 * 24 * 30.44))
+                              const years = Math.floor(totalMonths / 12)
+                              const months = totalMonths % 12
+                              if (years > 0) return `${years}y ${months}m tenure`
+                              if (months > 0) return `${months} months`
+                              return 'Just joined'
+                            })()}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-base font-medium text-gray-300">Not set</div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <AlertTriangle size={32} strokeWidth={2.25} className="text-gray-300 mb-3" />
+                  <p className="text-sm text-gray-500">{t('common.failedToLoad')}</p>
+                  <button
+                    type="button"
+                    onClick={() => { setLoaded(false); setLoadingEmp(true) }}
+                    className="mt-3 px-4 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition cursor-pointer border-none"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="p-5">
-            {loadingEmp ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-3">
-                <RefreshCw size={28} strokeWidth={2.25} className="animate-spin text-indigo-500" />
-                <p className="text-sm text-gray-500">{t('common.loading')}</p>
-              </div>
-            ) : empInfo ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Employee ID */}
-                <div className="p-5 bg-indigo-50/50 rounded-xl border border-indigo-100">
-                  <div className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider mb-2">{t('profile.employeeId')}</div>
-                  <div className="text-base font-extrabold text-gray-900">{empInfo.employee_id || '—'}</div>
-                </div>
-                {/* Department */}
-                <div className="p-5 bg-gray-50 rounded-xl border border-gray-100">
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t('profile.department')}</div>
-                  <div className="text-base font-extrabold text-gray-900">{empInfo.department_name || '—'}</div>
-                </div>
-                {/* Designation */}
-                <div className="p-5 bg-gray-50 rounded-xl border border-gray-100">
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t('profile.designation')}</div>
-                  <div className="text-base font-extrabold text-gray-900">{empInfo.designation || '—'}</div>
-                </div>
-                {/* Manager */}
-                <div className="p-5 bg-gray-50 rounded-xl border border-gray-100">
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t('profile.reportingManager')}</div>
-                  <div className="text-base font-extrabold text-gray-900">
-                    {empInfo.manager_first_name
-                      ? `${empInfo.manager_first_name} ${empInfo.manager_last_name || ''}`.trim()
-                      : '—'}
-                  </div>
-                </div>
-                {/* Joining Date */}
-                <div className="p-5 bg-gray-50 rounded-xl border border-gray-100">
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t('profile.joiningDate')}</div>
-                  <div className="text-base font-extrabold text-gray-900">
-                    {empInfo.hire_date
-                      ? new Date(empInfo.hire_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                      : '—'}
-                  </div>
-                </div>
-                {/* Employment Type */}
-                <div className="p-5 bg-gray-50 rounded-xl border border-gray-100">
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t('profile.employmentType')}</div>
-                  <div>
-                    {empInfo.employment_type ? (
-                      <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200 uppercase tracking-wider">
-                        {empInfo.employment_type}
-                      </span>
-                    ) : '—'}
-                  </div>
-                </div>
-                {/* Status — full width */}
-                <div className="sm:col-span-2 lg:col-span-3 p-5 bg-gray-50 rounded-xl border border-gray-100">
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">{t('profile.employmentStatus')}</div>
-                  <div className="flex items-center gap-3">
-                    {empInfo.status ? (
-                      <span className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-bold uppercase tracking-wider ${
-                        empInfo.status === 'active'
-                          ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                          : 'bg-gray-100 text-gray-600 border border-gray-200'
-                      }`}>
-                        <span className={`w-2 h-2 rounded-full ${empInfo.status === 'active' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
-                        {empInfo.status}
-                      </span>
-                    ) : '—'}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <AlertTriangle size={32} strokeWidth={2.25} className="text-gray-300 mb-3" />
-                <p className="text-sm text-gray-500">{t('common.failedToLoad')}</p>
-                <button
-                  type="button"
-                  onClick={() => { setLoaded(false); setLoadingEmp(true); }}
-                  className="mt-3 px-4 py-2 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition cursor-pointer border-none"
-                >
-                  Try Again
-                </button>
-              </div>
-            )}
-          </div>
+
         </div>
       )}
     </div>
