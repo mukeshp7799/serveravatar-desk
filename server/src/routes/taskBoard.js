@@ -43,6 +43,7 @@ const path = require("path");
 const multer = require("multer");
 const pool = require("../config/database");
 const { auth } = require("../middleware/auth");
+const { broadcast } = require("../sse/notifications");
 const { isProjectMember, requireProjectMember } = require("../middleware/projectMember");
 const { t } = require("../i18n");
 const { recordActivity } = require("../utils/activity");
@@ -525,6 +526,17 @@ router.post(
               link,
             ]
           );
+          broadcast(uid, {
+            event: 'new_notification',
+            notification: {
+              type: 'task_assigned',
+              title: 'Task assigned to you',
+              message: `${senderName} assigned you to "${taskTitle}"`,
+              link,
+              is_read: false,
+              created_at: new Date().toISOString(),
+            },
+          });
         }
       }
 
@@ -696,6 +708,17 @@ router.put("/tasks/:taskId", auth, async (req, res, next) => {
               link,
             ]
           );
+          broadcast(uid, {
+            event: 'new_notification',
+            notification: {
+              type: 'task_assigned',
+              title: 'Task assigned to you',
+              message: `${senderName} assigned you to "${taskTitle}"`,
+              link,
+              is_read: false,
+              created_at: new Date().toISOString(),
+            },
+          });
         }
       }
     }
@@ -1391,10 +1414,21 @@ router.post("/tasks/:taskId/comments", auth, async (req, res, next) => {
             m.user_id,
             "task_commented",
             "New comment on a task",
-            `${senderName}: ${contentSnippet}`,
+            `${senderName} on "${taskTitle || 'a task'}": ${contentSnippet}`,
             link,
           ]
         );
+        broadcast(m.user_id, {
+          event: 'new_notification',
+          notification: {
+            type: 'task_commented',
+            title: 'New comment on a task',
+            message: `${senderName} on "${taskTitle || 'a task'}": ${contentSnippet}`,
+            link,
+            is_read: false,
+            created_at: new Date().toISOString(),
+          },
+        });
       }
     }
 

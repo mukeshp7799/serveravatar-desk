@@ -4,6 +4,7 @@ const { auth } = require('../middleware/auth');
 const { requireProjectMember, isProjectMember } = require('../middleware/projectMember');
 const { t } = require('../i18n');
 const { processAndNotifyMentions, SOURCE_TYPES } = require('../utils/mentions');
+const { broadcast } = require('../sse/notifications');
 const { isNotificationAllowed } = require('../utils/notificationPreferences');
 const { logActivity } = require('../services/activityService');
 
@@ -295,11 +296,30 @@ router.post('/:id/messages', auth, async (req, res, next) => {
     });
 
     // Notify other project members about the new message (existing notification logic).
-    const [members] = await pool.query(
-      'SELECT user_id FROM project_members WHERE project_id = ? AND user_id != ?',
-      [discussion[0].project_id, req.user.id]
-    );
+    // Project-scoped discussions (project_id IS NOT NULL): notify project members.
+    // Organization-wide discussions (project_id IS NULL): notify all users with
+    // discussions.view permission so the entire org sees new messages.
+    let members;
+    if (discussion[0].project_id) {
+      [members] = await pool.query(
+        'SELECT user_id FROM project_members WHERE project_id = ? AND user_id != ?',
+        [discussion[0].project_id, req.user.id]
+      );
+    } else {
+      // Organization-wide: all users (except sender) who can view discussions
+      [members] = await pool.query(
+        `SELECT DISTINCT u.id AS user_id FROM users u
+         JOIN roles r ON u.role_id = r.id
+         JOIN role_permissions rp ON rp.role_id = r.id
+         JOIN permissions p ON rp.permission_id = p.id
+         WHERE p.name = 'discussions.view'
+           AND u.id != ?
+           AND u.status != 'inactive'`,
+        [req.user.id]
+      );
+    }
     const contentSnippet = content.substring(0, 100);
+    const discussionLink = `/discussions?id=${req.params.id}`;
     for (const m of members) {
       if (await isNotificationAllowed(m.user_id, 'new_message')) {
         await pool.query(
@@ -311,10 +331,21 @@ router.post('/:id/messages', auth, async (req, res, next) => {
             null,
             JSON.stringify({ senderName, contentSnippet }),
             `New message in "${discussionTitle}"`,
-            `${senderName}: ${contentSnippet}`,
-            `/discussions?id=${req.params.id}`,
+            `New Discussion message in "${discussionTitle}" from ${senderName}: ${contentSnippet}`,
+            discussionLink,
           ]
         );
+        broadcast(m.user_id, {
+          event: 'new_notification',
+          notification: {
+            type: 'new_message',
+            title: `New message in "${discussionTitle}"`,
+            message: `New Discussion message in "${discussionTitle}" from ${senderName}: ${contentSnippet}`,
+            link: discussionLink,
+            is_read: false,
+            created_at: new Date().toISOString(),
+          },
+        });
       }
     }
 

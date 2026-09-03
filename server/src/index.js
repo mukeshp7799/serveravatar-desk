@@ -36,6 +36,7 @@ const notificationPrefRoutes = require("./routes/notification-preferences");
 const companySettingsRoutes = require("./routes/company-settings");
 const activityLogRoutes = require("./routes/activityLogs");
 const { langMiddleware } = require("./i18n");
+const { SSEHandler, sendHeartbeat } = require("./sse/notifications");
 const { startAttendanceReminderCron } = require("./jobs/attendanceReminder");
 const { startAutoClockOutCron } = require("./jobs/autoClockOut");
 
@@ -50,6 +51,20 @@ app.use(express.urlencoded({ extended: true }));
 app.use(langMiddleware);
 
 // Routes
+
+// ── Unauthenticated endpoints ───────────────────────────────────────────────────
+// These must be registered BEFORE any app.use("/api", ...) router mounts,
+// because several of those routers (scheduleRoutes, taskBoardRoutes, etc.)
+// apply auth globally via router.use(auth) and would intercept these calls.
+
+// SSE stream — EventSource endpoint for real-time notifications
+app.get('/api/sse-stream', SSEHandler);
+
+// Health check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 app.use("/api/auth", authRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use("/api/users", userRoutes);
@@ -60,6 +75,7 @@ app.use("/api/leaves", leaveRoutes);
 app.use("/api/projects", projectRoutes);
 // /api/tasks/* comes from taskBoardRoutes below (mounted at /api)
 app.use("/api/discussions", discussionRoutes);
+
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/announcements", announcementRoutes);
 app.use("/api/timelogs", timelogRoutes);
@@ -82,10 +98,7 @@ app.use("/api/notification-preferences", notificationPrefRoutes);
 app.use("/api/company-settings", companySettingsRoutes);
 app.use("/api/activity-logs", activityLogRoutes);
 
-// Health check
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
+// Error handler — translate "Internal server error" via i18n
 
 // Error handler — translate "Internal server error" via i18n
 const { t } = require("./i18n");
@@ -101,4 +114,11 @@ app.listen(PORT, "127.0.0.1", () => {
   console.log(`Serveravatar Hub API server running on port ${PORT}`);
   startAttendanceReminderCron();
   startAutoClockOutCron();
+
+  // SSE heartbeat: send a comment every 25 seconds to keep connections alive through proxies.
+  // This prevents nginx/proxy timeouts on long-lived SSE streams.
+  setInterval(() => {
+    try { sendHeartbeat(); } catch (e) { /* ignore if server is shutting down */ }
+  }, 25_000);
+  console.log('[SSE] Heartbeat started (every 25s)');
 });

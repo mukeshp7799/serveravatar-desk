@@ -8,6 +8,8 @@
  */
 
 const pool = require('../config/database');
+let broadcast;
+try { broadcast = require('../sse/notifications').broadcast; } catch { broadcast = () => {}; }
 const { getSetting } = require('../services/attendanceCalc');
 const { getCompanySetting, nowInTimezone, todayInTimezone } = require('../utils/timezone');
 const { isNotificationAllowed } = require('../utils/notificationPreferences');
@@ -138,17 +140,18 @@ async function runAttendanceReminder() {
         continue;
       }
 
+      const notifMessage = `Hi ${user.first_name}, you haven't clocked in today. Please clock in now.`;
       await pool.query(
         `INSERT INTO notifications (user_id, type, title, message, link, is_read, created_at)
          VALUES (?, ?, ?, ?, ?, FALSE, NOW())`,
-        [
-          user.id,
-          REMINDER_TYPE,
-          '⏰ Attendance Reminder',
-          `Hi ${user.first_name}, you haven't clocked in today. Please clock in now.`,
-          '/attendance',
-        ]
+        [user.id, REMINDER_TYPE, '⏰ Attendance Reminder', notifMessage, '/attendance']
       );
+      if (broadcast) {
+        broadcast(user.id, {
+          event: 'new_notification',
+          notification: { type: REMINDER_TYPE, title: '⏰ Attendance Reminder', message: notifMessage, link: '/attendance', is_read: false, created_at: new Date().toISOString() },
+        });
+      }
       sentCount++;
     } catch (err) {
       console.error(`[attendanceReminder] Failed to notify user ${user.id}:`, err.message);

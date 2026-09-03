@@ -2,10 +2,12 @@ const express = require('express');
 const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { t, translateNotifications } = require('../i18n');
+const { broadcast } = require('../sse/notifications');
 
 const router = express.Router();
 
 // GET /api/notifications — translates title/message via stored i18n keys
+// Also returns pending project invitations as notification items
 // Also returns pending project invitations as notification items
 router.get('/', auth, async (req, res, next) => {
   try {
@@ -72,6 +74,14 @@ router.get('/', auth, async (req, res, next) => {
       pendingInvitations: invitationItems,
       unreadCount: totalUnread,
     });
+
+    // Broadcast each newly-created invitation-as-notification to all open SSE tabs
+    for (const inv of invitationItems) {
+      broadcast(req.user.id, {
+        event: 'new_notification',
+        notification: { ...inv, is_read: false },
+      });
+    }
   } catch (err) { next(err); }
 });
 

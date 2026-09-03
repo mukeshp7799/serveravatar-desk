@@ -11,6 +11,8 @@
 
 const pool = require("../config/database");
 const { t } = require("../i18n");
+let broadcast;
+try { broadcast = require("../sse/notifications").broadcast; } catch { broadcast = () => {}; }
 
 /* ─────────────────────────────────────────────────────────────────────────
  * 1.  Parse @username tokens from plain-text / HTML content
@@ -140,6 +142,20 @@ async function processAndNotifyMentions({
           link || "#",
         ]
       );
+
+      if (broadcast) {
+        broadcast(user.id, {
+          event: 'new_notification',
+          notification: {
+            type: 'mention',
+            title: 'You were mentioned',
+            message: snippet,
+            link: link || '#',
+            is_read: false,
+            created_at: new Date().toISOString(),
+          },
+        });
+      }
 
       results.push({ userId: user.id, stored: true });
     } catch (err) {

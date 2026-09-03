@@ -18,6 +18,7 @@ const {
 const { getCompanySetting, nowInTimezone, todayInTimezone, toTimezone, formatDate, formatTime } = require('../utils/timezone');
 const { logActivity } = require('../services/activityService');
 const { isNotificationAllowed } = require('../utils/notificationPreferences');
+const { broadcast } = require('../sse/notifications');
 
 const router = express.Router();
 
@@ -2152,16 +2153,15 @@ router.post('/break-adjustments', async (req, res, next) => {
     );
     for (const admin of admins) {
       if (await isNotificationAllowed(admin.id, 'attendance')) {
+        const notifMessage = `${req.user.first_name} ${req.user.last_name} requested ${requested_minutes} min work-during-break`;
         await pool.query(
           `INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)`,
-          [
-            admin.id,
-            'break_adjustment_request',
-            'New Break Adjustment Request',
-            `${req.user.first_name} ${req.user.last_name} requested ${requested_minutes} min work-during-break`,
-            `/attendance?tab=adjustments`,
-          ]
+          [admin.id, 'break_adjustment_request', 'New Break Adjustment Request', notifMessage, `/attendance?tab=adjustments`]
         );
+        broadcast(admin.id, {
+          event: 'new_notification',
+          notification: { type: 'break_adjustment_request', title: 'New Break Adjustment Request', message: notifMessage, link: `/attendance?tab=adjustments`, is_read: false, created_at: new Date().toISOString() },
+        });
       }
     }
   } catch (err) { next(err); }
@@ -2753,16 +2753,15 @@ router.put('/break-adjustments/:id/approve', async (req, res, next) => {
 
     // Notify the employee about approval
     if (await isNotificationAllowed(existing.user_id, 'attendance')) {
+      const notifMessage = `Your work-during-break request (${approvedMinutes} min) has been approved`;
       await pool.query(
         `INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)`,
-        [
-          existing.user_id,
-          'break_adjustment_approved',
-          'Break Adjustment Approved',
-          `Your work-during-break request (${approvedMinutes} min) has been approved`,
-          `/attendance?tab=history`,
-        ]
+        [existing.user_id, 'break_adjustment_approved', 'Break Adjustment Approved', notifMessage, `/attendance?tab=history`]
       );
+      broadcast(existing.user_id, {
+        event: 'new_notification',
+        notification: { type: 'break_adjustment_approved', title: 'Break Adjustment Approved', message: notifMessage, link: `/attendance?tab=history`, is_read: false, created_at: new Date().toISOString() },
+      });
     }
   } catch (err) { next(err); }
 });
@@ -2820,16 +2819,15 @@ router.put('/break-adjustments/:id/reject', async (req, res, next) => {
 
     // Notify the employee about rejection
     if (await isNotificationAllowed(existing.user_id, 'attendance')) {
+      const notifMessage = `Your work-during-break request (${existing.requested_minutes} min) was rejected${admin_remarks?.trim() ? ': ' + admin_remarks.trim() : ''}`;
       await pool.query(
         `INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)`,
-        [
-          existing.user_id,
-          'break_adjustment_rejected',
-          'Break Adjustment Rejected',
-          `Your work-during-break request (${existing.requested_minutes} min) was rejected${admin_remarks?.trim() ? ': ' + admin_remarks.trim() : ''}`,
-          `/attendance?tab=history`,
-        ]
+        [existing.user_id, 'break_adjustment_rejected', 'Break Adjustment Rejected', notifMessage, `/attendance?tab=history`]
       );
+      broadcast(existing.user_id, {
+        event: 'new_notification',
+        notification: { type: 'break_adjustment_rejected', title: 'Break Adjustment Rejected', message: notifMessage, link: `/attendance?tab=history`, is_read: false, created_at: new Date().toISOString() },
+      });
     }
   } catch (err) { next(err); }
 });

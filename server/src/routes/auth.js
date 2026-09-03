@@ -8,6 +8,7 @@ const { t } = require('../i18n');
 const { sendEmail } = require('../utils/mailer');
 const { emailVerificationEmail, passwordResetEmail } = require('../utils/emailTemplates');
 const { logActivity } = require('../services/activityService');
+const { broadcast } = require('../sse/notifications');
 
 const SITE_URL = process.env.SITE_URL || 'https://seravavatar-hub.95.217.8.52.nip.io';
 const VERIFICATION_TTL_HOURS = 24;
@@ -30,16 +31,16 @@ async function createNotificationsForPendingInvitations(conn, userId, email) {
     );
     if (!existing) {
       const link = `/invitation-confirm/${inv.token}`;
+      const notifMessage = `You've been invited to join "${inv.project_name}" as ${inv.role_in_project || 'Member'}.`;
       await conn.query(
         `INSERT INTO notifications (user_id, type, title, message, link, is_read, created_at)
          VALUES (?, 'project_invitation', ?, ?, ?, FALSE, NOW())`,
-        [
-          userId,
-          'Project Invitation',
-          `You've been invited to join "${inv.project_name}" as ${inv.role_in_project || 'Member'}.`,
-          link,
-        ]
+        [userId, 'Project Invitation', notifMessage, link]
       );
+      broadcast(userId, {
+        event: 'new_notification',
+        notification: { type: 'project_invitation', title: 'Project Invitation', message: notifMessage, link, is_read: false, created_at: new Date().toISOString() },
+      });
     }
   }
 }

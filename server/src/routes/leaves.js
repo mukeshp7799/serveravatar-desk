@@ -3,6 +3,7 @@ const pool = require('../config/database');
 const { auth } = require('../middleware/auth');
 const { t } = require('../i18n');
 const { isNotificationAllowed } = require('../utils/notificationPreferences');
+const { broadcast } = require('../sse/notifications');
 const { logActivity } = require('../services/activityService');
 const {
   getSetting,
@@ -709,16 +710,16 @@ router.post('/', auth, async (req, res, next) => {
     const [user] = await pool.query('SELECT reporting_manager_id FROM users WHERE id = ?', [req.user.id]);
     if (user[0]?.reporting_manager_id) {
       if (await isNotificationAllowed(user[0].reporting_manager_id, 'leave_request')) {
+        const notifLink = `/leaves?id=${result.insertId}`;
+        const notifMessage = `${req.user.first_name} ${req.user.last_name} applied for ${ltype[0].name} (${days} day${days !== 1 ? 's' : ''})`;
         await pool.query(
           'INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)',
-          [
-            user[0].reporting_manager_id,
-            'leave_request',
-            'New Leave Request',
-            `${req.user.first_name} ${req.user.last_name} applied for ${ltype[0].name} (${days} day${days !== 1 ? 's' : ''})`,
-            `/leaves?id=${result.insertId}`,
-          ]
+          [user[0].reporting_manager_id, 'leave_request', 'New Leave Request', notifMessage, notifLink]
         );
+        broadcast(user[0].reporting_manager_id, {
+          event: 'new_notification',
+          notification: { type: 'leave_request', title: 'New Leave Request', message: notifMessage, link: notifLink, is_read: false, created_at: new Date().toISOString() },
+        });
       }
     }
 
@@ -767,16 +768,15 @@ router.put('/:id/approve', auth, async (req, res, next) => {
     // Notify employee (only if they have leave_updates enabled)
     const statusLabel = action === 'approved' ? 'approved' : 'rejected';
     if (await isNotificationAllowed(lr.user_id, `leave_${action}`)) {
+      const notifMessage = `Your ${lr.leave_type_name || 'leave'} request (${lr.days} day${lr.days !== 1 ? 's' : ''}) has been ${statusLabel}${rejection_reason && action === 'rejected' ? ': ' + rejection_reason : ''}`;
       await pool.query(
         `INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)`,
-        [
-          lr.user_id,
-          `leave_${action}`,
-          `Leave Request ${action === 'approved' ? 'Approved' : 'Rejected'}`,
-          `Your leave request has been ${statusLabel}${rejection_reason && action === 'rejected' ? ': ' + rejection_reason : ''}`,
-          `/leaves`,
-        ]
+        [lr.user_id, `leave_${action}`, `Leave Request ${action === 'approved' ? 'Approved' : 'Rejected'}`, notifMessage, `/leaves`]
       );
+      broadcast(lr.user_id, {
+        event: 'new_notification',
+        notification: { type: `leave_${action}`, title: `Leave Request ${action === 'approved' ? 'Approved' : 'Rejected'}`, message: notifMessage, link: '/leaves', is_read: false, created_at: new Date().toISOString() },
+      });
     }
 
     res.json({ message: t(req.lang, `success.leaveRequest${action === 'approved' ? 'Approved' : 'Rejected'}`) });
@@ -818,12 +818,15 @@ router.put('/:id/cancel', auth, async (req, res, next) => {
 
     if (lr.user_id !== req.user.id) {
       if (await isNotificationAllowed(lr.user_id, 'leave_cancelled')) {
+        const notifMessage = `Your ${lr.leave_type_name || 'leave'} request was cancelled by ${req.user.first_name} ${req.user.last_name}`;
         await pool.query(
           `INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)`,
-          [lr.user_id, 'leave_cancelled', 'Leave Request Cancelled',
-           `Your leave request was cancelled by ${req.user.first_name} ${req.user.last_name}`,
-           `/leaves`]
+          [lr.user_id, 'leave_cancelled', 'Leave Request Cancelled', notifMessage, `/leaves`]
         );
+        broadcast(lr.user_id, {
+          event: 'new_notification',
+          notification: { type: 'leave_cancelled', title: 'Leave Request Cancelled', message: notifMessage, link: '/leaves', is_read: false, created_at: new Date().toISOString() },
+        });
       }
     }
 

@@ -8,6 +8,7 @@ const { auth, requirePermission } = require('../middleware/auth');
 const { t } = require('../i18n');
 const { getCompanySetting, nowInTimezone, formatDateTime } = require('../utils/timezone');
 const { isNotificationAllowed } = require('../utils/notificationPreferences');
+const { broadcast } = require('../sse/notifications');
 const { logActivity } = require('../services/activityService');
 
 const router = express.Router();
@@ -118,6 +119,21 @@ async function createAnnouncementNotifications(announcementId, audienceTarget, t
       'INSERT INTO notifications (user_id, type, title_key, params, title, message, link, is_read) VALUES ?',
       [values]
     );
+
+    // Broadcast to each eligible user in real-time via SSE
+    for (const uid of eligibleUserIds) {
+      broadcast(uid, {
+        event: 'new_notification',
+        notification: {
+          type: 'announcement_published',
+          title: 'New Announcement',
+          message: title,
+          link: `/announcements?id=${announcementId}`,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        },
+      });
+    }
   } catch (err) {
     console.error('[announcements] Notification creation error:', err.message);
   }
