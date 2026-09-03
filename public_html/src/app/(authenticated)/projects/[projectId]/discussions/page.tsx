@@ -88,6 +88,26 @@ export default function DiscussionsPage() {
   const [user, setUser] = useState<any>(null)
   const [activeMembers, setActiveMembers] = useState<ActiveMember[]>([])
 
+  // ── Real-time: listen for global SSE notification events ─────────────────────────────────
+  // The layout's SSE hook dispatches 'sse:notification' on window whenever a new
+  // notification arrives. We listen here so we can refresh the expanded thread.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const notif = (e as CustomEvent).detail;
+      if (!notif || notif.type !== 'new_message') return;
+      const match = (notif.link || '').match(/^\/discussions\?id=(\d+)/);
+      if (!match) return;
+      const notifDiscussionId = Number(match[1]);
+      if (expandedId && expandedId === notifDiscussionId) {
+        api.get(`/discussions/${expandedId}`).then((res: any) => {
+          setThreadData(res);
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener('sse:notification', handler);
+    return () => window.removeEventListener('sse:notification', handler);
+  }, [expandedId]);
+
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem('user') : null
     if (stored) setUser(JSON.parse(stored))

@@ -10,6 +10,7 @@ import Scroll from '../../components/Scroll'
 import ModalPortal, { ModalProvider } from '../../components/ModalPortal'
 import { CompanySettingsProvider } from '../../contexts/CompanySettingsContext'
 import api from '../../lib/api'
+import { useNotificationSSE } from '../../hooks/useNotificationSSE'
 import {
   LayoutDashboard, Users, Palmtree, Network, ShieldCheck,
   FolderKanban, ListChecks, MessageSquare, Megaphone, Bell,
@@ -124,6 +125,27 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
         .catch(() => { /* api already handled 401 by redirecting to /login */ })
     })
   }, [user, pathname])
+
+  // ── Real-time notifications via SSE ─────────────────────────────────────────
+  const { isConnected } = useNotificationSSE({
+    onNotification: (notification) => {
+      // New notification arrived — increment badge and show toast
+      setUnreadCount((prev: number) => prev + 1);
+      toast(notification.message || notification.title || 'New notification', {
+        id: `notif-${notification.created_at}`, // deduplicate rapid pushes
+        duration: 5000,
+        icon: '🔔',
+      });
+      // Dispatch a global window event so other components (e.g. discussion pages)
+      // can react to real-time notifications without needing their own SSE connection.
+      window.dispatchEvent(new CustomEvent('sse:notification', { detail: notification }));
+    },
+    onConnectionChange: (connected) => {
+      if (connected) {
+        console.log('[SSE] Connected to notification stream');
+      }
+    },
+  });
 
   // Resend verification email
   const [resending, setResending] = useState(false)

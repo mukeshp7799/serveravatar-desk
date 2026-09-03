@@ -526,6 +526,28 @@ export default function DiscussionsPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const listBottomRef = useRef<HTMLDivElement>(null)
 
+  // ── Real-time: listen for global SSE notification events ─────────────────────────────────
+  // The layout's SSE hook dispatches 'sse:notification' on window whenever a new
+  // notification arrives. We listen here so we can refresh the open thread without
+  // needing our own SSE connection (which would double the SSE streams).
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const notif = (e as CustomEvent).detail;
+      if (!notif || notif.type !== 'new_message') return;
+      const match = (notif.link || '').match(/^\/discussions\?id=(\d+)/);
+      if (!match) return;
+      const notifDiscussionId = Number(match[1]);
+      const openId = selectedDiscussion?.discussion?.id;
+      if (openId && openId === notifDiscussionId) {
+        api.get(`/discussions/${openId}`).then((res: any) => {
+          setSelectedDiscussion(res);
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener('sse:notification', handler);
+    return () => window.removeEventListener('sse:notification', handler);
+  }, [selectedDiscussion]);
+
   // Detect mobile viewport
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {
