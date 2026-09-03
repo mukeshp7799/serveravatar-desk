@@ -128,10 +128,10 @@ function StructurePageInner() {
 
   // Skeleton card
   const SkeletonCard = () => (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-100 dark:border-slate-800 animate-pulse">
-      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600 mb-5" />
-      <div className="w-3/4 h-5 bg-slate-200 dark:bg-slate-700 rounded-xl mb-3" />
-      <div className="w-1/2 h-3 bg-slate-100 dark:bg-slate-700 rounded-lg" />
+    <div className="bg-white dark:bg-slate-900 rounded-xl p-3 shadow-sm border border-slate-100 dark:border-slate-800 animate-pulse">
+      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600 mb-2" />
+      <div className="w-3/4 h-3 bg-slate-200 dark:bg-slate-700 rounded-xl mb-1" />
+      <div className="w-1/2 h-2 bg-slate-100 dark:bg-slate-700 rounded-lg" />
     </div>
   )
 
@@ -165,113 +165,71 @@ function StructurePageInner() {
   )
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6">
 
-      {/* ── Hero Header ── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-700 px-8 py-8 shadow-xl shadow-indigo-200/40 dark:shadow-indigo-900/30">
-        {/* Decorative background shapes */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-white/5" />
-          <div className="absolute -bottom-16 -left-8 w-40 h-40 rounded-full bg-white/5" />
-          <div className="absolute top-8 right-32 w-20 h-20 rounded-full bg-white/5" />
-          {/* Tree node lines */}
-          <svg className="absolute inset-0 w-full h-full opacity-10" preserveAspectRatio="none">
-            <line x1="20%" y1="80%" x2="40%" y2="40%" stroke="white" strokeWidth="1.5" />
-            <line x1="40%" y1="40%" x2="60%" y2="55%" stroke="white" strokeWidth="1.5" />
-            <line x1="60%" y1="55%" x2="80%" y2="35%" stroke="white" strokeWidth="1.5" />
-            <circle cx="20%" cy="80%" r="4" fill="white" />
-            <circle cx="40%" cy="40%" r="5" fill="white" />
-            <circle cx="60%" cy="55%" r="4" fill="white" />
-            <circle cx="80%" cy="35%" r="5" fill="white" />
-          </svg>
+      {/* ── Page Header ── */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-extrabold text-slate-900 dark:text-white leading-tight">Organization Structure</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Manage your organization's departments</p>
         </div>
-
-        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-          {/* Left: Title + Breadcrumb */}
-          <div>
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-1.5 text-indigo-200 text-xs font-medium mb-3">
-              <span className="opacity-70">Settings</span>
-              <ChevronRight size={12} strokeWidth={2.5} />
-              <span className="text-white font-semibold">Organization Structure</span>
-            </div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center shadow-inner">
-                <Network size={24} strokeWidth={2} className="text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-extrabold text-white leading-tight">Organization Structure</h1>
-                <p className="text-indigo-200 text-sm font-medium">Organize your workforce into departments</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Stats + CTA */}
-          <div className="flex items-center gap-4 shrink-0">
-            {/* Dept count pill */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-2xl px-5 py-3 text-center border border-white/15">
-              <div className="text-3xl font-extrabold text-white leading-none">{departments.length}</div>
-              <div className="text-[11px] text-indigo-200 font-medium uppercase tracking-widest mt-1">Departments</div>
-            </div>
-            {isAdmin && (
-              <button
-                onClick={openCreate}
-                className="inline-flex items-center gap-2 px-5 py-3 bg-white text-indigo-700 rounded-2xl text-sm font-bold transition shadow-xl hover:shadow-2xl hover:-translate-y-0.5 cursor-pointer border-none"
-              >
-                <Plus size={18} strokeWidth={2.5} />
-                Add Department
-              </button>
-            )}
-          </div>
-        </div>
+        {isAdmin && (
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition cursor-pointer border-none shrink-0"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            Add Department
+          </button>
+        )}
       </div>
 
       {/* ── Department Cards Grid ── */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 w-full">
           {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : departments.length === 0 ? (
-        <div className="grid grid-cols-1 gap-5 w-full">
+        <div className="grid grid-cols-1 gap-3 w-full">
           <EmptyState />
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3 w-full">
           {departments.map((item: any, i: number) => {
             const theme = DEPT_THEMES[i % DEPT_THEMES.length]
             const Icon = ITEM_ICONS[i % ITEM_ICONS.length]
             return (
               <div
                 key={item.id}
-                className="group relative bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm hover:shadow-xl border border-slate-100 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-700 transition-all duration-300 hover:-translate-y-1 flex flex-col"
+                className="group relative bg-white dark:bg-slate-900 rounded-xl p-3 shadow-sm hover:shadow-xl border border-slate-100 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-700 transition-all duration-300 flex flex-col animate-fade-in-up"
               >
-                {/* Top-right actions (visible on hover) */}
+                {/* Top-right actions (always visible) */}
                 {isAdmin && (
-                  <div className="absolute top-4 right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <div className="absolute top-2 right-2 flex items-center gap-0.5">
                     <button
                       onClick={() => openEdit(item)}
-                      className="w-8 h-8 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 flex items-center justify-center cursor-pointer border-none bg-white/80 dark:bg-slate-700/80 shadow-sm transition-colors"
+                      className="w-7 h-7 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 flex items-center justify-center cursor-pointer border-none bg-white/80 dark:bg-slate-700/80 shadow-sm transition-colors"
                       title={t('common.edit')}
                     >
-                      <Pencil size={13} strokeWidth={2.5} />
+                      <Pencil size={11} strokeWidth={2.5} />
                     </button>
                     <button
                       onClick={() => handleDelete(item.id)}
-                      className="w-8 h-8 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 flex items-center justify-center cursor-pointer border-none bg-white/80 dark:bg-slate-700/80 shadow-sm transition-colors"
+                      className="w-7 h-7 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 flex items-center justify-center cursor-pointer border-none bg-white/80 dark:bg-slate-700/80 shadow-sm transition-colors"
                       title={t('common.delete')}
                     >
-                      <Trash2 size={13} strokeWidth={2.25} />
+                      <Trash2 size={11} strokeWidth={2.25} />
                     </button>
                   </div>
                 )}
 
                 {/* Icon block */}
-                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${theme.icon} flex items-center justify-center mb-5 shadow-lg group-hover:scale-105 group-hover:shadow-xl transition-all duration-300`}>
-                  <Icon size={24} strokeWidth={2} className="text-white" />
+                <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${theme.icon} flex items-center justify-center mb-2 shadow-lg group-hover:scale-105 group-hover:shadow-xl transition-all duration-300`}>
+                  <Icon size={14} strokeWidth={2} className="text-white" />
                 </div>
 
                 {/* Department name */}
-                <h3 className="text-base font-extrabold text-slate-900 dark:text-white mb-3 pr-10 leading-tight">
+                <h3 className="text-xs font-extrabold text-slate-900 dark:text-white mb-1 pr-8 leading-tight">
                   {item.name}
                 </h3>
 
@@ -279,15 +237,15 @@ function StructurePageInner() {
                 <div className="flex-1" />
 
                 {/* Meta footer */}
-                <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex flex-wrap items-center justify-between gap-1 pt-2 border-t border-slate-100 dark:border-slate-800">
                   {/* Member count placeholder */}
-                  <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold border ${theme.badge}`}>
-                    <Users size={10} strokeWidth={2.5} />
+                  <div className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold border ${theme.badge}`}>
+                    <Users size={9} strokeWidth={2.5} />
                     Team
                   </div>
                   {/* Date */}
-                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500 font-medium">
-                    <Calendar size={11} strokeWidth={2} />
+                  <div className="flex items-center gap-1 text-[9px] text-slate-400 dark:text-slate-500 font-medium">
+                    <Calendar size={9} strokeWidth={2} />
                     <span>{fmtDate(item.created_at)}</span>
                   </div>
                 </div>

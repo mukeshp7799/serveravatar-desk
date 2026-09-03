@@ -544,7 +544,7 @@ export default function DashboardPage() {
                       <div className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
                       <AlertCircle size={12} className="text-amber-500 shrink-0" />
                       <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-                        Late arrival — {myToday.late_minutes || 0} minutes
+                        Late arrival — {fmtBreak(myToday.late_minutes)}
                       </span>
                     </div>
                   )}
