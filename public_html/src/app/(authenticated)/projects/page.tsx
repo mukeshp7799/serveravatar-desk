@@ -122,7 +122,11 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
-      <div className="flex flex-wrap justify-end items-center gap-3">
+      <div className="flex flex-wrap justify-between items-center gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Projects</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Manage and track all your projects in one place</p>
+        </div>
         {canManage && (
           <button onClick={openCreate} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-lg rounded-xl text-sm font-bold transition shadow-lg cursor-pointer border-none flex items-center gap-2">
             <span className="text-lg">+</span> {t('projects.newProject')}

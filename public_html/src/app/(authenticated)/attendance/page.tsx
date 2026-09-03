@@ -942,7 +942,10 @@ export default function AttendancePage() {
 
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Attendance</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Attendance</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Track and manage employee attendance records</p>
+        </div>
       </div>
 
       {/* Single-break info note */}

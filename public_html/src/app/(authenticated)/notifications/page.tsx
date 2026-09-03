@@ -142,7 +142,11 @@ export default function NotificationsPage() {
   return (
     <div className="space-y-5 animate-fade-in-up">
       {/* Page header */}
-      <div className="flex flex-wrap justify-end items-center gap-3">
+      <div className="flex flex-wrap justify-between items-center gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Notifications</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Stay updated with the latest activity and alerts</p>
+        </div>
         <button
           onClick={markAllRead}
           className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-lg rounded-xl text-sm font-bold transition shadow-lg cursor-pointer border-none flex items-center gap-2"

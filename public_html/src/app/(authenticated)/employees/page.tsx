@@ -273,7 +273,7 @@ export default function EmployeesPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Employee Directory</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            {pagination.total} employee{pagination.total !== 1 ? 's' : ''}
+            View and manage all employees in your organization
           </p>
         </div>
       </div>

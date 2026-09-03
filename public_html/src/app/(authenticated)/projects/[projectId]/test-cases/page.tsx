@@ -2076,7 +2076,7 @@ export default function TestCasesPage() {
           </div>
           <div>
             <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Test Cases</h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{tc.total} total</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Manage and track test cases for your project</p>
           </div>
         </div>
         <button
