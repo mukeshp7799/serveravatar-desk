@@ -9,7 +9,8 @@ import { useDateSettings } from '@/contexts/CompanySettingsContext'
 import PageLoader from '@/components/PageLoader'
 import { DataTable } from '@/components/DataTable'
 import toast from 'react-hot-toast'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Check, X } from 'lucide-react'
+import { isPasswordStrong, passwordValidation } from '@/lib/schemas'
 
 const ArrowLeft = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
 const Mail = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
@@ -186,6 +187,10 @@ export default function EmployeeProfilePage() {
   }
 
   const handleSave = async () => {
+    if (newPassword && !isPasswordStrong(newPassword)) {
+      toast.error('Password must contain at least 8 characters, 1 uppercase, 1 lowercase, 1 number, and 1 special character')
+      return
+    }
     setSaving(true)
     try {
       const payload: any = { ...form }
@@ -932,6 +937,25 @@ export default function EmployeeProfilePage() {
                     </button>
                   </div>
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Leave blank to keep the current password unchanged.</p>
+                  {newPassword && (
+                    <div className="mt-2 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+                      <p className="text-xs font-semibold text-gray-500 mb-1.5">Password must contain:</p>
+                      <div className="grid grid-cols-1 gap-0.5">
+                        {[
+                          { label: 'At least 8 characters', met: newPassword.length >= 8 },
+                          { label: '1 uppercase letter (A-Z)', met: /[A-Z]/.test(newPassword) },
+                          { label: '1 lowercase letter (a-z)', met: /[a-z]/.test(newPassword) },
+                          { label: '1 number (0-9)', met: /\d/.test(newPassword) },
+                          { label: '1 special character (!@#$%...)', met: /[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(newPassword) },
+                        ].map((req, i) => (
+                          <div key={i} className={`flex items-center gap-1.5 text-xs ${req.met ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                            {req.met ? <Check size={11} strokeWidth={3} /> : <X size={11} strokeWidth={3} />}
+                            {req.label}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

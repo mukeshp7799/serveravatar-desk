@@ -8,6 +8,17 @@ const { auth } = require('../middleware/auth');
 const { t } = require('../i18n');
 const { logActivity } = require('../services/activityService');
 
+// Helper: validate password strength (8+ chars, 1 uppercase, 1 lowercase, 1 number, 1 special char)
+function validatePasswordStrength(password) {
+  if (!password || typeof password !== 'string') return 'Password is required';
+  if (password.length < 8) return 'Password must be at least 8 characters';
+  if (!/[A-Z]/.test(password)) return 'Password must contain at least 1 uppercase letter';
+  if (!/[a-z]/.test(password)) return 'Password must contain at least 1 lowercase letter';
+  if (!/\d/.test(password)) return 'Password must contain at least 1 number';
+  if (!/[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(password)) return 'Password must contain at least 1 special character (!@#$%^&*...)';
+  return null; // null = valid
+}
+
 const router = express.Router();
 
 // GET /api/users — requires `users.view_all` (admin / HR)
@@ -94,6 +105,11 @@ router.post('/', auth, async (req, res, next) => {
     }
     if (!email || !password || !firstName || !lastName) {
       return res.status(400).json({ error: t(req.lang, 'errors.emailPasswordNameRequired') });
+    }
+
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      return res.status(400).json({ error: passwordError });
     }
 
     const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);

@@ -27,10 +27,44 @@ export const loginSchema = z.object({
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
+// ─── Strong password requirements ──────────────────────────────────────────
+// Password must contain: 8+ chars, 1 uppercase, 1 lowercase, 1 number, 1 special character
+export const passwordRequirements = {
+  minLength: 8,
+  pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/,
+};
+
+export function passwordValidation(password: string) {
+  const errors: string[] = [];
+  if (password.length < passwordRequirements.minLength) {
+    errors.push(`At least ${passwordRequirements.minLength} characters`);
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('At least 1 uppercase letter');
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push('At least 1 lowercase letter');
+  }
+  if (!/\d/.test(password)) {
+    errors.push('At least 1 number');
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(password)) {
+    errors.push('At least 1 special character (!@#$%^&*...)');
+  }
+  return errors;
+}
+
+export function isPasswordStrong(password: string): boolean {
+  return passwordRequirements.pattern.test(password);
+}
+
 // ─── Register ───────────────────────────────────────────────────────────
 export const registerSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Please enter a valid email'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(1, 'Password is required')
+    .refine(p => isPasswordStrong(p), {
+      message: 'Password must contain at least 8 characters, 1 uppercase, 1 lowercase, 1 number, and 1 special character',
+    }),
   confirmPassword: z.string().min(1, 'Please confirm your password'),
   firstName: z.string().min(1, 'First name is required').max(50),
   lastName: z.string().min(1, 'Last name is required').max(50),
@@ -119,7 +153,10 @@ export type ProfileInput = z.infer<typeof profileSchema>;
 // ─── Password change ────────────────────────────────────────────────────
 export const passwordChangeSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
-  newPassword: z.string().min(6, 'New password must be at least 6 characters'),
+  newPassword: z.string().min(1, 'New password is required')
+    .refine(p => isPasswordStrong(p), {
+      message: 'Password must contain at least 8 characters, 1 uppercase, 1 lowercase, 1 number, and 1 special character',
+    }),
   confirmPassword: z.string().min(1, 'Please confirm your new password'),
 }).refine(d => d.newPassword === d.confirmPassword, {
   message: 'Passwords do not match',

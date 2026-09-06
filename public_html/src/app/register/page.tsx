@@ -9,8 +9,8 @@ import api from "@/lib/api";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import ThemeSelector from "@/components/ThemeSelector";
 import Link from "next/link";
-import { registerSchema, type RegisterInput } from "@/lib/schemas";
-import { Sparkles, Rocket, Mail, Lock, Eye, EyeOff, ArrowRight, PartyPopper } from "lucide-react";
+import { registerSchema, passwordValidation, isPasswordStrong, type RegisterInput } from "@/lib/schemas";
+import { Sparkles, Rocket, Mail, Lock, Eye, EyeOff, ArrowRight, PartyPopper, Check, X } from "lucide-react";
 
 function RegisterForm() {
   const router = useRouter();
@@ -20,11 +20,22 @@ function RegisterForm() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
     mode: "onBlur",
   });
+
+  const watchedPassword = watch("password", "");
+  const passwordReqs = passwordValidation(watchedPassword);
+  const passwordReqList = [
+    { label: 'At least 8 characters', met: watchedPassword.length >= 8 },
+    { label: '1 uppercase letter (A-Z)', met: /[A-Z]/.test(watchedPassword) },
+    { label: '1 lowercase letter (a-z)', met: /[a-z]/.test(watchedPassword) },
+    { label: '1 number (0-9)', met: /\d/.test(watchedPassword) },
+    { label: '1 special character (!@#$%...)', met: /[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(watchedPassword) },
+  ];
 
   const onSubmit = async (data: RegisterInput) => {
     try {
@@ -183,7 +194,7 @@ function RegisterForm() {
                 <input
                   type={showPwdText ? "text" : "password"}
                   className={`w-full border-2 bg-white/70 dark:bg-gray-800 rounded-xl pl-9 pr-9 py-2.5 text-sm focus:outline-none focus:ring-2 transition ${errors.password ? "border-red-400 focus:ring-red-100 dark:focus:ring-red-900" : "border-gray-200 dark:border-gray-700 focus:border-indigo-500 focus:ring-indigo-100 dark:focus:ring-indigo-900"}`}
-                  placeholder={t("auth.register.passwordPlaceholder") || "Min. 6 characters"}
+                  placeholder={t("auth.register.passwordPlaceholder") || "Min. 8 characters"}
                   {...register("password")}
                 />
                 <button
@@ -194,8 +205,20 @@ function RegisterForm() {
                   {showPwdText ? <EyeOff size={14} strokeWidth={2.25} /> : <Eye size={14} strokeWidth={2.25} />}
                 </button>
               </div>
-              {errors.password && (
+              {errors.password ? (
                 <p className="mt-1 text-xs text-red-500">{errors.password.message}</p>
+              ) : (
+                <div className="mt-2 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Password must contain:</p>
+                  <div className="grid grid-cols-1 gap-0.5">
+                    {passwordReqList.map((req, i) => (
+                      <div key={i} className={`flex items-center gap-1.5 text-xs ${req.met ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                        {req.met ? <Check size={11} strokeWidth={3} /> : <X size={11} strokeWidth={3} />}
+                        {req.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
 

@@ -14,6 +14,17 @@ const SITE_URL = process.env.SITE_URL || 'https://seravavatar-hub.95.217.8.52.ni
 const VERIFICATION_TTL_HOURS = 24;
 const RESET_TTL_HOURS = 1;
 
+// Helper: validate password strength (8+ chars, 1 uppercase, 1 lowercase, 1 number, 1 special char)
+function validatePasswordStrength(password) {
+  if (!password || typeof password !== 'string') return 'Password is required';
+  if (password.length < 8) return 'Password must be at least 8 characters';
+  if (!/[A-Z]/.test(password)) return 'Password must contain at least 1 uppercase letter';
+  if (!/[a-z]/.test(password)) return 'Password must contain at least 1 lowercase letter';
+  if (!/\d/.test(password)) return 'Password must contain at least 1 number';
+  if (!/[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(password)) return 'Password must contain at least 1 special character (!@#$%^&*...)';
+  return null; // null = valid
+}
+
 // Helper: create notifications for pending invitations (only if not already notified)
 async function createNotificationsForPendingInvitations(conn, userId, email) {
   const emailLower = email.toLowerCase();
@@ -183,6 +194,12 @@ router.post('/register', async (req, res, next) => {
     if (!email || !password || !firstName || !lastName) {
       await conn.rollback();
       return res.status(400).json({ error: t(req.lang, 'errors.emailPasswordNameRequired') });
+    }
+
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      await conn.rollback();
+      return res.status(400).json({ error: passwordError });
     }
 
     const [existing] = await conn.query('SELECT id FROM users WHERE email = ?', [email]);
@@ -395,6 +412,11 @@ router.post('/change-password', auth, async (req, res, next) => {
       return res.status(400).json({ error: t(req.lang, 'errors.currentAndNewPasswordRequired') });
     }
 
+    const passwordError = validatePasswordStrength(newPassword);
+    if (passwordError) {
+      return res.status(400).json({ error: passwordError });
+    }
+
     const [users] = await pool.query('SELECT password_hash FROM users WHERE id = ?', [req.user.id]);
     const valid = await bcrypt.compare(currentPassword, users[0].password_hash);
 
@@ -477,8 +499,9 @@ router.post('/reset-password', async (req, res, next) => {
       return res.status(400).json({ error: t(req.lang, 'errors.tokenAndPasswordRequired') });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: t(req.lang, 'errors.passwordTooShort') });
+    const passwordError = validatePasswordStrength(newPassword);
+    if (passwordError) {
+      return res.status(400).json({ error: passwordError });
     }
 
     const [users] = await pool.query(

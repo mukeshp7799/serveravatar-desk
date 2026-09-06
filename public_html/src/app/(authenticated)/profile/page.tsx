@@ -8,7 +8,7 @@ import {
   User, Lock, Bell, Briefcase, Mail, Phone, MapPin,
   UserCircle, AlertTriangle, Save, KeyRound, RefreshCw,
   Link2, Globe, CheckCircle2, Shield, Bookmark,
-  CalendarDays, Clock,
+  CalendarDays, Clock, Check, X,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { profileSchema, passwordChangeSchema, type ProfileInput, type PasswordChangeInput } from '@/lib/schemas'
@@ -58,8 +58,18 @@ export default function ProfilePage() {
     register: registerPassword,
     handleSubmit: handlePasswordSubmit,
     reset: resetPassword,
+    watch: watchPassword,
     formState: { errors: passwordErrors },
   } = useForm<PasswordChangeInput>({ resolver: zodResolver(passwordChangeSchema), mode: 'onBlur' })
+
+  const watchedNewPassword = watchPassword("newPassword", "")
+  const newPasswordReqList = [
+    { label: 'At least 8 characters', met: watchedNewPassword.length >= 8 },
+    { label: '1 uppercase letter (A-Z)', met: /[A-Z]/.test(watchedNewPassword) },
+    { label: '1 lowercase letter (a-z)', met: /[a-z]/.test(watchedNewPassword) },
+    { label: '1 number (0-9)', met: /\d/.test(watchedNewPassword) },
+    { label: '1 special character (!@#$%...)', met: /[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(watchedNewPassword) },
+  ];
 
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
@@ -655,7 +665,21 @@ export default function ProfilePage() {
                         className={inputCls(!!passwordErrors.newPassword)}
                         placeholder="••••••••"
                       />
-                      {passwordErrors.newPassword && <p className="mt-1.5 text-xs text-red-500">{passwordErrors.newPassword.message}</p>}
+                      {passwordErrors.newPassword ? (
+                        <p className="mt-1.5 text-xs text-red-500">{passwordErrors.newPassword.message}</p>
+                      ) : (
+                        <div className="mt-2 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+                          <p className="text-xs font-semibold text-gray-500 mb-1.5">Password must contain:</p>
+                          <div className="grid grid-cols-1 gap-0.5">
+                            {newPasswordReqList.map((req, i) => (
+                              <div key={i} className={`flex items-center gap-1.5 text-xs ${req.met ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                                {req.met ? <Check size={11} strokeWidth={3} /> : <X size={11} strokeWidth={3} />}
+                                {req.label}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className={labelCls}>{t('auth.register.confirmPassword')}</label>
