@@ -946,7 +946,8 @@ export default function EmployeeProfilePage() {
                           { label: '1 uppercase letter (A-Z)', met: /[A-Z]/.test(newPassword) },
                           { label: '1 lowercase letter (a-z)', met: /[a-z]/.test(newPassword) },
                           { label: '1 number (0-9)', met: /\d/.test(newPassword) },
-                          { label: '1 special character (!@#$%...)', met: /[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(newPassword) },
+                          { label: '1 special character (!@#$%^&*()_+-=[]{};:\'\",.<>/?)', met: /[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(newPassword) },
+
                         ].map((req, i) => (
                           <div key={i} className={`flex items-center gap-1.5 text-xs ${req.met ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`}>
                             {req.met ? <Check size={11} strokeWidth={3} /> : <X size={11} strokeWidth={3} />}
@@ -1025,7 +1026,7 @@ export default function EmployeeProfilePage() {
                 className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer border border-gray-300 dark:border-gray-600 bg-transparent">
                 Cancel
               </button>
-              <button onClick={handleSave} disabled={saving}
+              <button onClick={handleSave} disabled={saving || (newPassword.length > 0 && !isPasswordStrong(newPassword))}
                 className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition disabled:opacity-50 cursor-pointer border-0">
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>

@@ -34,8 +34,10 @@ function RegisterForm() {
     { label: '1 uppercase letter (A-Z)', met: /[A-Z]/.test(watchedPassword) },
     { label: '1 lowercase letter (a-z)', met: /[a-z]/.test(watchedPassword) },
     { label: '1 number (0-9)', met: /\d/.test(watchedPassword) },
-    { label: '1 special character (!@#$%...)', met: /[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(watchedPassword) },
+    { label: '1 special character (!@#$%^&*()_+-=[]{};:\'".,<>/?)', met: /[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(watchedPassword) },
   ];
+  const isPasswordStrong = watchedPassword.length > 0 && passwordReqList.every(r => r.met);
+
 
   const onSubmit = async (data: RegisterInput) => {
     try {
@@ -207,7 +209,8 @@ function RegisterForm() {
               </div>
               {errors.password ? (
                 <p className="mt-1 text-xs text-red-500">{errors.password.message}</p>
-              ) : (
+              ) : null}
+              {watchedPassword.length > 0 && (
                 <div className="mt-2 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
                   <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5">Password must contain:</p>
                   <div className="grid grid-cols-1 gap-0.5">
@@ -244,7 +247,7 @@ function RegisterForm() {
             {/* Submit button */}
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !isPasswordStrong}
               className="w-full inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-base font-bold transition-all cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed border-none mt-2"
             >
               {isSubmitting ? (
