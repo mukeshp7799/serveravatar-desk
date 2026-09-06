@@ -1637,8 +1637,8 @@ router.post('/:id/breaks', async (req, res, next) => {
     }
 
     const [result] = await pool.query(
-      'INSERT INTO attendance_breaks (attendance_id, start_time, end_time, duration_minutes) VALUES (?, ?, ?, ?)',
-      [attId, toMySQLDate(start_time), toMySQLDate(end_time), Math.max(0, duration)]
+      'INSERT INTO attendance_breaks (attendance_id, start_time, end_time, duration_minutes, original_duration_minutes) VALUES (?, ?, ?, ?, ?)',
+      [attId, toMySQLDate(start_time), toMySQLDate(end_time), Math.max(0, duration), Math.max(0, duration)]
     );
 
     // Update total_break_minutes on attendance
@@ -1848,7 +1848,7 @@ async function recalcBreakDuration(breakId, connection = pool) {
   );
   if (!br) return;
   const attId = br.attendance_id;
-  const original = Number(br.original_duration_minutes) || 0;
+  const original = Number(br.original_duration_minutes ?? br.duration_minutes) || 0;
   const effectiveBreak = Math.max(0, original - totalApproved);
 
   // Update break record's current duration
