@@ -83,7 +83,10 @@ class ApiClient {
       // token issued by an older deployment) should never leave the user stuck
       // staring at a cryptic "Invalid token" toast. Wipe credentials and bounce
       // to /login so they can re-authenticate cleanly.
-      if (res.status === 401 && typeof window !== 'undefined') {
+      // But don't redirect for "wrong password" errors - those should be shown to the user.
+      const isWrongPasswordError = data?.error?.toLowerCase()?.includes('current password') ||
+        data?.error?.toLowerCase()?.includes('incorrect');
+      if (res.status === 401 && typeof window !== 'undefined' && !isWrongPasswordError) {
         const hadToken = !!this.getToken();
         this.setToken(null);
         try {

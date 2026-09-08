@@ -34,7 +34,7 @@ function RegisterForm() {
     { label: '1 uppercase letter (A-Z)', met: /[A-Z]/.test(watchedPassword) },
     { label: '1 lowercase letter (a-z)', met: /[a-z]/.test(watchedPassword) },
     { label: '1 number (0-9)', met: /\d/.test(watchedPassword) },
-    { label: '1 special character (!@#$%^&*()_+-=[]{};:\'".,<>/?)', met: /[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(watchedPassword) },
+    { label: '1 special character (@#$&!*^~)', met: /[@#$&!*^~]/.test(watchedPassword) },
   ];
   const isPasswordStrong = watchedPassword.length > 0 && passwordReqList.every(r => r.met);
 

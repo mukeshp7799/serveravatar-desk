@@ -63,12 +63,14 @@ export default function ProfilePage() {
   } = useForm<PasswordChangeInput>({ resolver: zodResolver(passwordChangeSchema), mode: 'onBlur' })
 
   const watchedNewPassword = watchPassword("newPassword", "")
+  const watchedConfirmPassword = watchPassword("confirmPassword", "")
+  const passwordsMatch = watchedNewPassword.length > 0 && watchedConfirmPassword.length > 0 && watchedNewPassword === watchedConfirmPassword
   const newPasswordReqList = [
     { label: 'At least 8 characters', met: watchedNewPassword.length >= 8 },
     { label: '1 uppercase letter (A-Z)', met: /[A-Z]/.test(watchedNewPassword) },
     { label: '1 lowercase letter (a-z)', met: /[a-z]/.test(watchedNewPassword) },
     { label: '1 number (0-9)', met: /\d/.test(watchedNewPassword) },
-    { label: '1 special character (!@#$%^&*()_+-=[]{};:\'\",.<>/?)', met: /[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(watchedNewPassword) },
+    { label: '1 special character (@#$&!*^~)', met: /[@#$&!*^~]/.test(watchedNewPassword) },
   ];
 
   const isNewPasswordStrong = watchedNewPassword.length > 0 && newPasswordReqList.every(r => r.met)
@@ -690,16 +692,20 @@ export default function ProfilePage() {
                         type={showPassword ? 'text' : 'password'}
                         autoComplete="new-password"
                         {...registerPassword('confirmPassword')}
-                        className={inputCls(!!passwordErrors.confirmPassword)}
+                        className={inputCls(!!passwordErrors.confirmPassword || (!passwordsMatch && watchedConfirmPassword.length > 0))}
                         placeholder="••••••••"
                       />
-                      {passwordErrors.confirmPassword && <p className="mt-1.5 text-xs text-red-500">{passwordErrors.confirmPassword.message}</p>}
+                      {(passwordErrors.confirmPassword || (!passwordsMatch && watchedConfirmPassword.length > 0)) && (
+                        <p className="mt-1.5 text-xs text-red-500">
+                          {passwordErrors.confirmPassword?.message || 'Passwords do not match'}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="mt-5 flex items-center gap-3 pt-4 border-t border-gray-100">
                     <button
                       type="submit"
-                      disabled={savingPassword || !isNewPasswordStrong}
+                      disabled={savingPassword || !isNewPasswordStrong || !passwordsMatch}
                       className="px-6 py-2.5 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition shadow-sm cursor-pointer border-none disabled:opacity-50 inline-flex items-center gap-2"
                     >
                       {savingPassword

@@ -21,7 +21,7 @@ function validatePasswordStrength(password) {
   if (!/[A-Z]/.test(password)) return 'Password must contain at least 1 uppercase letter';
   if (!/[a-z]/.test(password)) return 'Password must contain at least 1 lowercase letter';
   if (!/\d/.test(password)) return 'Password must contain at least 1 number';
-  if (!/[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(password)) return 'Password must contain at least 1 special character (!@#$%^&*...)';
+  if (!/[@#$&!*^~]/.test(password)) return 'Password must contain at least 1 special character (@#$&!*^~)';
   return null; // null = valid
 }
 
@@ -425,9 +425,7 @@ router.post('/change-password', auth, async (req, res, next) => {
     }
 
     const hash = await bcrypt.hash(newPassword, 10);
-    await pool.query('UPDATE password_hash SET password_hash = ? WHERE id = ?', [hash, req.user.id]).catch(async () => {
-      await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, req.user.id]);
-    });
+    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, req.user.id]);
 
     res.json({ message: t(req.lang, 'errors.passwordChangedSuccessfully') });
   } catch (err) {

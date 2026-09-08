@@ -210,6 +210,18 @@ router.get('/:id/profile', auth, async (req, res, next) => {
       LIMIT 200
     `, [targetId]);
 
+    // Fetch profile update activity from activity_logs
+    const [profileActivity] = await pool.query(`
+      SELECT 'profile' as source, al.id, al.action, al.description,
+        u.first_name, u.last_name, u.avatar_url,
+        al.created_at
+      FROM activity_logs al
+      JOIN users u ON al.user_id = u.id
+      WHERE al.user_id = ? AND al.module = 'Employee'
+      ORDER BY al.created_at DESC
+      LIMIT 200
+    `, [targetId]);
+
     // Merge and sort by timestamp descending
     const allActivity = [
       ...ownActivity.map(row => ({
@@ -242,6 +254,17 @@ router.get('/:id/profile', auth, async (req, res, next) => {
         project_id: row.project_id,
         meta: row.meta,
         source: 'project',
+      })),
+      ...profileActivity.map(row => ({
+        id: row.id,
+        action: row.action,
+        entity_type: 'profile',
+        target_label: row.description,
+        created_at: row.created_at,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        avatar_url: row.avatar_url,
+        source: 'profile',
       })),
     ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
@@ -358,10 +381,7 @@ router.put('/:id', auth, async (req, res, next) => {
       return res.status(400).json({ error: t(req.lang, 'errors.noFieldsToUpdate') });
     }
 
-    params.push(targetId);
-    await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
-
-    // Capture old status and email before update for activity logging
+    // Capture old values BEFORE update for activity logging
     const [[oldUser]] = await pool.query('SELECT status, email FROM users WHERE id = ?', [targetId]);
 
     params.push(targetId);

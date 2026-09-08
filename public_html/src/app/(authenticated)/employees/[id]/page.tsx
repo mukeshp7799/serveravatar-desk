@@ -188,7 +188,7 @@ export default function EmployeeProfilePage() {
 
   const handleSave = async () => {
     if (newPassword && !isPasswordStrong(newPassword)) {
-      toast.error('Password must contain at least 8 characters, 1 uppercase, 1 lowercase, 1 number, and 1 special character')
+      toast.error('Password must contain at least 8 characters, 1 uppercase, 1 lowercase, 1 number, and 1 special character (@#$&!*^~)')
       return
     }
     setSaving(true)
@@ -779,6 +779,16 @@ export default function EmployeeProfilePage() {
                     <h3 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide mb-3">Employment</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">First Name</label>
+                        <input value={form.first_name || ''} onChange={e => setForm({ ...form, first_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Last Name</label>
+                        <input value={form.last_name || ''} onChange={e => setForm({ ...form, last_name: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      </div>
+                      <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Employee ID</label>
                         <input value={form.employee_id || ''} onChange={e => setForm({ ...form, employee_id: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
@@ -946,7 +956,7 @@ export default function EmployeeProfilePage() {
                           { label: '1 uppercase letter (A-Z)', met: /[A-Z]/.test(newPassword) },
                           { label: '1 lowercase letter (a-z)', met: /[a-z]/.test(newPassword) },
                           { label: '1 number (0-9)', met: /\d/.test(newPassword) },
-                          { label: '1 special character (!@#$%^&*()_+-=[]{};:\'\",.<>/?)', met: /[!@#$%^&*()_+\-=\[\]{};:'",.<>\/?]/.test(newPassword) },
+                          { label: '1 special character (@#$&!*^~)', met: /[@#$&!*^~]/.test(newPassword) },
 
                         ].map((req, i) => (
                           <div key={i} className={`flex items-center gap-1.5 text-xs ${req.met ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`}>
