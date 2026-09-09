@@ -69,6 +69,7 @@ export function useNotificationSSE(
 
   const esRef = useRef<EventSource | null>(null);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const isMountedRef = useRef(true);
 
@@ -76,6 +77,10 @@ export function useNotificationSSE(
     if (heartbeatTimerRef.current !== null) {
       clearInterval(heartbeatTimerRef.current);
       heartbeatTimerRef.current = null;
+    }
+    if (reconnectTimerRef.current !== null) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
     }
   }, []);
 
@@ -167,6 +172,13 @@ export function useNotificationSSE(
     // ── Error / disconnect ────────────────────────────────────────────────
     es.onerror = () => {
       if (!isMountedRef.current) return;
+
+      // Cancel any pending reconnect BEFORE clearing state
+      if (reconnectTimerRef.current !== null) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+
       disconnect();
       es.close();
       esRef.current = null;
@@ -176,7 +188,10 @@ export function useNotificationSSE(
         const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnectAttemptsRef.current);
         reconnectAttemptsRef.current++;
         console.log(`[SSE] Disconnected. Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})…`);
-        setTimeout(() => { if (isMountedRef.current) connect(); }, delay);
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          if (isMountedRef.current) connect();
+        }, delay);
       } else {
         console.warn('[SSE] Max reconnect attempts reached. Giving up.');
       }
