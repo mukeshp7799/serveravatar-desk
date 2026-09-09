@@ -231,6 +231,34 @@ function GradientBar({ pct, from = "from-indigo-500", to = "to-purple-500" }: { 
   );
 }
 
+/* Circular progress ring for worked hours */
+function CircularProgress({ value, max, size = 64, stroke = 5, label, sublabel }: { value: number; max: number; size?: number; stroke?: number; label: string; sublabel?: string }) {
+  const pct = Math.min(100, (value / max) * 100);
+  const r = (size - stroke * 2) / 2;
+  const circ = 2 * Math.PI * r;
+  const dash = (pct / 100) * circ;
+  const color = pct >= 75 ? '#10b981' : pct >= 40 ? '#6366f1' : '#f59e0b';
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-gray-100 dark:text-gray-800/60" />
+        <circle
+          cx={size/2} cy={size/2} r={r} fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeDasharray={`${dash} ${circ}`}
+          strokeLinecap="round"
+          className="transition-all duration-700"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-[11px] font-extrabold text-gray-800 dark:text-white leading-tight">{label}</span>
+        {sublabel && <span className="text-[9px] text-gray-400 leading-tight">{sublabel}</span>}
+      </div>
+    </div>
+  );
+}
+
 /* Empty state */
 function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
   return (
@@ -256,6 +284,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
   const [clocking, setClocking] = useState<string | null>(null);
+  const [liveTime, setLiveTime] = useState<string>("--:-- --");
 
   const fetchDashboard = () =>
     api
@@ -313,11 +342,15 @@ export default function DashboardPage() {
         year: "numeric",
       });
       setNowStr(dateStr);
+      // Live clock update every second
+      const tOpts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: time_format === '12h' };
+      const loc2 = localeMap[i18n.language?.split('-')[0]] || 'en-US';
+      setLiveTime(new Intl.DateTimeFormat(loc2, tOpts).format(d));
     };
     update();
-    const iv = setInterval(update, 60_000);
+    const iv = setInterval(update, 1_000);
     return () => clearInterval(iv);
-  }, [i18n.language]);
+  }, [i18n.language, time_format]);
 
   const [nowStr, setNowStr] = useState("");
 
@@ -448,6 +481,10 @@ export default function DashboardPage() {
                 {storedUser.roleName || "User"}
               </span>
               <span className="text-xs text-indigo-200 font-medium">{nowStr}</span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-white/10 border border-white/15 text-white/80 backdrop-blur-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                {liveTime}
+              </span>
             </div>
           </div>
 
@@ -465,9 +502,11 @@ export default function DashboardPage() {
           2. STAT CARDS
       ══════════════════════════════════════════════════ */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-        {statCards.map((card) => (
+        {statCards.map((card, i) => (
           <Link key={card.label} href={card.href} className="no-underline">
-            <StatCard {...card} />
+            <div className="animate-fade-in-up" style={{ animationDelay: `${i * 80}ms` }}>
+              <StatCard {...card} />
+            </div>
           </Link>
         ))}
       </div>
@@ -509,32 +548,43 @@ export default function DashboardPage() {
               />
               <div className="flex flex-col justify-between h-full p-4 gap-4">
 
-                {/* ── Top: 2×2 Glass Stat Grid ── */}
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: "Clock In", value: fmtTime(myToday?.clock_in_time), accent: false, icon: LogIn },
-                    { label: "Clock Out", value: fmtTime(myToday?.clock_out_time), accent: false, icon: LogOut },
-                    { label: "Worked", value: fmtHrs(liveHours), accent: false, icon: TrendingUp },
-                    { label: "Break", value: fmtBreak(myToday?.total_break_minutes), accent: true, icon: Coffee },
-                  ].map((box) => (
-                    <div
-                      key={box.label}
-                      className={`relative rounded-2xl p-4 text-center overflow-hidden
-                        ${box.accent
-                          ? "bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/20 ring-1 ring-amber-200/60 dark:ring-amber-800/40"
-                          : "bg-gradient-to-br from-gray-50 to-slate-50 dark:from-gray-800/60 dark:to-slate-800/40 ring-1 ring-gray-200/60 dark:ring-gray-700/40"
-                        }`}
-                    >
-                      {/* Subtle icon watermark */}
-                      <box.icon size={28} className={`absolute -bottom-2 -right-2 opacity-5 ${box.accent ? "text-amber-400" : "text-gray-300 dark:text-gray-600"}`} />
-                      <div className={`text-[9px] font-bold uppercase tracking-widest mb-1.5 ${box.accent ? "text-amber-500" : "text-gray-400 dark:text-gray-500"}`}>
-                        {box.label}
-                      </div>
-                      <div className={`text-lg font-extrabold tracking-tight ${box.accent ? "text-amber-700 dark:text-amber-400" : "text-gray-900 dark:text-white"}`}>
-                        {box.value}
+                {/* ── Top: Ring + Stats layout ── */}
+                <div className="flex items-center gap-4">
+                  {/* Circular progress ring */}
+                  {myToday?.clock_in_time ? (
+                    <div className="shrink-0">
+                      <CircularProgress
+                        value={liveHours ?? 0}
+                        max={8}
+                        size={72}
+                        stroke={5}
+                        label={fmtHrs(liveHours)}
+                        sublabel="of 8h"
+                      />
+                    </div>
+                  ) : (
+                    <div className="shrink-0 flex flex-col items-center gap-1">
+                      <div className="w-[72px] h-[72px] rounded-full bg-gradient-to-br from-gray-50 to-slate-100 dark:from-gray-800 dark:to-slate-800 flex items-center justify-center ring-1 ring-gray-200/60 dark:ring-gray-700/40">
+                        <Clock size={22} className="text-gray-300 dark:text-gray-600" />
                       </div>
                     </div>
-                  ))}
+                  )}
+
+                  {/* Stats column */}
+                  <div className="flex-1 grid grid-cols-2 gap-2">
+                    {[
+                      { label: "Clock In", value: fmtTime(myToday?.clock_in_time), icon: LogIn },
+                      { label: "Clock Out", value: fmtTime(myToday?.clock_out_time), icon: LogOut },
+                      { label: "Worked", value: fmtHrs(liveHours), icon: TrendingUp },
+                      { label: "Break", value: fmtBreak(myToday?.total_break_minutes), icon: Coffee },
+                    ].map((box) => (
+                      <div key={box.label} className="relative rounded-xl p-3 text-center overflow-hidden bg-gradient-to-br from-gray-50 to-slate-50 dark:from-gray-800/60 dark:to-slate-800/40 ring-1 ring-gray-200/60 dark:ring-gray-700/40">
+                        <box.icon size={14} className="absolute -bottom-1 -right-1 opacity-5 text-gray-300 dark:text-gray-600" />
+                        <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-0.5">{box.label}</div>
+                        <div className="text-sm font-extrabold text-gray-900 dark:text-white tracking-tight">{box.value}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* ── Middle: Status Insights ── */}
@@ -752,11 +802,16 @@ export default function DashboardPage() {
                 const pct = proj.total_tasks > 0 ? Math.round((proj.done_tasks / proj.total_tasks) * 100) : 0;
                 return (
                   <div key={proj.id} className="px-4 py-3.5 hover:bg-purple-50/40 dark:hover:bg-purple-950/20 transition-colors group">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-bold text-gray-800 dark:text-gray-100 truncate mr-2 group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors">
                         {proj.name}
                       </span>
                       <span className="text-[11px] font-extrabold text-purple-600 dark:text-purple-400 shrink-0">{pct}%</span>
+                    </div>
+                    {/* Task count row */}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500">{proj.done_tasks ?? 0} / {proj.total_tasks ?? 0} tasks</span>
+                      {pct === 100 && <span className="text-[9px] font-bold text-emerald-500">✓ Complete</span>}
                     </div>
                     <GradientBar pct={pct} from="from-purple-500" to="to-pink-500" />
                   </div>
