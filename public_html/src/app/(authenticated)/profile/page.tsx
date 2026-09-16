@@ -647,7 +647,7 @@ export default function ProfilePage() {
                 </h3>
               </div>
               <div className="p-5">
-                <form onSubmit={handlePasswordSubmit(onPasswordSubmit)}>
+                <form method="post" onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); }}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                     <div>
                       <label className={labelCls}>{t('settings.currentPassword')}</label>
@@ -704,8 +704,30 @@ export default function ProfilePage() {
                   </div>
                   <div className="mt-5 flex items-center gap-3 pt-4 border-t border-gray-100">
                     <button
-                      type="submit"
+                      type="button"
                       disabled={savingPassword || !isNewPasswordStrong || !passwordsMatch}
+                      onClick={async () => {
+                        // Get form data from react-hook-form's internal state
+                        // Since we can't easily get it, we use the watched values
+                        const currentPwd = watchPassword('currentPassword')
+                        const newPwd = watchPassword('newPassword')
+                        const confirmPwd = watchPassword('confirmPassword')
+
+                        const data: PasswordChangeInput = {
+                          currentPassword: currentPwd,
+                          newPassword: newPwd,
+                          confirmPassword: confirmPwd,
+                        }
+
+                        // Validate
+                        const result = passwordChangeSchema.safeParse(data)
+                        if (!result.success) {
+                          toast.error(result.error.issues[0]?.message || 'Validation failed')
+                          return
+                        }
+
+                        await onPasswordSubmit(result.data)
+                      }}
                       className="px-6 py-2.5 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition shadow-sm cursor-pointer border-none disabled:opacity-50 inline-flex items-center gap-2"
                     >
                       {savingPassword
